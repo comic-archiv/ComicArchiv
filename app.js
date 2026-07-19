@@ -1,6 +1,8 @@
 import {
   APP_CONFIG,
   DEFAULT_SETTINGS,
+  createDuckipediaSearchUrl,
+  createMissingDetailKey,
   getAvailableSeries,
   getConditionLabel,
   getConditionRank
@@ -26,17 +28,17 @@ import {
 } from "./export.js";
 
 const THEME_STORAGE_KEY = "comicarchiv-theme";
-const MAX_VISIBLE_MISSING_BANDS = 100;
 
 const state = {
   comics: [],
   filteredComics: [],
   missingGroups: [],
-  settings: { ...DEFAULT_SETTINGS, customSeries: [], knownHighestBandBySeries: {} },
+  settings: { ...DEFAULT_SETTINGS, customSeries: [], knownHighestBandBySeries: {}, missingBandDetails: {} },
   editingId: null,
   editingComic: null,
   importBackup: null,
-  waitingServiceWorker: null
+  waitingServiceWorker: null,
+  selectedMissingBand: null
 };
 
 const elements = {
@@ -49,6 +51,9 @@ const elements = {
   publicationYear: document.querySelector("#publication-year"),
   title: document.querySelector("#title"),
   condition: document.querySelector("#condition"),
+  duplicateCondition: document.querySelector("#duplicate-condition"),
+  duplicateConditionField: document.querySelector("#duplicate-condition-field"),
+  primaryConditionLabel: document.querySelector("#primary-condition-label"),
   isRead: document.querySelector("#is-read"),
   isDuplicate: document.querySelector("#is-duplicate"),
   isSealed: document.querySelector("#is-sealed"),
@@ -68,6 +73,8 @@ const elements = {
   sortBy: document.querySelector("#sort-by"),
   resetFilters: document.querySelector("#reset-filters"),
   filterResult: document.querySelector("#filter-result"),
+  filterSummary: document.querySelector("#filter-summary"),
+  filterPanel: document.querySelector("#filter-panel"),
   statTotal: document.querySelector("#stat-total"),
   statSeries: document.querySelector("#stat-series"),
   statRead: document.querySelector("#stat-read"),
@@ -103,6 +110,25 @@ const elements = {
   importModeReplace: document.querySelector("#import-mode-replace"),
   importSubmit: document.querySelector("#import-submit"),
   importMessage: document.querySelector("#import-message"),
+  openSeriesManager: document.querySelector("#open-series-manager"),
+  seriesModal: document.querySelector("#series-modal"),
+  closeSeries: document.querySelector("#close-series"),
+  seriesForm: document.querySelector("#series-form"),
+  customSeriesName: document.querySelector("#custom-series-name"),
+  customSeriesList: document.querySelector("#custom-series-list"),
+  seriesMessage: document.querySelector("#series-message"),
+  missingDetailModal: document.querySelector("#missing-detail-modal"),
+  closeMissingDetail: document.querySelector("#close-missing-detail"),
+  missingDetailForm: document.querySelector("#missing-detail-form"),
+  missingDetailContext: document.querySelector("#missing-detail-context"),
+  missingDetailName: document.querySelector("#missing-detail-name"),
+  missingDetailYear: document.querySelector("#missing-detail-year"),
+  missingDetailCondition: document.querySelector("#missing-detail-condition"),
+  missingDetailUrl: document.querySelector("#missing-detail-url"),
+  missingDetailNotes: document.querySelector("#missing-detail-notes"),
+  missingDuckipediaLink: document.querySelector("#missing-duckipedia-link"),
+  deleteMissingDetail: document.querySelector("#delete-missing-detail"),
+  missingDetailMessage: document.querySelector("#missing-detail-message"),
   toast: document.querySelector("#toast")
 };
 
@@ -111,7 +137,7 @@ let importInProgress = false;
 
 initializeApp().catch((error) => {
   console.error(error);
-  showToast(`ComicArchiv konnte nicht gestartet werden: ${error.message}`, "error");
+  showToast(`Sammlerhausen konnte nicht gestartet werden: ${error.message}`, "error");
 });
 
 async function initializeApp() {
@@ -129,6 +155,7 @@ async function initializeApp() {
   }
 
   populateConfiguration();
+  updateDuplicateConditionVisibility();
   await refreshCollection();
   renderBackupStatus();
   await refreshStorageStatus();
@@ -136,50 +163,54 @@ async function initializeApp() {
 }
 
 function populateConfiguration() {
-  const availableSeries = getAvailableSeries(state.settings);
+  const availableSeries = getAvailableSeries(state.settings, state.comics);
   const selectedSeries = elements.series.value;
   const selectedFilterSeries = elements.filterSeries.value;
   const selectedCondition = elements.condition.value || "VG";
+  const selectedDuplicateCondition = elements.duplicateCondition.value || selectedCondition;
   const selectedFilterCondition = elements.filterCondition.value;
+  const selectedMissingCondition = elements.missingDetailCondition.value;
 
   elements.series.replaceChildren();
   elements.series.append(createOption("", "Reihe auswählen"));
-  availableSeries.forEach((seriesName) => {
-    elements.series.append(createOption(seriesName, seriesName));
-  });
+  availableSeries.forEach((seriesName) => elements.series.append(createOption(seriesName, seriesName)));
   elements.series.value = availableSeries.includes(selectedSeries) ? selectedSeries : "";
 
   elements.filterSeries.replaceChildren();
   elements.filterSeries.append(createOption("all", "Alle Reihen"));
-  availableSeries.forEach((seriesName) => {
-    elements.filterSeries.append(createOption(seriesName, seriesName));
-  });
-  elements.filterSeries.value = availableSeries.includes(selectedFilterSeries)
-    ? selectedFilterSeries
-    : "all";
+  availableSeries.forEach((seriesName) => elements.filterSeries.append(createOption(seriesName, seriesName)));
+  elements.filterSeries.value = availableSeries.includes(selectedFilterSeries) ? selectedFilterSeries : "all";
 
-  elements.condition.replaceChildren();
-  APP_CONFIG.conditions.forEach((condition) => {
-    elements.condition.append(
-      createOption(condition.code, `${condition.label} – ${condition.code}`)
-    );
+  [elements.condition, elements.duplicateCondition].forEach((select) => {
+    select.replaceChildren();
+    APP_CONFIG.conditions.forEach((condition) => {
+      select.append(createOption(condition.code, `${condition.label} – ${condition.code}`));
+    });
   });
   elements.condition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedCondition)
     ? selectedCondition
     : "VG";
+  elements.duplicateCondition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedDuplicateCondition)
+    ? selectedDuplicateCondition
+    : elements.condition.value;
 
   elements.filterCondition.replaceChildren();
   elements.filterCondition.append(createOption("all", "Alle Zustände"));
   APP_CONFIG.conditions.forEach((condition) => {
-    elements.filterCondition.append(
-      createOption(condition.code, `${condition.label} – ${condition.code}`)
-    );
+    elements.filterCondition.append(createOption(condition.code, `${condition.label} – ${condition.code}`));
   });
-  elements.filterCondition.value = APP_CONFIG.conditions.some(
-    (entry) => entry.code === selectedFilterCondition
-  )
+  elements.filterCondition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedFilterCondition)
     ? selectedFilterCondition
     : "all";
+
+  elements.missingDetailCondition.replaceChildren();
+  elements.missingDetailCondition.append(createOption("", "Nicht festgelegt"));
+  APP_CONFIG.conditions.forEach((condition) => {
+    elements.missingDetailCondition.append(createOption(condition.code, `${condition.label} – ${condition.code}`));
+  });
+  elements.missingDetailCondition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedMissingCondition)
+    ? selectedMissingCondition
+    : "";
 }
 
 function createOption(value, label) {
@@ -191,8 +222,10 @@ function createOption(value, label) {
 
 function bindEvents() {
   elements.form.addEventListener("submit", handleFormSubmit);
+  elements.isDuplicate.addEventListener("change", updateDuplicateConditionVisibility);
   elements.cancelEdit.addEventListener("click", resetForm);
   elements.comicList.addEventListener("click", handleCardAction);
+  elements.missingList.addEventListener("click", handleMissingBandClick);
   elements.themeToggle.addEventListener("click", toggleTheme);
   elements.updateApp.addEventListener("click", activateWaitingServiceWorker);
   window.addEventListener("online", updateConnectionStatus);
@@ -219,6 +252,19 @@ function bindEvents() {
   elements.closeImport.addEventListener("click", closeImportModal);
   elements.importFile.addEventListener("change", handleImportFileSelection);
   elements.importSubmit.addEventListener("click", handleImportSubmit);
+  elements.openSeriesManager.addEventListener("click", openSeriesModal);
+  elements.closeSeries.addEventListener("click", closeSeriesModal);
+  elements.seriesForm.addEventListener("submit", handleAddCustomSeries);
+  elements.customSeriesList.addEventListener("click", handleRemoveCustomSeries);
+  elements.seriesModal.addEventListener("click", (event) => {
+    if (event.target.closest("[data-close-series]")) closeSeriesModal();
+  });
+  elements.closeMissingDetail.addEventListener("click", closeMissingDetailModal);
+  elements.missingDetailForm.addEventListener("submit", handleSaveMissingDetail);
+  elements.deleteMissingDetail.addEventListener("click", handleDeleteMissingDetail);
+  elements.missingDetailModal.addEventListener("click", (event) => {
+    if (event.target.closest("[data-close-missing-detail]")) closeMissingDetailModal();
+  });
   elements.importModal.addEventListener("click", (event) => {
     if (event.target.closest("[data-close-import]")) {
       closeImportModal();
@@ -226,9 +272,10 @@ function bindEvents() {
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !elements.importModal.classList.contains("hidden")) {
-      closeImportModal();
-    }
+    if (event.key !== "Escape") return;
+    if (!elements.importModal.classList.contains("hidden")) closeImportModal();
+    if (!elements.seriesModal.classList.contains("hidden")) closeSeriesModal();
+    if (!elements.missingDetailModal.classList.contains("hidden")) closeMissingDetailModal();
   });
 }
 
@@ -269,9 +316,10 @@ function buildComicFromForm() {
   const title = elements.title.value.trim();
   const publicationYearRaw = elements.publicationYear.value.trim();
   const condition = elements.condition.value;
+  const duplicateCondition = elements.isDuplicate.checked ? elements.duplicateCondition.value : null;
   const notes = elements.notes.value.trim();
   const errors = {};
-  const availableSeries = getAvailableSeries(state.settings);
+  const availableSeries = getAvailableSeries(state.settings, state.comics);
 
   if (!availableSeries.includes(series)) {
     errors.series = "Bitte wähle eine gültige Reihe aus.";
@@ -293,7 +341,7 @@ function buildComicFromForm() {
 
   if (publicationYearRaw) {
     publicationYear = Number(publicationYearRaw);
-    const maximumYear = new Date().getFullYear() + 1;
+    const maximumYear = APP_CONFIG.publicationYearMaximum;
 
     if (!Number.isInteger(publicationYear) || publicationYear < 1800 || publicationYear > maximumYear) {
       errors.publicationYear = `Bitte gib ein Jahr zwischen 1800 und ${maximumYear} ein.`;
@@ -306,6 +354,10 @@ function buildComicFromForm() {
 
   if (!APP_CONFIG.conditions.some((entry) => entry.code === condition)) {
     errors.condition = "Bitte wähle einen gültigen Zustand aus.";
+  }
+
+  if (elements.isDuplicate.checked && !APP_CONFIG.conditions.some((entry) => entry.code === duplicateCondition)) {
+    errors.duplicateCondition = "Bitte wähle den Zustand des zweiten Exemplars aus.";
   }
 
   if (notes.length > 2000) {
@@ -330,6 +382,7 @@ function buildComicFromForm() {
     title,
     publicationYear,
     condition,
+    duplicateCondition,
     isRead: elements.isRead.checked,
     isDuplicate: elements.isDuplicate.checked,
     isSealed: elements.isSealed.checked,
@@ -362,6 +415,7 @@ function createStableId() {
 async function refreshCollection() {
   try {
     state.comics = await getAllComics();
+    populateConfiguration();
     state.missingGroups = calculateMissingBands(
       state.comics,
       state.settings.knownHighestBandBySeries
@@ -390,6 +444,9 @@ function renderCollection() {
   elements.filterResult.textContent = hasComics
     ? `${formatEntryCount(state.filteredComics.length)} sichtbar.`
     : "";
+  elements.filterSummary.textContent = getActiveFilterCount() > 0
+    ? `${getActiveFilterCount()} aktiv`
+    : "Standardansicht";
 
   state.filteredComics.forEach((comic) => {
     elements.comicList.append(createComicCard(comic));
@@ -409,7 +466,11 @@ function getFilteredAndSortedComics() {
       return false;
     }
 
-    if (selectedCondition !== "all" && comic.condition !== selectedCondition) {
+    if (
+      selectedCondition !== "all" &&
+      comic.condition !== selectedCondition &&
+      comic.duplicateCondition !== selectedCondition
+    ) {
       return false;
     }
 
@@ -525,7 +586,6 @@ function createComicCard(comic) {
   top.className = "comic-card-top";
 
   const headingGroup = document.createElement("div");
-
   const series = document.createElement("p");
   series.className = "comic-series";
   series.textContent = comic.series;
@@ -544,19 +604,62 @@ function createComicCard(comic) {
 
   headingGroup.append(series, title, subtitle);
 
-  const condition = document.createElement("span");
-  condition.className = "condition-badge";
-  condition.textContent = getConditionLabel(comic.condition);
+  const rightColumn = document.createElement("div");
+  rightColumn.className = "card-right-column";
 
-  top.append(headingGroup, condition);
+  const conditions = document.createElement("div");
+  conditions.className = "condition-badge-list";
+  const primaryCondition = document.createElement("span");
+  primaryCondition.className = "condition-badge";
+  primaryCondition.textContent = comic.isDuplicate
+    ? `Ex. 1: ${getConditionLabel(comic.condition)}`
+    : getConditionLabel(comic.condition);
+  conditions.append(primaryCondition);
+
+  if (comic.isDuplicate) {
+    const secondCondition = document.createElement("span");
+    secondCondition.className = "condition-badge condition-badge-secondary";
+    secondCondition.textContent = `Ex. 2: ${getConditionLabel(comic.duplicateCondition || comic.condition)}`;
+    conditions.append(secondCondition);
+  }
+
+  const menu = document.createElement("details");
+  menu.className = "card-menu";
+  const menuSummary = document.createElement("summary");
+  menuSummary.setAttribute("aria-label", `${comic.series}, Band ${comic.volumeNumber} verwalten`);
+  menuSummary.textContent = "⚙";
+  const menuContent = document.createElement("div");
+  menuContent.className = "card-menu-content";
+
+  const editButton = document.createElement("button");
+  editButton.type = "button";
+  editButton.className = "menu-action";
+  editButton.dataset.action = "edit";
+  editButton.textContent = "Bearbeiten";
+
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.className = "menu-action menu-action-danger";
+  deleteButton.dataset.action = "delete";
+  deleteButton.textContent = "Löschen";
+
+  menuContent.append(editButton, deleteButton);
+  menu.append(menuSummary, menuContent);
+  rightColumn.append(conditions, menu);
+  top.append(headingGroup, rightColumn);
 
   const tags = document.createElement("div");
   tags.className = "tag-list";
-  tags.append(
-    createTag(comic.isRead ? "Gelesen" : "Ungelesen", comic.isRead),
-    createTag("Foliert", comic.isSealed),
-    createTag("Doppelt", comic.isDuplicate)
-  );
+  tags.append(createTag(comic.isRead ? "Gelesen" : "Ungelesen", comic.isRead));
+  if (comic.isSealed) tags.append(createTag("Foliert", true));
+  if (comic.isDuplicate) tags.append(createTag("Doppelt", true));
+
+  const duckipediaLink = document.createElement("a");
+  duckipediaLink.className = "duckipedia-link";
+  duckipediaLink.href = createDuckipediaSearchUrl(comic.series, comic.volumeNumber, comic.title);
+  duckipediaLink.target = "_blank";
+  duckipediaLink.rel = "noopener noreferrer";
+  duckipediaLink.textContent = "In Duckipedia nachschlagen ↗";
 
   article.append(top, tags);
 
@@ -567,26 +670,7 @@ function createComicCard(comic) {
     article.append(notes);
   }
 
-  const actions = document.createElement("div");
-  actions.className = "card-actions";
-
-  const editButton = document.createElement("button");
-  editButton.type = "button";
-  editButton.className = "secondary-button compact-button";
-  editButton.dataset.action = "edit";
-  editButton.textContent = "Bearbeiten";
-  editButton.setAttribute("aria-label", `${comic.series}, Band ${comic.volumeNumber} bearbeiten`);
-
-  const deleteButton = document.createElement("button");
-  deleteButton.type = "button";
-  deleteButton.className = "danger-button compact-button";
-  deleteButton.dataset.action = "delete";
-  deleteButton.textContent = "Löschen";
-  deleteButton.setAttribute("aria-label", `${comic.series}, Band ${comic.volumeNumber} löschen`);
-
-  actions.append(editButton, deleteButton);
-  article.append(actions);
-
+  article.append(duckipediaLink);
   return article;
 }
 
@@ -602,6 +686,7 @@ function renderStats() {
   const read = state.comics.filter((comic) => comic.isRead).length;
   const sealed = state.comics.filter((comic) => comic.isSealed).length;
   const duplicate = state.comics.filter((comic) => comic.isDuplicate).length;
+  const physicalCopies = total + duplicate;
   const seriesCount = new Set(state.comics.map((comic) => comic.series)).size;
   const missingCount = countMissingBands(state.missingGroups);
 
@@ -612,33 +697,32 @@ function renderStats() {
   elements.statSealed.textContent = sealed;
   elements.statDuplicate.textContent = duplicate;
   elements.statMissing.textContent = missingCount;
-  elements.conditionStatsTotal.textContent = formatEntryCount(total);
+  elements.conditionStatsTotal.textContent = physicalCopies === 1 ? "1 Exemplar" : `${physicalCopies} Exemplare`;
 
   elements.conditionStats.replaceChildren();
   APP_CONFIG.conditions.forEach((condition) => {
-    const count = state.comics.filter((comic) => comic.condition === condition.code).length;
-    const percentage = total > 0 ? (count / total) * 100 : 0;
+    const primaryCount = state.comics.filter((comic) => comic.condition === condition.code).length;
+    const duplicateCount = state.comics.filter(
+      (comic) => comic.isDuplicate && (comic.duplicateCondition || comic.condition) === condition.code
+    ).length;
+    const count = primaryCount + duplicateCount;
+    const percentage = physicalCopies > 0 ? (count / physicalCopies) * 100 : 0;
 
     const row = document.createElement("div");
     row.className = "condition-stat-row";
-
     const label = document.createElement("span");
     label.className = "condition-stat-label";
     label.textContent = `${condition.label} – ${condition.code}`;
-
     const bar = document.createElement("span");
     bar.className = "condition-stat-bar";
     bar.setAttribute("aria-hidden", "true");
-
     const fill = document.createElement("span");
     fill.className = "condition-stat-fill";
     fill.style.width = `${percentage}%`;
     bar.append(fill);
-
     const countElement = document.createElement("span");
     countElement.className = "condition-stat-count";
     countElement.textContent = count;
-
     row.append(label, bar, countElement);
     elements.conditionStats.append(row);
   });
@@ -653,36 +737,57 @@ function renderMissingBands() {
   elements.missingCount.textContent = totalMissing === 1 ? "1 fehlt" : `${totalMissing} fehlen`;
 
   groupsWithMissing.forEach((group) => {
-    const card = document.createElement("article");
-    card.className = "missing-card";
+    const details = document.createElement("details");
+    details.className = "missing-card missing-series-details";
 
-    const heading = document.createElement("h3");
+    const summary = document.createElement("summary");
+    const summaryText = document.createElement("span");
+    const heading = document.createElement("strong");
     heading.textContent = group.series;
-
-    const meta = document.createElement("p");
-    meta.className = "missing-meta";
+    const meta = document.createElement("small");
     meta.textContent = `${group.missingBands.length} fehlend · geprüft bis Band ${group.highestChecked}`;
+    summaryText.append(heading, meta);
+    const icon = document.createElement("span");
+    icon.className = "disclosure-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = "⌄";
+    summary.append(summaryText, icon);
 
     const list = document.createElement("div");
-    list.className = "missing-band-list";
+    list.className = "missing-band-list detailed-missing-list";
 
-    group.missingBands.slice(0, MAX_VISIBLE_MISSING_BANDS).forEach((bandNumber) => {
-      const badge = document.createElement("span");
-      badge.className = "missing-band";
-      badge.textContent = bandNumber;
-      list.append(badge);
+    group.missingBands.forEach((bandNumber) => {
+      const key = createMissingDetailKey(group.series, bandNumber);
+      const detail = state.settings.missingBandDetails?.[key] || {};
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = detail.title || detail.desiredCondition || detail.notes || detail.publicationYear
+        ? "missing-band missing-band-detailed"
+        : "missing-band";
+      button.dataset.series = group.series;
+      button.dataset.bandNumber = String(bandNumber);
+
+      const number = document.createElement("strong");
+      number.textContent = `Band ${bandNumber}`;
+      button.append(number);
+
+      const detailsText = [
+        detail.title,
+        detail.publicationYear ? String(detail.publicationYear) : "",
+        detail.desiredCondition ? `Wunsch: ${getConditionLabel(detail.desiredCondition)}` : ""
+      ].filter(Boolean).join(" · ");
+
+      if (detailsText) {
+        const extra = document.createElement("small");
+        extra.textContent = detailsText;
+        button.append(extra);
+      }
+
+      list.append(button);
     });
 
-    card.append(heading, meta, list);
-
-    if (group.missingBands.length > MAX_VISIBLE_MISSING_BANDS) {
-      const more = document.createElement("p");
-      more.className = "missing-more";
-      more.textContent = `Weitere ${group.missingBands.length - MAX_VISIBLE_MISSING_BANDS} Bände stehen im CSV-Export.`;
-      card.append(more);
-    }
-
-    elements.missingList.append(card);
+    details.append(summary, list);
+    elements.missingList.append(details);
   });
 }
 
@@ -720,10 +825,12 @@ function startEditing(comic) {
   elements.publicationYear.value = comic.publicationYear ?? "";
   elements.title.value = comic.title;
   elements.condition.value = comic.condition;
+  elements.duplicateCondition.value = comic.duplicateCondition || comic.condition;
   elements.isRead.checked = comic.isRead;
   elements.isDuplicate.checked = comic.isDuplicate;
   elements.isSealed.checked = comic.isSealed;
   elements.notes.value = comic.notes;
+  updateDuplicateConditionVisibility();
 
   elements.formTitle.textContent = "Comic bearbeiten";
   elements.cancelEdit.classList.remove("hidden");
@@ -773,6 +880,8 @@ function prepareNextComic(savedComic) {
   elements.series.value = selectedSeries;
   elements.volumeNumber.value = nextBandNumber;
   elements.condition.value = savedComic.condition;
+  elements.duplicateCondition.value = savedComic.duplicateCondition || savedComic.condition;
+  updateDuplicateConditionVisibility();
   state.editingId = null;
   state.editingComic = null;
   clearValidationErrors();
@@ -786,6 +895,8 @@ function prepareNextComic(savedComic) {
 function resetForm() {
   elements.form.reset();
   elements.condition.value = "VG";
+  elements.duplicateCondition.value = "VG";
+  updateDuplicateConditionVisibility();
   state.editingId = null;
   state.editingComic = null;
   elements.formTitle.textContent = "Comic hinzufügen";
@@ -804,8 +915,36 @@ function resetFilters() {
   elements.filterDuplicate.checked = false;
   elements.sortBy.value = "series";
   renderCollection();
-  elements.search.focus();
+  elements.filterPanel.open = false;
 }
+
+function getActiveFilterCount() {
+  return [
+    Boolean(elements.search.value.trim()),
+    elements.filterSeries.value !== "all",
+    elements.filterCondition.value !== "all",
+    elements.filterRead.value !== "all",
+    elements.filterSealed.checked,
+    elements.filterDuplicate.checked,
+    elements.sortBy.value !== "series"
+  ].filter(Boolean).length;
+}
+
+function updateDuplicateConditionVisibility() {
+  const isDuplicate = elements.isDuplicate.checked;
+  elements.duplicateConditionField.classList.toggle("hidden", !isDuplicate);
+  document.querySelector("#primary-condition-field").classList.toggle("field-full", !isDuplicate);
+  elements.duplicateCondition.required = isDuplicate;
+  const labelText = document.createTextNode(isDuplicate ? "Zustand Exemplar 1 " : "Zustand ");
+  const requiredMark = document.createElement("strong");
+  requiredMark.setAttribute("aria-hidden", "true");
+  requiredMark.textContent = "*";
+  elements.primaryConditionLabel.replaceChildren(labelText, requiredMark);
+  if (isDuplicate && !elements.duplicateCondition.value) {
+    elements.duplicateCondition.value = elements.condition.value || "VG";
+  }
+}
+
 
 function renderValidationErrors(errors) {
   Object.entries(errors).forEach(([fieldName, message]) => {
@@ -836,6 +975,7 @@ function clearValidationErrors() {
     elements.publicationYear,
     elements.title,
     elements.condition,
+    elements.duplicateCondition,
     elements.notes
   ].forEach((inputElement) => inputElement.removeAttribute("aria-invalid"));
 }
@@ -850,6 +990,213 @@ function setFormBusy(isBusy) {
   });
 }
 
+function openSeriesModal() {
+  renderCustomSeriesList();
+  elements.seriesMessage.textContent = "";
+  elements.seriesModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+  window.setTimeout(() => elements.customSeriesName.focus(), 0);
+}
+
+function closeSeriesModal() {
+  elements.seriesModal.classList.add("hidden");
+  elements.customSeriesName.value = "";
+  elements.seriesMessage.textContent = "";
+  restoreBodyModalState();
+}
+
+async function handleAddCustomSeries(event) {
+  event.preventDefault();
+  const name = elements.customSeriesName.value.trim();
+  const allSeries = getAvailableSeries(state.settings, state.comics);
+
+  if (!name) {
+    elements.seriesMessage.textContent = "Bitte gib einen Namen ein.";
+    elements.seriesMessage.dataset.type = "error";
+    return;
+  }
+
+  if (name.length > 100) {
+    elements.seriesMessage.textContent = "Der Name darf höchstens 100 Zeichen enthalten.";
+    elements.seriesMessage.dataset.type = "error";
+    return;
+  }
+
+  if (allSeries.some((entry) => entry.localeCompare(name, "de", { sensitivity: "base" }) === 0)) {
+    elements.seriesMessage.textContent = "Diese Reihe ist bereits vorhanden.";
+    elements.seriesMessage.dataset.type = "error";
+    return;
+  }
+
+  try {
+    state.settings = await saveAppSettings({
+      ...state.settings,
+      customSeries: [...(state.settings.customSeries || []), name]
+    });
+    populateConfiguration();
+    elements.series.value = name;
+    elements.customSeriesName.value = "";
+    elements.seriesMessage.textContent = `„${name}“ wurde hinzugefügt.`;
+    elements.seriesMessage.dataset.type = "success";
+    renderCustomSeriesList();
+  } catch (error) {
+    elements.seriesMessage.textContent = `Reihe konnte nicht gespeichert werden: ${error.message}`;
+    elements.seriesMessage.dataset.type = "error";
+  }
+}
+
+function renderCustomSeriesList() {
+  elements.customSeriesList.replaceChildren();
+  const customSeries = state.settings.customSeries || [];
+
+  if (customSeries.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted-copy";
+    empty.textContent = "Noch keine eigenen Reihen angelegt.";
+    elements.customSeriesList.append(empty);
+    return;
+  }
+
+  customSeries.forEach((seriesName) => {
+    const row = document.createElement("div");
+    row.className = "management-row";
+    const label = document.createElement("span");
+    label.textContent = seriesName;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "text-button danger-text";
+    button.dataset.removeSeries = seriesName;
+    button.textContent = "Entfernen";
+    row.append(label, button);
+    elements.customSeriesList.append(row);
+  });
+}
+
+async function handleRemoveCustomSeries(event) {
+  const button = event.target.closest("button[data-remove-series]");
+  if (!button) return;
+  const seriesName = button.dataset.removeSeries;
+  const isUsed = state.comics.some((comic) => comic.series === seriesName);
+  const prompt = isUsed
+    ? `„${seriesName}“ wird von gespeicherten Comics verwendet. Aus der persönlichen Auswahlliste entfernen? Bestehende Comics bleiben erhalten.`
+    : `„${seriesName}“ aus der persönlichen Auswahlliste entfernen?`;
+  if (!window.confirm(prompt)) return;
+
+  state.settings = await saveAppSettings({
+    ...state.settings,
+    customSeries: (state.settings.customSeries || []).filter((entry) => entry !== seriesName)
+  });
+  populateConfiguration();
+  renderCustomSeriesList();
+  elements.seriesMessage.textContent = `„${seriesName}“ wurde aus der persönlichen Liste entfernt.`;
+  elements.seriesMessage.dataset.type = "success";
+}
+
+function handleMissingBandClick(event) {
+  const button = event.target.closest("button[data-series][data-band-number]");
+  if (!button) return;
+  openMissingDetailModal(button.dataset.series, Number(button.dataset.bandNumber));
+}
+
+function openMissingDetailModal(series, bandNumber) {
+  const key = createMissingDetailKey(series, bandNumber);
+  const detail = state.settings.missingBandDetails?.[key] || {};
+  state.selectedMissingBand = { series, bandNumber, key };
+  elements.missingDetailContext.textContent = `${series} · Band ${bandNumber}`;
+  elements.missingDetailName.value = detail.title || "";
+  elements.missingDetailYear.value = detail.publicationYear ?? "";
+  elements.missingDetailCondition.value = detail.desiredCondition || "";
+  elements.missingDetailUrl.value = detail.duckipediaUrl || "";
+  elements.missingDetailNotes.value = detail.notes || "";
+  elements.missingDuckipediaLink.href = detail.duckipediaUrl || createDuckipediaSearchUrl(series, bandNumber, detail.title || "");
+  elements.deleteMissingDetail.classList.toggle("hidden", !hasMissingDetailContent(detail));
+  elements.missingDetailMessage.textContent = "";
+  elements.missingDetailModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+  window.setTimeout(() => elements.missingDetailName.focus(), 0);
+}
+
+function closeMissingDetailModal() {
+  elements.missingDetailModal.classList.add("hidden");
+  state.selectedMissingBand = null;
+  elements.missingDetailForm.reset();
+  elements.missingDetailMessage.textContent = "";
+  restoreBodyModalState();
+}
+
+async function handleSaveMissingDetail(event) {
+  event.preventDefault();
+  if (!state.selectedMissingBand) return;
+
+  const title = elements.missingDetailName.value.trim();
+  const yearRaw = elements.missingDetailYear.value.trim();
+  const desiredCondition = elements.missingDetailCondition.value;
+  const notes = elements.missingDetailNotes.value.trim();
+  const duckipediaUrl = normalizeHttpUrl(elements.missingDetailUrl.value);
+
+  if (elements.missingDetailUrl.value.trim() && !duckipediaUrl) {
+    elements.missingDetailMessage.textContent = "Der Duckipedia-Link muss mit http:// oder https:// beginnen.";
+    elements.missingDetailMessage.dataset.type = "error";
+    return;
+  }
+
+  let publicationYear = null;
+  if (yearRaw) {
+    publicationYear = Number(yearRaw);
+    if (!Number.isInteger(publicationYear) || publicationYear < 1800 || publicationYear > APP_CONFIG.publicationYearMaximum) {
+      elements.missingDetailMessage.textContent = `Das Erscheinungsjahr muss zwischen 1800 und ${APP_CONFIG.publicationYearMaximum} liegen.`;
+      elements.missingDetailMessage.dataset.type = "error";
+      return;
+    }
+  }
+
+  const nextDetails = { ...(state.settings.missingBandDetails || {}) };
+  nextDetails[state.selectedMissingBand.key] = {
+    title,
+    publicationYear,
+    desiredCondition,
+    notes,
+    duckipediaUrl,
+    updatedAt: new Date().toISOString()
+  };
+
+  state.settings = await saveAppSettings({ ...state.settings, missingBandDetails: nextDetails });
+  renderMissingBands();
+  closeMissingDetailModal();
+  showToast("Details zum fehlenden Band gespeichert.");
+}
+
+async function handleDeleteMissingDetail() {
+  if (!state.selectedMissingBand) return;
+  const nextDetails = { ...(state.settings.missingBandDetails || {}) };
+  delete nextDetails[state.selectedMissingBand.key];
+  state.settings = await saveAppSettings({ ...state.settings, missingBandDetails: nextDetails });
+  renderMissingBands();
+  closeMissingDetailModal();
+  showToast("Ergänzende Details gelöscht.");
+}
+
+function hasMissingDetailContent(detail) {
+  return Boolean(detail && (detail.title || detail.publicationYear || detail.desiredCondition || detail.notes || detail.duckipediaUrl));
+}
+
+function normalizeHttpUrl(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function restoreBodyModalState() {
+  const anyModalOpen = [elements.importModal, elements.seriesModal, elements.missingDetailModal]
+    .some((modal) => !modal.classList.contains("hidden"));
+  document.body.classList.toggle("modal-open", anyModalOpen);
+}
+
 async function handleCollectionCsvExport() {
   setExportButtonsBusy(true);
   showExportMessage("");
@@ -857,10 +1204,10 @@ async function handleCollectionCsvExport() {
   try {
     const result = await shareOrDownloadText({
       content: createCollectionCsv(state.comics),
-      filename: createDatedFilename("ComicArchiv-Sammlung", "csv"),
+      filename: createDatedFilename("Sammlerhausen-Sammlung", "csv"),
       mimeType: "text/csv;charset=utf-8",
-      title: "ComicArchiv – Sammlung",
-      text: "Meine ComicArchiv-Sammlung als CSV-Datei."
+      title: "Sammlerhausen – Sammlung",
+      text: "Meine Sammlerhausen-Sammlung als CSV-Datei."
     });
     reportExportResult(result, "Die Sammlung");
   } catch (error) {
@@ -884,11 +1231,11 @@ async function handleMissingCsvExport() {
 
   try {
     const result = await shareOrDownloadText({
-      content: createMissingCsv(state.missingGroups),
-      filename: createDatedFilename("ComicArchiv-Fehlende-Baende", "csv"),
+      content: createMissingCsv(state.missingGroups, state.settings),
+      filename: createDatedFilename("Sammlerhausen-Fehlende-Baende", "csv"),
       mimeType: "text/csv;charset=utf-8",
-      title: "ComicArchiv – Fehlende Bände",
-      text: "Meine Such- und Wunschliste aus ComicArchiv."
+      title: "Sammlerhausen – Fehlende Bände",
+      text: "Meine Such- und Wunschliste aus Sammlerhausen."
     });
     reportExportResult(result, "Die Liste der fehlenden Bände");
   } catch (error) {
@@ -908,10 +1255,10 @@ async function handleJsonExport() {
     const nextSettings = { ...state.settings, lastBackupAt: backupTime };
     const result = await shareOrDownloadText({
       content: createJsonBackup(state.comics, nextSettings),
-      filename: createDatedFilename("ComicArchiv-Backup", "json"),
+      filename: createDatedFilename("Sammlerhausen-Backup", "json"),
       mimeType: "application/json;charset=utf-8",
-      title: "ComicArchiv – JSON-Backup",
-      text: "Vollständiges Backup meiner ComicArchiv-Daten."
+      title: "Sammlerhausen – JSON-Backup",
+      text: "Vollständiges Backup meiner Sammlerhausen-Daten."
     });
 
     if (result.method !== "cancelled") {
@@ -976,7 +1323,7 @@ function closeImportModal() {
   }
 
   elements.importModal.classList.add("hidden");
-  document.body.classList.remove("modal-open");
+  restoreBodyModalState();
   elements.openImport.focus();
 }
 
@@ -1119,6 +1466,10 @@ function mergeImportedSettings(mode, backup) {
     knownHighestBandBySeries: {
       ...(state.settings.knownHighestBandBySeries || {}),
       ...(importedSettings.knownHighestBandBySeries || {})
+    },
+    missingBandDetails: {
+      ...(state.settings.missingBandDetails || {}),
+      ...(importedSettings.missingBandDetails || {})
     }
   };
 }
@@ -1347,7 +1698,7 @@ function registerServiceWorker() {
 function showAvailableUpdate(worker) {
   state.waitingServiceWorker = worker;
   elements.updateApp.classList.remove("hidden");
-  showToast("Eine neue ComicArchiv-Version ist verfügbar.");
+  showToast("Eine neue Sammlerhausen-Version ist verfügbar.");
 }
 
 function activateWaitingServiceWorker() {

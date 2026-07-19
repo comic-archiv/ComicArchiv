@@ -1,7 +1,7 @@
 import { DEFAULT_SETTINGS } from "./config.js";
 
 const DATABASE_NAME = "comicarchiv-db";
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 const COMICS_STORE = "comics";
 const SETTINGS_STORE = "settings";
 const SETTINGS_KEY = "app";
@@ -48,7 +48,7 @@ function createDatabaseConnection() {
     };
 
     request.onblocked = () => {
-      reject(new Error("Die Datenbank-Aktualisierung ist blockiert. Bitte schließe andere geöffnete ComicArchiv-Fenster."));
+      reject(new Error("Die Datenbank-Aktualisierung ist blockiert. Bitte schließe andere geöffnete Sammlerhausen-Fenster."));
     };
   });
 }
@@ -150,7 +150,7 @@ function normalizeSettings(settings) {
   const customSeries = Array.isArray(source.customSeries)
     ? source.customSeries
         .filter((entry) => typeof entry === "string" && entry.trim())
-        .map((entry) => entry.trim())
+        .map((entry) => entry.trim().slice(0, 100))
     : [];
 
   const knownHighestBandBySeries = {};
@@ -164,8 +164,34 @@ function normalizeSettings(settings) {
 
       const parsedValue = Number(value);
       if (Number.isSafeInteger(parsedValue) && parsedValue >= 1 && parsedValue <= 99999) {
-        knownHighestBandBySeries[series.trim()] = parsedValue;
+        knownHighestBandBySeries[series.trim().slice(0, 100)] = parsedValue;
       }
+    });
+  }
+
+  const missingBandDetails = {};
+  const detailSource = source.missingBandDetails;
+
+  if (detailSource && typeof detailSource === "object" && !Array.isArray(detailSource)) {
+    Object.entries(detailSource).forEach(([key, value]) => {
+      if (typeof key !== "string" || !key || !value || typeof value !== "object" || Array.isArray(value)) {
+        return;
+      }
+
+      const publicationYear = value.publicationYear === null || value.publicationYear === undefined || value.publicationYear === ""
+        ? null
+        : Number(value.publicationYear);
+
+      missingBandDetails[key.slice(0, 500)] = {
+        title: typeof value.title === "string" ? value.title.trim().slice(0, 200) : "",
+        publicationYear: Number.isInteger(publicationYear) && publicationYear >= 1800 && publicationYear <= 2035
+          ? publicationYear
+          : null,
+        desiredCondition: typeof value.desiredCondition === "string" ? value.desiredCondition.slice(0, 10) : "",
+        notes: typeof value.notes === "string" ? value.notes.trim().slice(0, 2000) : "",
+        duckipediaUrl: normalizeOptionalUrl(value.duckipediaUrl),
+        updatedAt: isValidDateString(value.updatedAt) ? value.updatedAt : null
+      };
     });
   }
 
@@ -173,8 +199,22 @@ function normalizeSettings(settings) {
     theme: source.theme === "light" ? "light" : DEFAULT_SETTINGS.theme,
     lastBackupAt: isValidDateString(source.lastBackupAt) ? source.lastBackupAt : null,
     customSeries: [...new Set(customSeries)],
-    knownHighestBandBySeries
+    knownHighestBandBySeries,
+    missingBandDetails
   };
+}
+
+function normalizeOptionalUrl(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return "";
+  }
+
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href.slice(0, 1000) : "";
+  } catch (error) {
+    return "";
+  }
 }
 
 function isValidDateString(value) {

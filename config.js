@@ -1,8 +1,11 @@
 export const APP_CONFIG = Object.freeze({
-  appVersion: "2.0.0",
-  dataFormatVersion: 2,
+  appVersion: "3.0.0",
+  dataFormatVersion: 3,
   minimumSupportedBackupVersion: 1,
   storageName: "ComicArchiv",
+  displayName: "Sammlerhausen",
+  publicationYearMaximum: 2035,
+  duckipediaSearchBase: "https://www.duckipedia.de/index.php?title=Spezial%3ASuche&fulltext=1&search=",
   series: Object.freeze([
     "Lustiges Taschenbuch",
     "LTB Spezial",
@@ -40,7 +43,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   theme: "dark",
   lastBackupAt: null,
   customSeries: Object.freeze([]),
-  knownHighestBandBySeries: Object.freeze({})
+  knownHighestBandBySeries: Object.freeze({}),
+  missingBandDetails: Object.freeze({})
 });
 
 export function getConditionLabel(code) {
@@ -53,10 +57,28 @@ export function getConditionRank(code) {
   return index === -1 ? APP_CONFIG.conditions.length : index;
 }
 
-export function getAvailableSeries(settings = DEFAULT_SETTINGS) {
+export function getAvailableSeries(settings = DEFAULT_SETTINGS, comics = []) {
   const customSeries = Array.isArray(settings.customSeries)
     ? settings.customSeries.filter((entry) => typeof entry === "string" && entry.trim())
     : [];
+  const usedSeries = Array.isArray(comics)
+    ? comics
+        .map((comic) => comic?.series)
+        .filter((entry) => typeof entry === "string" && entry.trim())
+    : [];
 
-  return [...new Set([...APP_CONFIG.series, ...customSeries.map((entry) => entry.trim())])];
+  return [...new Set([
+    ...APP_CONFIG.series,
+    ...customSeries.map((entry) => entry.trim()),
+    ...usedSeries.map((entry) => entry.trim())
+  ])];
+}
+
+export function createDuckipediaSearchUrl(series, volumeNumber, title = "") {
+  const searchTerm = [series, `Band ${volumeNumber}`, title].filter(Boolean).join(" ");
+  return `${APP_CONFIG.duckipediaSearchBase}${encodeURIComponent(searchTerm)}`;
+}
+
+export function createMissingDetailKey(series, bandNumber) {
+  return `${encodeURIComponent(String(series).trim())}::${Number(bandNumber)}`;
 }

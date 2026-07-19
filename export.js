@@ -1,4 +1,4 @@
-import { APP_CONFIG } from "./config.js";
+import { APP_CONFIG, createDuckipediaSearchUrl, createMissingDetailKey } from "./config.js";
 
 const CSV_SEPARATOR = ";";
 const UTF8_BOM = "\uFEFF";
@@ -19,7 +19,8 @@ export function createCollectionCsv(comics) {
       "Bandnummer",
       "Titel",
       "Erscheinungsjahr",
-      "Zustand",
+      "Zustand Exemplar 1",
+      "Zustand Exemplar 2",
       "Gelesen",
       "Foliert",
       "Doppelt",
@@ -31,6 +32,7 @@ export function createCollectionCsv(comics) {
       comic.title || "",
       comic.publicationYear ?? "",
       comic.condition,
+      comic.isDuplicate ? (comic.duplicateCondition || comic.condition) : "",
       comic.isRead ? "Ja" : "Nein",
       comic.isSealed ? "Ja" : "Nein",
       comic.isDuplicate ? "Ja" : "Nein",
@@ -41,12 +43,30 @@ export function createCollectionCsv(comics) {
   return UTF8_BOM + rows.map(createCsvRow).join("\r\n");
 }
 
-export function createMissingCsv(missingGroups) {
-  const rows = [["Reihe", "Fehlender Band"]];
+export function createMissingCsv(missingGroups, settings = {}) {
+  const rows = [[
+    "Reihe",
+    "Fehlender Band",
+    "Titel / Name",
+    "Erscheinungsjahr",
+    "Wunschzustand",
+    "Notizen",
+    "Duckipedia"
+  ]];
+  const detailMap = settings.missingBandDetails || {};
 
   missingGroups.forEach((group) => {
     group.missingBands.forEach((bandNumber) => {
-      rows.push([group.series, bandNumber]);
+      const detail = detailMap[createMissingDetailKey(group.series, bandNumber)] || {};
+      rows.push([
+        group.series,
+        bandNumber,
+        detail.title || "",
+        detail.publicationYear ?? "",
+        detail.desiredCondition || "",
+        detail.notes || "",
+        detail.duckipediaUrl || createDuckipediaSearchUrl(group.series, bandNumber, detail.title || "")
+      ]);
     });
   });
 
@@ -65,12 +85,14 @@ export function createJsonBackup(comics, settings) {
       theme: settings.theme === "light" ? "light" : "dark",
       lastBackupAt: settings.lastBackupAt || null,
       customSeries: Array.isArray(settings.customSeries) ? settings.customSeries : [],
-      knownHighestBandBySeries: settings.knownHighestBandBySeries || {}
+      knownHighestBandBySeries: settings.knownHighestBandBySeries || {},
+      missingBandDetails: settings.missingBandDetails || {}
     },
     seriesConfiguration: {
       defaultSeries: [...APP_CONFIG.series],
       customSeries: Array.isArray(settings.customSeries) ? settings.customSeries : [],
-      knownHighestBandBySeries: settings.knownHighestBandBySeries || {}
+      knownHighestBandBySeries: settings.knownHighestBandBySeries || {},
+      missingBandDetails: settings.missingBandDetails || {}
     }
   };
 
@@ -112,7 +134,7 @@ export function parseAndValidateBackup(text) {
     issues.push(`Datenformat-Version ${version} ist zu alt.`);
   } else if (version > APP_CONFIG.dataFormatVersion) {
     issues.push(
-      `Datenformat-Version ${version} ist neuer als diese App-Version unterstützt. Bitte aktualisiere zuerst ComicArchiv.`
+      `Datenformat-Version ${version} ist neuer als diese App-Version unterstützt. Bitte aktualisiere zuerst Sammlerhausen.`
     );
   }
 
@@ -146,11 +168,18 @@ export function parseAndValidateBackup(text) {
     throw new BackupValidationError("Das Backup enthält ungültige Comic-Einträge.", issues.slice(0, 20));
   }
 
+  let normalizedSettings;
+  try {
+    normalizedSettings = normalizeImportedSettings(parsedBackup.settings, parsedBackup.seriesConfiguration);
+  } catch (error) {
+    throw new BackupValidationError("Die App-Einstellungen im Backup sind ungültig.", [error.message]);
+  }
+
   return {
     dataFormatVersion: version,
     exportedAt: isValidDateString(parsedBackup.exportedAt) ? parsedBackup.exportedAt : null,
     comics: normalizedComics,
-    settings: normalizeImportedSettings(parsedBackup.settings, parsedBackup.seriesConfiguration)
+    settings: normalizedSettings
   };
 }
 
@@ -287,6 +316,16 @@ function normalizeImportedComic(comic, index) {
     }
   });
 
+  let duplicateCondition = null;
+  if (comic.isDuplicate) {
+    duplicateCondition = typeof comic.duplicateCondition === "string" && comic.duplicateCondition
+      ? comic.duplicateCondition
+      : condition;
+    if (!APP_CONFIG.conditions.some((entry) => entry.code === duplicateCondition)) {
+      throw new Error(`${label}: Der Zustand des zweiten Exemplars ist unbekannt.`);
+    }
+  }
+
   const now = new Date().toISOString();
   const createdAt = isValidDateString(comic.createdAt) ? comic.createdAt : now;
   const updatedAt = isValidDateString(comic.updatedAt) ? comic.updatedAt : createdAt;
@@ -300,6 +339,7 @@ function normalizeImportedComic(comic, index) {
     title,
     publicationYear,
     condition,
+    duplicateCondition,
     isRead: comic.isRead,
     isDuplicate: comic.isDuplicate,
     isSealed: comic.isSealed,
@@ -341,11 +381,36 @@ function normalizeImportedSettings(settings, seriesConfiguration) {
     });
   }
 
+  const missingSource = isPlainObject(source.missingBandDetails)
+    ? source.missingBandDetails
+    : isPlainObject(seriesSource.missingBandDetails)
+      ? seriesSource.missingBandDetails
+      : {};
+  const missingBandDetails = {};
+  Object.entries(missingSource).forEach(([key, detail]) => {
+    if (!key || !isPlainObject(detail)) return;
+    const publicationYear = detail.publicationYear === null || detail.publicationYear === undefined || detail.publicationYear === ""
+      ? null
+      : Number(detail.publicationYear);
+    const desiredCondition = typeof detail.desiredCondition === "string" && APP_CONFIG.conditions.some((entry) => entry.code === detail.desiredCondition)
+      ? detail.desiredCondition
+      : "";
+    missingBandDetails[key.slice(0, 500)] = {
+      title: normalizeOptionalString(detail.title, 200, "Fehlband-Titel"),
+      publicationYear: Number.isInteger(publicationYear) && publicationYear >= 1800 && publicationYear <= APP_CONFIG.publicationYearMaximum ? publicationYear : null,
+      desiredCondition,
+      notes: normalizeOptionalString(detail.notes, 2000, "Fehlband-Notizen"),
+      duckipediaUrl: normalizeOptionalHttpUrl(detail.duckipediaUrl),
+      updatedAt: isValidDateString(detail.updatedAt) ? detail.updatedAt : null
+    };
+  });
+
   return {
     theme: source.theme === "light" ? "light" : "dark",
     lastBackupAt: isValidDateString(source.lastBackupAt) ? source.lastBackupAt : null,
     customSeries: [...new Set(customSeries)],
-    knownHighestBandBySeries
+    knownHighestBandBySeries,
+    missingBandDetails
   };
 }
 
@@ -355,7 +420,7 @@ function normalizePublicationYear(value, label) {
   }
 
   const parsedValue = Number(value);
-  const maximumYear = new Date().getFullYear() + 1;
+  const maximumYear = APP_CONFIG.publicationYearMaximum;
 
   if (!Number.isInteger(parsedValue) || parsedValue < 1800 || parsedValue > maximumYear) {
     throw new Error(`${label}: Das Erscheinungsjahr muss zwischen 1800 und ${maximumYear} liegen.`);
@@ -398,6 +463,17 @@ function normalizeOptionalString(value, maximumLength, label) {
   return normalized;
 }
 
+function normalizeOptionalHttpUrl(value) {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value !== "string") return "";
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href.slice(0, 1000) : "";
+  } catch (error) {
+    return "";
+  }
+}
+
 function parseStrictPositiveInteger(value) {
   if (!/^\d+$/.test(String(value))) {
     return null;
@@ -416,6 +492,7 @@ function createComicFingerprint(comic) {
     normalizeForComparison(comic.title),
     comic.publicationYear ?? null,
     comic.condition,
+    comic.duplicateCondition || null,
     Boolean(comic.isRead),
     Boolean(comic.isDuplicate),
     Boolean(comic.isSealed),
