@@ -1,6 +1,10 @@
+import { DEFAULT_SETTINGS } from "./config.js";
+
 const DATABASE_NAME = "comicarchiv-db";
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 const COMICS_STORE = "comics";
+const SETTINGS_STORE = "settings";
+const SETTINGS_KEY = "app";
 
 let databasePromise;
 
@@ -22,6 +26,10 @@ function createDatabaseConnection() {
         store.createIndex("numericBandNumber", "numericBandNumber", { unique: false });
         store.createIndex("updatedAt", "updatedAt", { unique: false });
       }
+
+      if (!database.objectStoreNames.contains(SETTINGS_STORE)) {
+        database.createObjectStore(SETTINGS_STORE, { keyPath: "key" });
+      }
     };
 
     request.onsuccess = () => {
@@ -29,6 +37,7 @@ function createDatabaseConnection() {
 
       database.onversionchange = () => {
         database.close();
+        databasePromise = undefined;
       };
 
       resolve(database);
@@ -62,28 +71,21 @@ function requestToPromise(request) {
   });
 }
 
+function transactionDone(transaction) {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error || new Error("Die Speichertransaktion ist fehlgeschlagen."));
+    transaction.onabort = () => reject(transaction.error || new Error("Die Speichertransaktion wurde abgebrochen."));
+  });
+}
+
 export async function getAllComics() {
   const database = await getDatabase();
   const transaction = database.transaction(COMICS_STORE, "readonly");
   const request = transaction.objectStore(COMICS_STORE).getAll();
   const comics = await requestToPromise(request);
-
-  return comics.sort((first, second) => {
-    const seriesComparison = first.series.localeCompare(second.series, "de");
-
-    if (seriesComparison !== 0) {
-      return seriesComparison;
-    }
-
-    const firstNumber = first.numericBandNumber ?? Number.POSITIVE_INFINITY;
-    const secondNumber = second.numericBandNumber ?? Number.POSITIVE_INFINITY;
-
-    if (firstNumber !== secondNumber) {
-      return firstNumber - secondNumber;
-    }
-
-    return first.volumeNumber.localeCompare(second.volumeNumber, "de", { numeric: true });
-  });
+  await transactionDone(transaction);
+  return comics;
 }
 
 export async function saveComic(comic) {
@@ -103,10 +105,78 @@ export async function deleteComic(id) {
   await transactionDone(transaction);
 }
 
-function transactionDone(transaction) {
-  return new Promise((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error || new Error("Die Speichertransaktion ist fehlgeschlagen."));
-    transaction.onabort = () => reject(transaction.error || new Error("Die Speichertransaktion wurde abgebrochen."));
+export async function replaceAllComics(comics) {
+  const database = await getDatabase();
+  const transaction = database.transaction(COMICS_STORE, "readwrite");
+  const store = transaction.objectStore(COMICS_STORE);
+  store.clear();
+  comics.forEach((comic) => store.put(comic));
+  await transactionDone(transaction);
+}
+
+export async function upsertComics(comics) {
+  const database = await getDatabase();
+  const transaction = database.transaction(COMICS_STORE, "readwrite");
+  const store = transaction.objectStore(COMICS_STORE);
+  comics.forEach((comic) => store.put(comic));
+  await transactionDone(transaction);
+}
+
+export async function getAppSettings() {
+  const database = await getDatabase();
+  const transaction = database.transaction(SETTINGS_STORE, "readonly");
+  const storedRecord = await requestToPromise(
+    transaction.objectStore(SETTINGS_STORE).get(SETTINGS_KEY)
+  );
+  await transactionDone(transaction);
+
+  return normalizeSettings(storedRecord?.value);
+}
+
+export async function saveAppSettings(settings) {
+  const normalizedSettings = normalizeSettings(settings);
+  const database = await getDatabase();
+  const transaction = database.transaction(SETTINGS_STORE, "readwrite");
+  transaction.objectStore(SETTINGS_STORE).put({
+    key: SETTINGS_KEY,
+    value: normalizedSettings
   });
+  await transactionDone(transaction);
+  return normalizedSettings;
+}
+
+function normalizeSettings(settings) {
+  const source = settings && typeof settings === "object" ? settings : {};
+  const customSeries = Array.isArray(source.customSeries)
+    ? source.customSeries
+        .filter((entry) => typeof entry === "string" && entry.trim())
+        .map((entry) => entry.trim())
+    : [];
+
+  const knownHighestBandBySeries = {};
+  const knownSource = source.knownHighestBandBySeries;
+
+  if (knownSource && typeof knownSource === "object" && !Array.isArray(knownSource)) {
+    Object.entries(knownSource).forEach(([series, value]) => {
+      if (typeof series !== "string" || !series.trim()) {
+        return;
+      }
+
+      const parsedValue = Number(value);
+      if (Number.isSafeInteger(parsedValue) && parsedValue >= 1 && parsedValue <= 99999) {
+        knownHighestBandBySeries[series.trim()] = parsedValue;
+      }
+    });
+  }
+
+  return {
+    theme: source.theme === "light" ? "light" : DEFAULT_SETTINGS.theme,
+    lastBackupAt: isValidDateString(source.lastBackupAt) ? source.lastBackupAt : null,
+    customSeries: [...new Set(customSeries)],
+    knownHighestBandBySeries
+  };
+}
+
+function isValidDateString(value) {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value));
 }

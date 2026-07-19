@@ -36,45 +36,76 @@
   <main id="main-content" class="app-shell">
     <section class="status-panel" aria-label="App-Status">
       <span id="connection-status" class="status-pill">Online</span>
-      <span class="status-copy">Automatische Speicherung auf diesem Gerät</span>
+      <span class="status-copy">Lokale Speicherung auf diesem Gerät</span>
+      <button id="update-app" class="update-pill hidden" type="button">Update</button>
+      <span id="app-version" class="version-pill">v2</span>
     </section>
 
-    <section class="stats-grid" aria-label="Sammlungsübersicht">
-      <article class="stat-card">
-        <span class="stat-label">Gesamt</span>
-        <strong id="stat-total" class="stat-value">0</strong>
-      </article>
-      <article class="stat-card">
-        <span class="stat-label">Gelesen</span>
-        <strong id="stat-read" class="stat-value">0</strong>
-      </article>
-      <article class="stat-card">
-        <span class="stat-label">Foliert</span>
-        <strong id="stat-sealed" class="stat-value">0</strong>
-      </article>
-      <article class="stat-card">
-        <span class="stat-label">Doppelt</span>
-        <strong id="stat-duplicate" class="stat-value">0</strong>
-      </article>
+    <section id="dashboard" class="section-anchor" aria-labelledby="dashboard-title">
+      <div class="section-heading compact-heading">
+        <div>
+          <p class="eyebrow">Übersicht</p>
+          <h2 id="dashboard-title">Dashboard</h2>
+        </div>
+      </div>
+
+      <div class="stats-grid" aria-label="Sammlungsübersicht">
+        <article class="stat-card">
+          <span class="stat-label">Gesamt</span>
+          <strong id="stat-total" class="stat-value">0</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Reihen</span>
+          <strong id="stat-series" class="stat-value">0</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Gelesen</span>
+          <strong id="stat-read" class="stat-value">0</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Ungelesen</span>
+          <strong id="stat-unread" class="stat-value">0</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Foliert</span>
+          <strong id="stat-sealed" class="stat-value">0</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Doppelt</span>
+          <strong id="stat-duplicate" class="stat-value">0</strong>
+        </article>
+        <article class="stat-card stat-card-highlight">
+          <span class="stat-label">Fehlende Bände</span>
+          <strong id="stat-missing" class="stat-value">0</strong>
+        </article>
+      </div>
+
+      <section class="panel condition-panel" aria-labelledby="condition-stats-title">
+        <div class="subsection-heading">
+          <h3 id="condition-stats-title">Verteilung nach Zustand</h3>
+          <span id="condition-stats-total" class="muted-copy">0 Einträge</span>
+        </div>
+        <div id="condition-stats" class="condition-stats"></div>
+      </section>
     </section>
 
     <section class="panel data-note" aria-labelledby="data-note-title">
       <div>
-        <h2 id="data-note-title">Wo liegen meine Daten?</h2>
+        <h2 id="data-note-title">Privat gespeichert, trotzdem sichern</h2>
         <p>
-          Deine Einträge werden in der lokalen Datenbank dieser Web-App gespeichert.
-          Sie werden nicht in das öffentliche GitHub-Repository hochgeladen.
+          Deine Sammlung liegt in IndexedDB auf diesem Gerät und nicht im öffentlichen GitHub-Repository.
+          Browserdaten können dennoch gelöscht werden. Erstelle deshalb regelmäßig ein JSON-Backup.
         </p>
       </div>
     </section>
 
-    <section class="panel form-panel" aria-labelledby="form-title">
+    <section id="add" class="panel form-panel section-anchor" aria-labelledby="form-title">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Sammlung verwalten</p>
           <h2 id="form-title">Comic hinzufügen</h2>
         </div>
-        <button id="cancel-edit" class="text-button hidden" type="button">Bearbeiten abbrechen</button>
+        <button id="cancel-edit" class="text-button hidden" type="button">Abbrechen</button>
       </div>
 
       <form id="comic-form" novalidate>
@@ -97,7 +128,7 @@
               autocomplete="off"
               placeholder="z. B. 42"
             >
-            <small class="field-help">Zahlen werden für spätere Fehlband-Prüfungen erkannt.</small>
+            <small class="field-help">Reine Zahlen werden für fehlende Bände erkannt.</small>
             <small class="field-error" id="volume-number-error"></small>
           </label>
 
@@ -178,7 +209,7 @@
       </form>
     </section>
 
-    <section class="collection-section" aria-labelledby="collection-title">
+    <section id="collection" class="collection-section section-anchor" aria-labelledby="collection-title">
       <div class="section-heading collection-heading">
         <div>
           <p class="eyebrow">Gespeicherte Einträge</p>
@@ -187,15 +218,177 @@
         <span id="collection-count" class="count-badge">0 Einträge</span>
       </div>
 
+      <section class="panel filter-panel" aria-labelledby="filter-title">
+        <div class="subsection-heading">
+          <h3 id="filter-title">Suchen &amp; filtern</h3>
+          <button id="reset-filters" class="text-button" type="button">Zurücksetzen</button>
+        </div>
+
+        <div class="filter-grid">
+          <label class="field field-full">
+            <span>Suche</span>
+            <input id="search" type="search" placeholder="Titel, Reihe, Bandnummer oder Notiz">
+          </label>
+
+          <label class="field">
+            <span>Reihe</span>
+            <select id="filter-series"></select>
+          </label>
+
+          <label class="field">
+            <span>Zustand</span>
+            <select id="filter-condition"></select>
+          </label>
+
+          <label class="field">
+            <span>Lesestatus</span>
+            <select id="filter-read">
+              <option value="all">Alle</option>
+              <option value="read">Nur gelesen</option>
+              <option value="unread">Nur ungelesen</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Sortierung</span>
+            <select id="sort-by">
+              <option value="series">Reihe &amp; Bandnummer</option>
+              <option value="volume">Bandnummer</option>
+              <option value="title">Titel</option>
+              <option value="condition">Zustand</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="filter-toggles">
+          <label class="check-row compact-check">
+            <input id="filter-sealed" type="checkbox">
+            <span>Nur foliert</span>
+          </label>
+          <label class="check-row compact-check">
+            <input id="filter-duplicate" type="checkbox">
+            <span>Nur doppelt</span>
+          </label>
+        </div>
+
+        <p id="filter-result" class="filter-result" aria-live="polite"></p>
+      </section>
+
       <div id="empty-state" class="panel empty-state">
         <div class="empty-icon" aria-hidden="true">＋</div>
         <h3>Noch keine Comics eingetragen</h3>
         <p>Lege oben deinen ersten Band an. Die Speicherung erfolgt automatisch.</p>
       </div>
 
+      <div id="no-results" class="panel empty-state hidden">
+        <div class="empty-icon" aria-hidden="true">⌕</div>
+        <h3>Keine passenden Einträge</h3>
+        <p>Ändere die Suche oder setze die Filter zurück.</p>
+      </div>
+
       <div id="comic-list" class="comic-list" aria-live="polite"></div>
     </section>
+
+    <section id="missing" class="section-anchor" aria-labelledby="missing-title">
+      <div class="section-heading collection-heading">
+        <div>
+          <p class="eyebrow">Automatische Prüfung</p>
+          <h2 id="missing-title">Fehlende Bände</h2>
+        </div>
+        <span id="missing-count" class="count-badge">0 fehlen</span>
+      </div>
+
+      <div id="missing-empty" class="panel empty-state">
+        <div class="empty-icon" aria-hidden="true">✓</div>
+        <h3>Keine Lücken erkannt</h3>
+        <p>Geprüft werden reine Bandnummern von 1 bis zur höchsten eingetragenen Nummer je Reihe.</p>
+      </div>
+
+      <div id="missing-list" class="missing-list"></div>
+    </section>
+
+    <section id="backup" class="panel backup-panel section-anchor" aria-labelledby="backup-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Daten sichern</p>
+          <h2 id="backup-title">Export &amp; Backup</h2>
+        </div>
+      </div>
+
+      <div class="backup-status-grid">
+        <div class="backup-status-card">
+          <span class="stat-label">Letztes JSON-Backup</span>
+          <strong id="last-backup">Noch keines</strong>
+        </div>
+        <div class="backup-status-card">
+          <span class="stat-label">Speichermodus</span>
+          <strong id="storage-persistence">Wird geprüft …</strong>
+          <small id="storage-usage" class="muted-copy"></small>
+        </div>
+      </div>
+
+      <div class="backup-actions">
+        <button id="export-json" class="primary-button" type="button">JSON-Backup erstellen</button>
+        <button id="export-csv" class="secondary-button" type="button">Sammlung als CSV</button>
+        <button id="export-missing-csv" class="secondary-button" type="button">Fehlende Bände als CSV</button>
+        <button id="open-import" class="secondary-button" type="button">JSON-Backup importieren</button>
+        <button id="request-persistence" class="text-button storage-button" type="button">Speicherschutz anfragen</button>
+      </div>
+
+      <p id="export-message" class="form-message" role="status" aria-live="polite"></p>
+      <p class="backup-help">
+        Das iPhone-Teilen-Menü wird genutzt, wenn Dateifreigabe unterstützt wird. Sonst startet ein Download.
+        Nur das JSON-Backup enthält alle Daten und Einstellungen zur vollständigen Wiederherstellung.
+      </p>
+    </section>
   </main>
+
+  <nav class="bottom-nav" aria-label="Hauptnavigation">
+    <a href="#dashboard"><span aria-hidden="true">▦</span>Übersicht</a>
+    <a href="#add"><span aria-hidden="true">＋</span>Hinzufügen</a>
+    <a href="#collection"><span aria-hidden="true">▤</span>Sammlung</a>
+    <a href="#backup"><span aria-hidden="true">⇩</span>Backup</a>
+  </nav>
+
+  <div id="import-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="import-title">
+    <div class="modal-backdrop" data-close-import></div>
+    <section class="modal-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Wiederherstellen</p>
+          <h2 id="import-title">JSON-Backup importieren</h2>
+        </div>
+        <button id="close-import" class="icon-button small-icon-button" type="button" aria-label="Import schließen">×</button>
+      </div>
+
+      <label class="field field-full">
+        <span>Backup-Datei auswählen</span>
+        <input id="import-file" type="file" accept=".json,application/json">
+      </label>
+
+      <div id="import-summary" class="import-summary hidden" aria-live="polite"></div>
+      <ul id="import-issues" class="import-issues hidden"></ul>
+
+      <fieldset class="import-mode">
+        <legend>Importart</legend>
+        <label class="check-row">
+          <input id="import-mode-merge" name="importMode" type="radio" value="merge" checked>
+          <span><strong>Zusammenführen</strong><small>Vorhandene Einträge bleiben erhalten; Sicherungsduplikate werden übersprungen.</small></span>
+        </label>
+        <label class="check-row">
+          <input id="import-mode-replace" name="importMode" type="radio" value="replace">
+          <span><strong>Ersetzen</strong><small>Die aktuelle Sammlung wird vollständig durch das Backup ersetzt.</small></span>
+        </label>
+      </fieldset>
+
+      <div class="modal-actions">
+        <button id="import-submit" class="primary-button" type="button" disabled>Import starten</button>
+        <button class="secondary-button" type="button" data-close-import>Abbrechen</button>
+      </div>
+
+      <p id="import-message" class="form-message" role="status" aria-live="polite"></p>
+    </section>
+  </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 

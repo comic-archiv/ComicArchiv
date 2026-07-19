@@ -1,5 +1,7 @@
 export const APP_CONFIG = Object.freeze({
-  dataFormatVersion: 1,
+  appVersion: "2.0.0",
+  dataFormatVersion: 2,
+  minimumSupportedBackupVersion: 1,
   storageName: "ComicArchiv",
   series: Object.freeze([
     "Lustiges Taschenbuch",
@@ -30,10 +32,31 @@ export const APP_CONFIG = Object.freeze({
     { code: "GD", label: "Good" },
     { code: "FR", label: "Fair" },
     { code: "PR", label: "Poor" }
-  ])
+  ]),
+  knownHighestBandBySeries: Object.freeze({})
+});
+
+export const DEFAULT_SETTINGS = Object.freeze({
+  theme: "dark",
+  lastBackupAt: null,
+  customSeries: Object.freeze([]),
+  knownHighestBandBySeries: Object.freeze({})
 });
 
 export function getConditionLabel(code) {
   const condition = APP_CONFIG.conditions.find((entry) => entry.code === code);
   return condition ? `${condition.label} – ${condition.code}` : code;
+}
+
+export function getConditionRank(code) {
+  const index = APP_CONFIG.conditions.findIndex((entry) => entry.code === code);
+  return index === -1 ? APP_CONFIG.conditions.length : index;
+}
+
+export function getAvailableSeries(settings = DEFAULT_SETTINGS) {
+  const customSeries = Array.isArray(settings.customSeries)
+    ? settings.customSeries.filter((entry) => typeof entry === "string" && entry.trim())
+    : [];
+
+  return [...new Set([...APP_CONFIG.series, ...customSeries.map((entry) => entry.trim())])];
 }

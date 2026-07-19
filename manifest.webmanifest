@@ -2,7 +2,7 @@
   "id": "./",
   "name": "ComicArchiv",
   "short_name": "ComicArchiv",
-  "description": "Privates Archiv für Lustige Taschenbücher und Sonderbände.",
+  "description": "Privates, offline nutzbares Archiv für Lustige Taschenbücher und Sonderbände.",
   "lang": "de-DE",
   "dir": "ltr",
   "start_url": "./",

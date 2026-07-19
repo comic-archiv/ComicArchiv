@@ -1,10 +1,12 @@
-const CACHE_NAME = "comicarchiv-shell-v1";
+const CACHE_NAME = "comicarchiv-shell-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./style.css",
   "./config.js",
   "./storage.js",
+  "./missing.js",
+  "./export.js",
   "./app.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
@@ -13,12 +15,7 @@ const APP_SHELL = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting())
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
 });
 
 self.addEventListener("activate", (event) => {
@@ -32,6 +29,12 @@ self.addEventListener("activate", (event) => {
       ))
       .then(() => self.clients.claim())
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("fetch", (event) => {
@@ -52,7 +55,7 @@ self.addEventListener("fetch", (event) => {
 
 async function networkFirst(request) {
   try {
-    const networkResponse = await fetch(request);
+    const networkResponse = await fetch(request, { cache: "no-store" });
 
     if (networkResponse.ok) {
       const cache = await caches.open(CACHE_NAME);
