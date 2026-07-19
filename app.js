@@ -1,7 +1,7 @@
 import {
   APP_CONFIG,
   DEFAULT_SETTINGS,
-  createDuckipediaSearchUrl,
+  createDuckipediaUrl,
   createMissingDetailKey,
   getAvailableSeries,
   getConditionLabel,
@@ -609,25 +609,17 @@ function createComicCard(comic) {
 
   const conditions = document.createElement("div");
   conditions.className = "condition-badge-list";
-  const primaryCondition = document.createElement("span");
-  primaryCondition.className = "condition-badge";
-  primaryCondition.textContent = comic.isDuplicate
-    ? `Ex. 1: ${getConditionLabel(comic.condition)}`
-    : getConditionLabel(comic.condition);
-  conditions.append(primaryCondition);
+  conditions.append(createConditionBadge(comic.condition, comic.isDuplicate ? "Exemplar 1" : "Zustand"));
 
   if (comic.isDuplicate) {
-    const secondCondition = document.createElement("span");
-    secondCondition.className = "condition-badge condition-badge-secondary";
-    secondCondition.textContent = `Ex. 2: ${getConditionLabel(comic.duplicateCondition || comic.condition)}`;
-    conditions.append(secondCondition);
+    conditions.append(createConditionBadge(comic.duplicateCondition || comic.condition, "Exemplar 2"));
   }
 
   const menu = document.createElement("details");
   menu.className = "card-menu";
   const menuSummary = document.createElement("summary");
   menuSummary.setAttribute("aria-label", `${comic.series}, Band ${comic.volumeNumber} verwalten`);
-  menuSummary.textContent = "⚙";
+  menuSummary.append(createSettingsIcon());
   const menuContent = document.createElement("div");
   menuContent.className = "card-menu-content";
 
@@ -656,7 +648,7 @@ function createComicCard(comic) {
 
   const duckipediaLink = document.createElement("a");
   duckipediaLink.className = "duckipedia-link";
-  duckipediaLink.href = createDuckipediaSearchUrl(comic.series, comic.volumeNumber, comic.title);
+  duckipediaLink.href = createDuckipediaUrl(comic.series, comic.volumeNumber, comic.title);
   duckipediaLink.target = "_blank";
   duckipediaLink.rel = "noopener noreferrer";
   duckipediaLink.textContent = "In Duckipedia nachschlagen ↗";
@@ -672,6 +664,33 @@ function createComicCard(comic) {
 
   article.append(duckipediaLink);
   return article;
+}
+
+function createConditionBadge(conditionCode, contextLabel) {
+  const badge = document.createElement("span");
+  const normalizedCode = String(conditionCode || "").toUpperCase();
+  badge.className = `condition-badge condition-${normalizedCode.toLowerCase()}`;
+  badge.textContent = normalizedCode || "–";
+  badge.title = `${contextLabel}: ${getConditionLabel(normalizedCode)}`;
+  badge.setAttribute("aria-label", badge.title);
+  return badge;
+}
+
+function createSettingsIcon() {
+  const svgNamespace = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNamespace, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "20");
+  svg.setAttribute("height", "20");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  svg.classList.add("settings-icon");
+
+  const path = document.createElementNS(svgNamespace, "path");
+  path.setAttribute("d", "M12 8.25A3.75 3.75 0 1 0 12 15.75 3.75 3.75 0 0 0 12 8.25Zm9 3.75c0-.55-.05-1.08-.15-1.6l-2.08-.48a7.32 7.32 0 0 0-.72-1.74l1.13-1.82a9.1 9.1 0 0 0-2.26-2.26L15.1 5.22a7.32 7.32 0 0 0-1.74-.72L12.88 2.4a9.47 9.47 0 0 0-3.2 0L9.2 4.5c-.62.18-1.2.42-1.75.72L5.64 4.09a9.1 9.1 0 0 0-2.26 2.26L4.5 8.18c-.3.55-.54 1.13-.72 1.74l-2.08.48a9.47 9.47 0 0 0 0 3.2l2.08.48c.18.61.42 1.2.72 1.74l-1.13 1.82a9.1 9.1 0 0 0 2.26 2.26l1.82-1.13c.55.3 1.13.54 1.75.72l.48 2.08a9.47 9.47 0 0 0 3.2 0l.48-2.08a7.32 7.32 0 0 0 1.74-.72l1.82 1.13a9.1 9.1 0 0 0 2.26-2.26l-1.13-1.82c.3-.55.54-1.13.72-1.74l2.08-.48c.1-.52.15-1.05.15-1.6Z");
+  path.setAttribute("fill", "currentColor");
+  svg.append(path);
+  return svg;
 }
 
 function createTag(label, active) {
@@ -1108,7 +1127,7 @@ function openMissingDetailModal(series, bandNumber) {
   elements.missingDetailCondition.value = detail.desiredCondition || "";
   elements.missingDetailUrl.value = detail.duckipediaUrl || "";
   elements.missingDetailNotes.value = detail.notes || "";
-  elements.missingDuckipediaLink.href = detail.duckipediaUrl || createDuckipediaSearchUrl(series, bandNumber, detail.title || "");
+  elements.missingDuckipediaLink.href = detail.duckipediaUrl || createDuckipediaUrl(series, bandNumber, detail.title || "");
   elements.deleteMissingDetail.classList.toggle("hidden", !hasMissingDetailContent(detail));
   elements.missingDetailMessage.textContent = "";
   elements.missingDetailModal.classList.remove("hidden");
@@ -1715,23 +1734,29 @@ async function handleUpdateButtonClick() {
   elements.updateApp.textContent = "Prüfe …";
 
   try {
-    const registration = await navigator.serviceWorker.getRegistration("./");
-
-    if (!registration) {
-      throw new Error("Keine Service-Worker-Registrierung gefunden.");
+    if (!navigator.onLine) {
+      showToast("Für die Updateprüfung wird kurz eine Internetverbindung benötigt.", "error");
+      return;
     }
 
+    // navigator.serviceWorker.ready ist auf iOS zuverlässiger als getRegistration mit relativer Scope-URL.
+    const registration = await navigator.serviceWorker.ready;
     await registration.update();
+
+    // Safari aktualisiert registration.waiting teilweise erst im nächsten Task.
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
 
     if (registration.waiting) {
       showAvailableUpdate(registration.waiting);
       return;
     }
 
-    showToast("Die installierte Version ist aktuell.");
+    showToast(`Sammlerhausen v${APP_CONFIG.appVersion} ist aktuell.`);
   } catch (error) {
     console.error("Updateprüfung fehlgeschlagen:", error);
-    showToast("Updateprüfung fehlgeschlagen. Bitte Internetverbindung prüfen.", "error");
+
+    // Die App bleibt nutzbar; Safari prüft den Service Worker zusätzlich bei jedem Start automatisch.
+    showToast("Manuelle Prüfung nicht möglich. Beim nächsten App-Start wird automatisch erneut geprüft.");
   } finally {
     if (!state.waitingServiceWorker) {
       elements.updateApp.disabled = false;

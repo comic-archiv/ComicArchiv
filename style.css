@@ -1428,3 +1428,86 @@ textarea[aria-invalid="true"] {
   font-size: 0.9rem;
   font-weight: 750;
 }
+
+
+/* Version 3.0.2: präzise Feld-Ausrichtung und kompakte Kartensteuerung */
+.paired-field {
+  align-self: start;
+}
+
+.paired-field > span {
+  display: flex;
+  min-height: 1.25rem;
+  align-items: center;
+  line-height: 1.25rem;
+}
+
+.paired-field > input {
+  display: block;
+  box-sizing: border-box;
+  height: 44px;
+  min-height: 44px;
+  margin: 0;
+}
+
+.card-right-column {
+  min-width: auto;
+  align-items: flex-start;
+}
+
+.condition-badge-list {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.condition-badge-list .condition-badge,
+.condition-badge {
+  display: grid;
+  width: 38px;
+  min-width: 38px;
+  max-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0;
+  place-items: center;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 11px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.condition-n { background: #d8f3ff; border-color: #8ad7f5; color: #075985; }
+.condition-nm { background: #bfeeea; border-color: #5bc4bb; color: #115e59; }
+.condition-vf { background: #c9f4d2; border-color: #65c77b; color: #166534; }
+.condition-fn { background: #e5f6bd; border-color: #a9cf54; color: #3f6212; }
+.condition-vg { background: #fff0a8; border-color: #e0ba32; color: #713f12; }
+.condition-gd { background: #ffd5a3; border-color: #ef9a3d; color: #7c2d12; }
+.condition-fr { background: #ffb68f; border-color: #e76f3c; color: #7f1d1d; }
+.condition-pr { background: #ffc3c3; border-color: #dc5d5d; color: #7f1d1d; }
+
+.card-menu > summary {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0;
+}
+
+.settings-icon {
+  display: block;
+}
+
+@media (max-width: 390px) {
+  .card-right-column {
+    min-width: auto;
+  }
+
+  .condition-badge-list .condition-badge {
+    max-width: 38px;
+    font-size: 0.7rem;
+  }
+}

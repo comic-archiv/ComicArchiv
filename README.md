@@ -1,8 +1,10 @@
-# Sammlerhausen 3.0.1
+# Sammlerhausen 3.0.2
 
-Hotfix fuer die PWA-Updatefunktion auf iPhone und iPad.
+Hotfix und Oberflächen-Update für die private Comic-Sammlung.
 
-- Updates werden automatisch aktiviert.
-- Eine einzelne fehlende Offline-Datei bricht die Installation nicht mehr ab.
-- Der Button "Updates pruefen" ist dauerhaft sichtbar.
-- Bestehende IndexedDB-Daten und Backups bleiben unveraendert kompatibel.
+Neu in 3.0.2:
+- zuverlässigere manuelle Updateprüfung auf iOS
+- direkt erzeugte Duckipedia-Seitenlinks je Reihe und Bandnummer
+- exakt ausgerichtete Felder für Bandnummer und Erscheinungsjahr
+- eigenes SVG-Einstellungsicon statt Emoji
+- kompakte, farbcodierte Zustandskacheln mit Abkürzungen
