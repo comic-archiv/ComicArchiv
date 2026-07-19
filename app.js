@@ -227,7 +227,7 @@ function bindEvents() {
   elements.comicList.addEventListener("click", handleCardAction);
   elements.missingList.addEventListener("click", handleMissingBandClick);
   elements.themeToggle.addEventListener("click", toggleTheme);
-  elements.updateApp.addEventListener("click", activateWaitingServiceWorker);
+  elements.updateApp.addEventListener("click", handleUpdateButtonClick);
   window.addEventListener("online", updateConnectionStatus);
   window.addEventListener("offline", updateConnectionStatus);
 
@@ -1698,15 +1698,44 @@ function registerServiceWorker() {
 function showAvailableUpdate(worker) {
   state.waitingServiceWorker = worker;
   elements.updateApp.classList.remove("hidden");
+  elements.updateApp.textContent = "Jetzt aktualisieren";
+  elements.updateApp.disabled = false;
   showToast("Eine neue Sammlerhausen-Version ist verfügbar.");
 }
 
-function activateWaitingServiceWorker() {
-  if (!state.waitingServiceWorker) {
-    elements.updateApp.classList.add("hidden");
+async function handleUpdateButtonClick() {
+  if (state.waitingServiceWorker) {
+    elements.updateApp.disabled = true;
+    elements.updateApp.textContent = "Aktualisiere …";
+    state.waitingServiceWorker.postMessage({ type: "SKIP_WAITING" });
     return;
   }
 
   elements.updateApp.disabled = true;
-  state.waitingServiceWorker.postMessage({ type: "SKIP_WAITING" });
+  elements.updateApp.textContent = "Prüfe …";
+
+  try {
+    const registration = await navigator.serviceWorker.getRegistration("./");
+
+    if (!registration) {
+      throw new Error("Keine Service-Worker-Registrierung gefunden.");
+    }
+
+    await registration.update();
+
+    if (registration.waiting) {
+      showAvailableUpdate(registration.waiting);
+      return;
+    }
+
+    showToast("Die installierte Version ist aktuell.");
+  } catch (error) {
+    console.error("Updateprüfung fehlgeschlagen:", error);
+    showToast("Updateprüfung fehlgeschlagen. Bitte Internetverbindung prüfen.", "error");
+  } finally {
+    if (!state.waitingServiceWorker) {
+      elements.updateApp.disabled = false;
+      elements.updateApp.textContent = "Updates prüfen";
+    }
+  }
 }
