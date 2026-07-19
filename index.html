@@ -35,7 +35,7 @@
       <span id="connection-status" class="status-pill">Online</span>
       <span class="status-copy">Lokale Sammlung</span>
       <button id="update-app" class="update-pill" type="button">Updates prüfen</button>
-      <span id="app-version" class="version-pill">v3.0.2</span>
+      <span id="app-version" class="version-pill">v3.1.0</span>
     </section>
 
     <section id="dashboard" class="section-anchor" aria-labelledby="dashboard-title">
@@ -63,6 +63,10 @@
         <button id="cancel-edit" class="text-button hidden" type="button">Abbrechen</button>
       </div>
       <p class="required-note"><strong>*</strong> Pflichtfeld</p>
+      <button id="open-scanner" class="scanner-launch-button" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M7 9v6M10 8v8M13 9v6M16 8v8"/></svg>
+        <span><strong>Serien-Scanner</strong><small>Zusatzbarcode lesen und Bandnummer automatisch übernehmen</small></span>
+      </button>
 
       <form id="comic-form" novalidate>
         <div class="field-grid compact-field-grid">
@@ -192,6 +196,78 @@
     <a href="#backup"><span aria-hidden="true">⇩</span>Backup</a>
   </nav>
 
+  <div id="scanner-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="scanner-modal-title">
+    <div class="modal-backdrop" data-close-scanner></div>
+    <section class="modal-card scanner-modal-card">
+      <div class="section-heading">
+        <div><p class="eyebrow">Schnellerfassung</p><h2 id="scanner-modal-title">Serien-Scanner</h2></div>
+        <button id="close-scanner" class="icon-button small-icon-button" type="button" aria-label="Scanner schließen">×</button>
+      </div>
+
+      <p class="scanner-intro">Wähle die Reihe einmal aus und halte die gesamte weiße Barcodefläche in den Rahmen. Sammlerhausen nutzt ausschließlich den kleinen zwei- oder fünfstelligen Zusatzcode als Bandnummer.</p>
+
+      <div class="scanner-settings-grid">
+        <label class="field field-full"><span>Reihe <strong aria-hidden="true">*</strong></span><select id="scanner-series"></select></label>
+        <label class="field"><span>Standardzustand</span><select id="scanner-condition"></select></label>
+        <label id="scanner-duplicate-condition-field" class="field hidden"><span>Zustand Exemplar 2</span><select id="scanner-duplicate-condition"></select></label>
+      </div>
+
+      <fieldset class="switch-group compact-switch-group scanner-switches">
+        <legend>Eigenschaften für gescannte Bände</legend>
+        <label class="check-row"><input id="scanner-is-read" type="checkbox"><span>Gelesen</span></label>
+        <label class="check-row"><input id="scanner-is-duplicate" type="checkbox"><span>Doppelt</span></label>
+        <label class="check-row"><input id="scanner-is-sealed" type="checkbox"><span>Foliert</span></label>
+      </fieldset>
+
+      <div class="scanner-viewport">
+        <div id="scanner-camera-target" class="scanner-camera-target" aria-label="Kamerabild für die Barcode-Erkennung"></div>
+        <div class="scanner-frame" aria-hidden="true"><span></span></div>
+        <div id="scanner-camera-placeholder" class="scanner-camera-placeholder">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M7 9v6M10 8v8M13 9v6M16 8v8"/></svg>
+          <span>Kamera noch nicht aktiv</span>
+        </div>
+      </div>
+
+      <p id="scanner-status" class="scanner-status" role="status" aria-live="polite">Bereit zum Scannen.</p>
+
+      <div class="scanner-source-actions">
+        <button id="scanner-start" class="primary-button" type="button">Kamera starten</button>
+        <button id="scanner-stop" class="secondary-button hidden" type="button">Kamera stoppen</button>
+        <label class="secondary-button file-button" for="scanner-photo">Foto auswerten</label>
+        <input id="scanner-photo" class="visually-hidden" type="file" accept="image/*" capture="environment">
+      </div>
+
+      <details class="scanner-manual-fallback">
+        <summary>Zusatzcode manuell eingeben</summary>
+        <div class="inline-form scanner-manual-row">
+          <label class="field field-full"><span>Zwei oder fünf Ziffern</span><input id="scanner-manual-code" type="text" inputmode="numeric" maxlength="5" placeholder="z. B. 03 oder 00239"></label>
+          <button id="scanner-manual-apply" class="secondary-button" type="button">Übernehmen</button>
+        </div>
+      </details>
+
+      <section id="scanner-result" class="scanner-result hidden" aria-labelledby="scanner-result-title">
+        <div class="scanner-result-heading">
+          <div><span class="stat-label">Erkannt</span><h3 id="scanner-result-title">Band <span id="scanner-band-number"></span></h3></div>
+          <span id="scanner-extension" class="scanner-code-pill"></span>
+        </div>
+        <p id="scanner-existing-warning" class="scanner-warning hidden"></p>
+        <div class="field-grid compact-field-grid scanner-result-fields">
+          <label class="field field-full"><span>Titel</span><input id="scanner-result-name" type="text" maxlength="200" placeholder="Wird nach Möglichkeit aus Duckipedia ergänzt"></label>
+          <label class="field"><span>Erscheinungsjahr</span><input id="scanner-result-year" type="number" inputmode="numeric" min="1800" max="2035" placeholder="Optional"></label>
+          <div class="field scanner-link-field"><span>Bandseite</span><a id="scanner-duckipedia-link" class="secondary-button link-button" href="#" target="_blank" rel="noopener noreferrer">Duckipedia öffnen</a></div>
+        </div>
+        <p id="scanner-lookup-status" class="field-help" aria-live="polite"></p>
+        <div class="modal-actions scanner-result-actions">
+          <button id="scanner-save" class="primary-button" type="button">Speichern &amp; weiter scannen</button>
+          <button id="scanner-apply-form" class="secondary-button" type="button">Nur ins Formular übernehmen</button>
+          <button id="scanner-rescan" class="text-button" type="button">Neu scannen</button>
+        </div>
+      </section>
+
+      <p class="scanner-help">Der große EAN-Code enthält nicht zuverlässig die Bandnummer. Entscheidend ist der kleine Zusatzcode rechts daneben. Die Kamera-Erkennung funktioniert nach dem ersten vollständigen Laden auch offline. Nur das automatische Ergänzen von Titel und Jahr über Duckipedia benötigt Internet; gespeicherte Comics bleiben lokal.</p>
+    </section>
+  </div>
+
   <div id="series-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="series-modal-title">
     <div class="modal-backdrop" data-close-series></div>
     <section class="modal-card">
@@ -239,6 +315,7 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  <script src="./vendor/quagga.min.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

@@ -16,6 +16,8 @@ import {
   saveComic
 } from "./storage.js";
 import { calculateMissingBands, countMissingBands } from "./missing.js";
+import { lookupDuckipediaMetadata } from "./duckipedia.js";
+import { MagazineBarcodeScanner, parseSupplementToBandNumber } from "./scanner.js";
 import {
   BackupValidationError,
   createCollectionCsv,
@@ -38,7 +40,9 @@ const state = {
   editingComic: null,
   importBackup: null,
   waitingServiceWorker: null,
-  selectedMissingBand: null
+  selectedMissingBand: null,
+  scannerResult: null,
+  scannerLookupController: null
 };
 
 const elements = {
@@ -129,11 +133,41 @@ const elements = {
   missingDuckipediaLink: document.querySelector("#missing-duckipedia-link"),
   deleteMissingDetail: document.querySelector("#delete-missing-detail"),
   missingDetailMessage: document.querySelector("#missing-detail-message"),
+  openScanner: document.querySelector("#open-scanner"),
+  scannerModal: document.querySelector("#scanner-modal"),
+  closeScanner: document.querySelector("#close-scanner"),
+  scannerSeries: document.querySelector("#scanner-series"),
+  scannerCondition: document.querySelector("#scanner-condition"),
+  scannerDuplicateCondition: document.querySelector("#scanner-duplicate-condition"),
+  scannerDuplicateConditionField: document.querySelector("#scanner-duplicate-condition-field"),
+  scannerIsRead: document.querySelector("#scanner-is-read"),
+  scannerIsDuplicate: document.querySelector("#scanner-is-duplicate"),
+  scannerIsSealed: document.querySelector("#scanner-is-sealed"),
+  scannerCameraTarget: document.querySelector("#scanner-camera-target"),
+  scannerCameraPlaceholder: document.querySelector("#scanner-camera-placeholder"),
+  scannerStatus: document.querySelector("#scanner-status"),
+  scannerStart: document.querySelector("#scanner-start"),
+  scannerStop: document.querySelector("#scanner-stop"),
+  scannerPhoto: document.querySelector("#scanner-photo"),
+  scannerManualCode: document.querySelector("#scanner-manual-code"),
+  scannerManualApply: document.querySelector("#scanner-manual-apply"),
+  scannerResult: document.querySelector("#scanner-result"),
+  scannerBandNumber: document.querySelector("#scanner-band-number"),
+  scannerExtension: document.querySelector("#scanner-extension"),
+  scannerExistingWarning: document.querySelector("#scanner-existing-warning"),
+  scannerResultName: document.querySelector("#scanner-result-name"),
+  scannerResultYear: document.querySelector("#scanner-result-year"),
+  scannerDuckipediaLink: document.querySelector("#scanner-duckipedia-link"),
+  scannerLookupStatus: document.querySelector("#scanner-lookup-status"),
+  scannerSave: document.querySelector("#scanner-save"),
+  scannerApplyForm: document.querySelector("#scanner-apply-form"),
+  scannerRescan: document.querySelector("#scanner-rescan"),
   toast: document.querySelector("#toast")
 };
 
 let toastTimer;
 let importInProgress = false;
+let barcodeScanner;
 
 initializeApp().catch((error) => {
   console.error(error);
@@ -142,6 +176,7 @@ initializeApp().catch((error) => {
 
 async function initializeApp() {
   applyStoredTheme();
+  barcodeScanner = new MagazineBarcodeScanner(elements.scannerCameraTarget);
   bindEvents();
   updateConnectionStatus();
   elements.appVersion.textContent = `v${APP_CONFIG.appVersion}`;
@@ -170,6 +205,9 @@ function populateConfiguration() {
   const selectedDuplicateCondition = elements.duplicateCondition.value || selectedCondition;
   const selectedFilterCondition = elements.filterCondition.value;
   const selectedMissingCondition = elements.missingDetailCondition.value;
+  const selectedScannerSeries = elements.scannerSeries.value || selectedSeries;
+  const selectedScannerCondition = elements.scannerCondition.value || selectedCondition;
+  const selectedScannerDuplicateCondition = elements.scannerDuplicateCondition.value || selectedDuplicateCondition;
 
   elements.series.replaceChildren();
   elements.series.append(createOption("", "Reihe auswählen"));
@@ -203,6 +241,24 @@ function populateConfiguration() {
     ? selectedFilterCondition
     : "all";
 
+  elements.scannerSeries.replaceChildren();
+  elements.scannerSeries.append(createOption("", "Reihe auswählen"));
+  availableSeries.forEach((seriesName) => elements.scannerSeries.append(createOption(seriesName, seriesName)));
+  elements.scannerSeries.value = availableSeries.includes(selectedScannerSeries) ? selectedScannerSeries : "";
+
+  [elements.scannerCondition, elements.scannerDuplicateCondition].forEach((select) => {
+    select.replaceChildren();
+    APP_CONFIG.conditions.forEach((condition) => {
+      select.append(createOption(condition.code, `${condition.label} – ${condition.code}`));
+    });
+  });
+  elements.scannerCondition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedScannerCondition)
+    ? selectedScannerCondition
+    : "VG";
+  elements.scannerDuplicateCondition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedScannerDuplicateCondition)
+    ? selectedScannerDuplicateCondition
+    : elements.scannerCondition.value;
+
   elements.missingDetailCondition.replaceChildren();
   elements.missingDetailCondition.append(createOption("", "Nicht festgelegt"));
   APP_CONFIG.conditions.forEach((condition) => {
@@ -228,6 +284,25 @@ function bindEvents() {
   elements.missingList.addEventListener("click", handleMissingBandClick);
   elements.themeToggle.addEventListener("click", toggleTheme);
   elements.updateApp.addEventListener("click", handleUpdateButtonClick);
+  elements.openScanner.addEventListener("click", openScannerModal);
+  elements.closeScanner.addEventListener("click", closeScannerModal);
+  elements.scannerStart.addEventListener("click", startScannerCamera);
+  elements.scannerStop.addEventListener("click", stopScannerCamera);
+  elements.scannerPhoto.addEventListener("change", handleScannerPhoto);
+  elements.scannerManualApply.addEventListener("click", handleScannerManualCode);
+  elements.scannerIsDuplicate.addEventListener("change", updateScannerDuplicateConditionVisibility);
+  elements.scannerSeries.addEventListener("change", () => {
+    if (state.scannerResult && state.scannerResult.series !== elements.scannerSeries.value) {
+      clearScannerResult();
+      setScannerStatus("Reihe geändert. Bitte scanne den Band erneut.");
+    }
+  });
+  elements.scannerSave.addEventListener("click", handleScannerSave);
+  elements.scannerApplyForm.addEventListener("click", handleScannerApplyToForm);
+  elements.scannerRescan.addEventListener("click", resetScannerForNext);
+  elements.scannerModal.addEventListener("click", (event) => {
+    if (event.target.closest("[data-close-scanner]")) closeScannerModal();
+  });
   window.addEventListener("online", updateConnectionStatus);
   window.addEventListener("offline", updateConnectionStatus);
 
@@ -276,6 +351,7 @@ function bindEvents() {
     if (!elements.importModal.classList.contains("hidden")) closeImportModal();
     if (!elements.seriesModal.classList.contains("hidden")) closeSeriesModal();
     if (!elements.missingDetailModal.classList.contains("hidden")) closeMissingDetailModal();
+    if (!elements.scannerModal.classList.contains("hidden")) closeScannerModal();
   });
 }
 
@@ -1009,6 +1085,394 @@ function setFormBusy(isBusy) {
   });
 }
 
+async function openScannerModal() {
+  if (state.editingId) {
+    showToast("Beende zuerst die Bearbeitung des geöffneten Eintrags.", "error");
+    return;
+  }
+
+  const availableSeries = getAvailableSeries(state.settings, state.comics);
+  if (availableSeries.includes(elements.series.value)) {
+    elements.scannerSeries.value = elements.series.value;
+  }
+
+  elements.scannerCondition.value = elements.condition.value || "VG";
+  elements.scannerDuplicateCondition.value = elements.duplicateCondition.value || elements.scannerCondition.value;
+  elements.scannerIsRead.checked = elements.isRead.checked;
+  elements.scannerIsDuplicate.checked = elements.isDuplicate.checked;
+  elements.scannerIsSealed.checked = elements.isSealed.checked;
+  updateScannerDuplicateConditionVisibility();
+  clearScannerResult();
+  elements.scannerModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+  setScannerStatus("Kamera wird vorbereitet …");
+
+  try {
+    await startScannerCamera();
+  } catch (error) {
+    console.warn("Scanner konnte beim Öffnen nicht automatisch starten:", error);
+  }
+}
+
+function closeScannerModal() {
+  stopScannerCamera();
+  abortScannerLookup();
+  clearScannerResult();
+  elements.scannerPhoto.value = "";
+  elements.scannerManualCode.value = "";
+  elements.scannerModal.classList.add("hidden");
+  restoreBodyModalState();
+}
+
+async function startScannerCamera() {
+  if (!elements.scannerSeries.value) {
+    setScannerStatus("Bitte wähle zuerst eine Reihe aus.", "error");
+    elements.scannerSeries.focus();
+    return;
+  }
+
+  if (!barcodeScanner?.isSupported()) {
+    setScannerStatus(
+      "Live-Scan ist hier nicht verfügbar. Nutze den Foto-Fallback oder prüfe, ob die App über HTTPS geöffnet wurde.",
+      "error"
+    );
+    return;
+  }
+
+  stopScannerCamera();
+  clearScannerResult();
+  elements.scannerStart.disabled = true;
+  elements.scannerCameraPlaceholder.classList.add("hidden");
+  elements.scannerStart.classList.add("hidden");
+  elements.scannerStop.classList.remove("hidden");
+  setScannerStatus("Kamera aktiv: Richte die gesamte weiße Barcodefläche waagerecht im Rahmen aus.");
+
+  try {
+    await barcodeScanner.start({
+      onDetected: handleScannerDetected,
+      onInterim: ({ type }) => {
+        if (type === "main-code-only") {
+          setScannerStatus("Großer Barcode erkannt. Bewege das Heft etwas weiter weg, damit auch der kleine Zusatzcode rechts sichtbar ist.");
+        }
+      },
+      onError: (error) => {
+        console.warn("Scannerfehler:", error);
+        setScannerStatus("Das Bild konnte noch nicht gelesen werden. Halte Barcode und Zusatzcode ruhig und möglichst gerade.");
+      }
+    });
+  } catch (error) {
+    console.error("Kamera konnte nicht gestartet werden:", error);
+    stopScannerCamera();
+    setScannerStatus(error.message, "error");
+  } finally {
+    elements.scannerStart.disabled = false;
+  }
+}
+
+function stopScannerCamera() {
+  barcodeScanner?.stop();
+  elements.scannerStart.classList.remove("hidden");
+  elements.scannerStop.classList.add("hidden");
+  elements.scannerCameraPlaceholder.classList.remove("hidden");
+}
+
+async function handleScannerPhoto() {
+  const [file] = elements.scannerPhoto.files || [];
+  elements.scannerPhoto.value = "";
+
+  if (!file) {
+    return;
+  }
+
+  if (!elements.scannerSeries.value) {
+    setScannerStatus("Bitte wähle vor der Fotoauswertung eine Reihe aus.", "error");
+    return;
+  }
+
+  stopScannerCamera();
+  clearScannerResult();
+  setScannerStatus("Foto wird lokal auf dem iPhone ausgewertet …");
+  elements.scannerStart.disabled = true;
+
+  try {
+    const payload = await barcodeScanner.decodeImageFile(file);
+    handleScannerDetected(payload);
+  } catch (error) {
+    console.error("Barcodefoto konnte nicht ausgewertet werden:", error);
+    setScannerStatus(error.message, "error");
+  } finally {
+    elements.scannerStart.disabled = false;
+  }
+}
+
+function handleScannerManualCode() {
+  const extension = elements.scannerManualCode.value.trim();
+  const bandNumber = parseSupplementToBandNumber(extension);
+
+  if (bandNumber === null) {
+    setScannerStatus("Der Zusatzcode muss genau zwei oder fünf Ziffern enthalten und darf nicht nur aus Nullen bestehen.", "error");
+    elements.scannerManualCode.focus();
+    return;
+  }
+
+  if (!elements.scannerSeries.value) {
+    setScannerStatus("Bitte wähle zuerst eine Reihe aus.", "error");
+    elements.scannerSeries.focus();
+    return;
+  }
+
+  stopScannerCamera();
+  handleScannerDetected({ extension, bandNumber, mainBarcode: "", format: null });
+}
+
+function handleScannerDetected(payload) {
+  const series = elements.scannerSeries.value;
+  const token = `${series}::${payload.bandNumber}::${Date.now()}::${Math.random()}`;
+  const pageUrl = createDuckipediaUrl(series, payload.bandNumber);
+
+  stopScannerCamera();
+  abortScannerLookup();
+  state.scannerResult = {
+    ...payload,
+    series,
+    pageUrl,
+    token
+  };
+
+  elements.scannerBandNumber.textContent = String(payload.bandNumber);
+  elements.scannerExtension.textContent = `Code ${payload.extension}`;
+  elements.scannerResultName.value = "";
+  elements.scannerResultYear.value = "";
+  elements.scannerDuckipediaLink.href = pageUrl;
+  elements.scannerResult.classList.remove("hidden");
+  setScannerStatus(`Band ${payload.bandNumber} wurde erkannt. Prüfe die Angaben und speichere den Band.` , "success");
+
+  const existingCount = state.comics.filter((comic) => (
+    comic.series === series && comic.numericBandNumber === payload.bandNumber
+  )).length;
+  elements.scannerExistingWarning.classList.toggle("hidden", existingCount === 0);
+  elements.scannerExistingWarning.textContent = existingCount === 0
+    ? ""
+    : existingCount === 1
+      ? "Dieser Band ist bereits einmal in deiner Sammlung eingetragen."
+      : `Dieser Band ist bereits ${existingCount}-mal in deiner Sammlung eingetragen.`;
+
+  lookupScannerMetadata(token);
+}
+
+async function lookupScannerMetadata(token) {
+  if (!state.scannerResult || state.scannerResult.token !== token) {
+    return;
+  }
+
+  if (!navigator.onLine) {
+    elements.scannerLookupStatus.textContent = "Offline: Titel und Erscheinungsjahr können gerade nicht automatisch ergänzt werden.";
+    return;
+  }
+
+  const controller = new AbortController();
+  state.scannerLookupController = controller;
+  elements.scannerLookupStatus.textContent = "Duckipedia wird nach Titel und Erscheinungsjahr durchsucht …";
+
+  const result = await lookupDuckipediaMetadata(
+    state.scannerResult.series,
+    state.scannerResult.bandNumber,
+    { signal: controller.signal }
+  );
+
+  if (!state.scannerResult || state.scannerResult.token !== token || controller.signal.aborted) {
+    return;
+  }
+
+  state.scannerResult.pageUrl = result.pageUrl;
+  elements.scannerDuckipediaLink.href = result.pageUrl;
+
+  if (result.title) {
+    elements.scannerResultName.value = result.title;
+  }
+
+  if (result.publicationYear) {
+    elements.scannerResultYear.value = String(result.publicationYear);
+  }
+
+  if (result.found && (result.title || result.publicationYear)) {
+    const foundParts = [result.title ? "Titel" : "", result.publicationYear ? "Jahr" : ""].filter(Boolean);
+    elements.scannerLookupStatus.textContent = `${foundParts.join(" und ")} wurden aus Duckipedia ergänzt.`;
+  } else if (result.found) {
+    elements.scannerLookupStatus.textContent = "Die Bandseite wurde gefunden, enthält aber keine automatisch auswertbaren Titel- oder Jahresangaben.";
+  } else {
+    elements.scannerLookupStatus.textContent = result.reason || "Titel und Jahr konnten nicht automatisch ergänzt werden.";
+  }
+}
+
+function abortScannerLookup() {
+  state.scannerLookupController?.abort();
+  state.scannerLookupController = null;
+}
+
+async function handleScannerSave() {
+  if (!state.scannerResult) {
+    setScannerStatus("Scanne zuerst einen Band.", "error");
+    return;
+  }
+
+  const comic = buildComicFromScanner();
+  setScannerControlsBusy(true);
+
+  try {
+    await saveComic(comic);
+    await refreshCollection();
+    showToast(`${comic.series}, Band ${comic.volumeNumber} wurde gespeichert.`);
+    clearScannerResult();
+    setScannerStatus("Gespeichert. Bereit für den nächsten Band.", "success");
+    await startScannerCamera();
+  } catch (error) {
+    console.error("Gescannter Band konnte nicht gespeichert werden:", error);
+    setScannerStatus(`Speichern fehlgeschlagen: ${error.message}`, "error");
+  } finally {
+    setScannerControlsBusy(false);
+  }
+}
+
+function buildComicFromScanner() {
+  const scan = state.scannerResult;
+  const series = elements.scannerSeries.value;
+  const condition = elements.scannerCondition.value;
+  const isDuplicate = elements.scannerIsDuplicate.checked;
+  const duplicateCondition = isDuplicate ? elements.scannerDuplicateCondition.value : null;
+  const title = elements.scannerResultName.value.trim();
+  const yearRaw = elements.scannerResultYear.value.trim();
+  const publicationYear = yearRaw ? Number(yearRaw) : null;
+
+  if (!scan || !series || scan.series !== series) {
+    throw new Error("Die Reihe wurde nach dem Scan geändert. Bitte scanne den Band erneut.");
+  }
+
+  if (!APP_CONFIG.conditions.some((entry) => entry.code === condition)) {
+    throw new Error("Bitte wähle einen gültigen Zustand aus.");
+  }
+
+  if (isDuplicate && !APP_CONFIG.conditions.some((entry) => entry.code === duplicateCondition)) {
+    throw new Error("Bitte wähle den Zustand des zweiten Exemplars aus.");
+  }
+
+  if (title.length > 200) {
+    throw new Error("Der Titel darf höchstens 200 Zeichen enthalten.");
+  }
+
+  if (
+    publicationYear !== null &&
+    (!Number.isInteger(publicationYear) || publicationYear < 1800 || publicationYear > APP_CONFIG.publicationYearMaximum)
+  ) {
+    throw new Error(`Das Erscheinungsjahr muss zwischen 1800 und ${APP_CONFIG.publicationYearMaximum} liegen.`);
+  }
+
+  const now = new Date().toISOString();
+
+  return {
+    id: createStableId(),
+    dataFormatVersion: APP_CONFIG.dataFormatVersion,
+    series,
+    volumeNumber: String(scan.bandNumber),
+    numericBandNumber: scan.bandNumber,
+    title,
+    publicationYear,
+    condition,
+    duplicateCondition,
+    isRead: elements.scannerIsRead.checked,
+    isDuplicate,
+    isSealed: elements.scannerIsSealed.checked,
+    notes: "",
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function handleScannerApplyToForm() {
+  if (!state.scannerResult) {
+    setScannerStatus("Scanne zuerst einen Band.", "error");
+    return;
+  }
+
+  const scan = state.scannerResult;
+  elements.series.value = scan.series;
+  elements.volumeNumber.value = String(scan.bandNumber);
+  elements.title.value = elements.scannerResultName.value.trim();
+  elements.publicationYear.value = elements.scannerResultYear.value.trim();
+  elements.condition.value = elements.scannerCondition.value;
+  elements.duplicateCondition.value = elements.scannerDuplicateCondition.value;
+  elements.isRead.checked = elements.scannerIsRead.checked;
+  elements.isDuplicate.checked = elements.scannerIsDuplicate.checked;
+  elements.isSealed.checked = elements.scannerIsSealed.checked;
+  updateDuplicateConditionVisibility();
+  closeScannerModal();
+  showFormMessage("Bandnummer und erkannte Duckipedia-Daten wurden übernommen. Bitte prüfe die Angaben und speichere den Comic.", "success");
+  elements.form.scrollIntoView({ behavior: "smooth", block: "start" });
+  window.setTimeout(() => elements.condition.focus({ preventScroll: true }), 350);
+}
+
+async function resetScannerForNext() {
+  clearScannerResult();
+  setScannerStatus("Bereit für einen neuen Scan.");
+  await startScannerCamera();
+}
+
+function clearScannerResult() {
+  abortScannerLookup();
+  state.scannerResult = null;
+  elements.scannerResult.classList.add("hidden");
+  elements.scannerBandNumber.textContent = "";
+  elements.scannerExtension.textContent = "";
+  elements.scannerResultName.value = "";
+  elements.scannerResultYear.value = "";
+  elements.scannerExistingWarning.textContent = "";
+  elements.scannerExistingWarning.classList.add("hidden");
+  elements.scannerLookupStatus.textContent = "";
+}
+
+function updateScannerDuplicateConditionVisibility() {
+  const isDuplicate = elements.scannerIsDuplicate.checked;
+  elements.scannerDuplicateConditionField.classList.toggle("hidden", !isDuplicate);
+  elements.scannerDuplicateCondition.disabled = !isDuplicate;
+
+  if (isDuplicate && !elements.scannerDuplicateCondition.value) {
+    elements.scannerDuplicateCondition.value = elements.scannerCondition.value || "VG";
+  }
+}
+
+function setScannerControlsBusy(isBusy) {
+  [
+    elements.scannerSeries,
+    elements.scannerCondition,
+    elements.scannerDuplicateCondition,
+    elements.scannerIsRead,
+    elements.scannerIsDuplicate,
+    elements.scannerIsSealed,
+    elements.scannerStart,
+    elements.scannerStop,
+    elements.scannerPhoto,
+    elements.scannerManualCode,
+    elements.scannerManualApply,
+    elements.scannerResultName,
+    elements.scannerResultYear,
+    elements.scannerSave,
+    elements.scannerApplyForm,
+    elements.scannerRescan,
+    elements.closeScanner
+  ].forEach((control) => {
+    control.disabled = isBusy;
+  });
+
+  if (!isBusy) {
+    updateScannerDuplicateConditionVisibility();
+  }
+}
+
+function setScannerStatus(message, type = "info") {
+  elements.scannerStatus.textContent = message;
+  elements.scannerStatus.dataset.type = type;
+}
+
 function openSeriesModal() {
   renderCustomSeriesList();
   elements.seriesMessage.textContent = "";
@@ -1211,7 +1675,7 @@ function normalizeHttpUrl(value) {
 }
 
 function restoreBodyModalState() {
-  const anyModalOpen = [elements.importModal, elements.seriesModal, elements.missingDetailModal]
+  const anyModalOpen = [elements.importModal, elements.seriesModal, elements.missingDetailModal, elements.scannerModal]
     .some((modal) => !modal.classList.contains("hidden"));
   document.body.classList.toggle("modal-open", anyModalOpen);
 }
