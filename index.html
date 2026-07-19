@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ComicArchiv">
+  <meta name="description" content="Privates Archiv für Lustige Taschenbücher und Sonderbände.">
+
+  <title>ComicArchiv</title>
+
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="icon" href="./icons/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Zum Inhalt springen</a>
+
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">CA</div>
+      <div>
+        <p class="eyebrow">Mein privates Archiv</p>
+        <h1>ComicArchiv</h1>
+      </div>
+    </div>
+
+    <button id="theme-toggle" class="icon-button" type="button" aria-label="Darstellung wechseln">
+      <span id="theme-icon" aria-hidden="true">☀︎</span>
+    </button>
+  </header>
+
+  <main id="main-content" class="app-shell">
+    <section class="status-panel" aria-label="App-Status">
+      <span id="connection-status" class="status-pill">Online</span>
+      <span class="status-copy">Automatische Speicherung auf diesem Gerät</span>
+    </section>
+
+    <section class="stats-grid" aria-label="Sammlungsübersicht">
+      <article class="stat-card">
+        <span class="stat-label">Gesamt</span>
+        <strong id="stat-total" class="stat-value">0</strong>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Gelesen</span>
+        <strong id="stat-read" class="stat-value">0</strong>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Foliert</span>
+        <strong id="stat-sealed" class="stat-value">0</strong>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Doppelt</span>
+        <strong id="stat-duplicate" class="stat-value">0</strong>
+      </article>
+    </section>
+
+    <section class="panel data-note" aria-labelledby="data-note-title">
+      <div>
+        <h2 id="data-note-title">Wo liegen meine Daten?</h2>
+        <p>
+          Deine Einträge werden in der lokalen Datenbank dieser Web-App gespeichert.
+          Sie werden nicht in das öffentliche GitHub-Repository hochgeladen.
+        </p>
+      </div>
+    </section>
+
+    <section class="panel form-panel" aria-labelledby="form-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Sammlung verwalten</p>
+          <h2 id="form-title">Comic hinzufügen</h2>
+        </div>
+        <button id="cancel-edit" class="text-button hidden" type="button">Bearbeiten abbrechen</button>
+      </div>
+
+      <form id="comic-form" novalidate>
+        <div class="field-grid">
+          <label class="field field-full">
+            <span>Reihe <strong aria-hidden="true">*</strong></span>
+            <select id="series" name="series" required autocomplete="off"></select>
+            <small class="field-error" id="series-error"></small>
+          </label>
+
+          <label class="field">
+            <span>Bandnummer <strong aria-hidden="true">*</strong></span>
+            <input
+              id="volume-number"
+              name="volumeNumber"
+              type="text"
+              inputmode="numeric"
+              maxlength="30"
+              required
+              autocomplete="off"
+              placeholder="z. B. 42"
+            >
+            <small class="field-help">Zahlen werden für spätere Fehlband-Prüfungen erkannt.</small>
+            <small class="field-error" id="volume-number-error"></small>
+          </label>
+
+          <label class="field">
+            <span>Erscheinungsjahr</span>
+            <input
+              id="publication-year"
+              name="publicationYear"
+              type="number"
+              inputmode="numeric"
+              min="1800"
+              max="2100"
+              autocomplete="off"
+              placeholder="z. B. 2024"
+            >
+            <small class="field-error" id="publication-year-error"></small>
+          </label>
+
+          <label class="field field-full">
+            <span>Titel</span>
+            <input
+              id="title"
+              name="title"
+              type="text"
+              maxlength="200"
+              autocomplete="off"
+              placeholder="Optional"
+            >
+            <small class="field-error" id="title-error"></small>
+          </label>
+
+          <label class="field field-full">
+            <span>Zustand <strong aria-hidden="true">*</strong></span>
+            <select id="condition" name="condition" required></select>
+            <small class="field-error" id="condition-error"></small>
+          </label>
+        </div>
+
+        <fieldset class="switch-group">
+          <legend>Eigenschaften</legend>
+
+          <label class="check-row">
+            <input id="is-read" name="isRead" type="checkbox">
+            <span>Gelesen</span>
+          </label>
+
+          <label class="check-row">
+            <input id="is-duplicate" name="isDuplicate" type="checkbox">
+            <span>Doppelt</span>
+          </label>
+
+          <label class="check-row">
+            <input id="is-sealed" name="isSealed" type="checkbox">
+            <span>Foliert</span>
+          </label>
+        </fieldset>
+
+        <label class="field field-full">
+          <span>Notizen</span>
+          <textarea
+            id="notes"
+            name="notes"
+            rows="4"
+            maxlength="2000"
+            placeholder="Optional, z. B. kleine Gebrauchsspuren"
+          ></textarea>
+          <small class="field-error" id="notes-error"></small>
+        </label>
+
+        <div class="form-actions">
+          <button class="primary-button" type="submit" data-action="save">Comic speichern</button>
+          <button id="save-next" class="secondary-button" type="submit" data-action="save-next">
+            Speichern &amp; nächsten Band
+          </button>
+        </div>
+
+        <p id="form-message" class="form-message" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section class="collection-section" aria-labelledby="collection-title">
+      <div class="section-heading collection-heading">
+        <div>
+          <p class="eyebrow">Gespeicherte Einträge</p>
+          <h2 id="collection-title">Meine Sammlung</h2>
+        </div>
+        <span id="collection-count" class="count-badge">0 Einträge</span>
+      </div>
+
+      <div id="empty-state" class="panel empty-state">
+        <div class="empty-icon" aria-hidden="true">＋</div>
+        <h3>Noch keine Comics eingetragen</h3>
+        <p>Lege oben deinen ersten Band an. Die Speicherung erfolgt automatisch.</p>
+      </div>
+
+      <div id="comic-list" class="comic-list" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
