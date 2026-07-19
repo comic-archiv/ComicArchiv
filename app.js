@@ -13,7 +13,8 @@ import {
   getAppSettings,
   replaceAllComics,
   saveAppSettings,
-  saveComic
+  saveComic,
+  upsertComics
 } from "./storage.js";
 import { calculateMissingBands, countMissingBands } from "./missing.js";
 import { lookupDuckipediaMetadata } from "./duckipedia.js";
@@ -42,7 +43,8 @@ const state = {
   waitingServiceWorker: null,
   selectedMissingBand: null,
   scannerResult: null,
-  scannerLookupController: null
+  scannerLookupController: null,
+  scannerQueue: []
 };
 
 const elements = {
@@ -96,11 +98,23 @@ const elements = {
   connectionStatus: document.querySelector("#connection-status"),
   appVersion: document.querySelector("#app-version"),
   updateApp: document.querySelector("#update-app"),
+  backupReminder: document.querySelector("#backup-reminder"),
+  backupReminderText: document.querySelector("#backup-reminder-text"),
+  backupReminderAction: document.querySelector("#backup-reminder-action"),
+  progressTargetForm: document.querySelector("#progress-target-form"),
+  progressSeries: document.querySelector("#progress-series"),
+  progressTarget: document.querySelector("#progress-target"),
+  progressSave: document.querySelector("#progress-save"),
+  progressMessage: document.querySelector("#progress-message"),
+  progressList: document.querySelector("#progress-list"),
+  progressSummary: document.querySelector("#progress-summary"),
   exportJson: document.querySelector("#export-json"),
   exportCsv: document.querySelector("#export-csv"),
   exportMissingCsv: document.querySelector("#export-missing-csv"),
   exportMessage: document.querySelector("#export-message"),
   lastBackup: document.querySelector("#last-backup"),
+  backupHealth: document.querySelector("#backup-health"),
+  backupChangeCount: document.querySelector("#backup-change-count"),
   storagePersistence: document.querySelector("#storage-persistence"),
   storageUsage: document.querySelector("#storage-usage"),
   requestPersistence: document.querySelector("#request-persistence"),
@@ -162,6 +176,13 @@ const elements = {
   scannerSave: document.querySelector("#scanner-save"),
   scannerApplyForm: document.querySelector("#scanner-apply-form"),
   scannerRescan: document.querySelector("#scanner-rescan"),
+  scannerQueue: document.querySelector("#scanner-queue"),
+  scannerQueueCount: document.querySelector("#scanner-queue-count"),
+  scannerQueueList: document.querySelector("#scanner-queue-list"),
+  scannerApplyDefaults: document.querySelector("#scanner-apply-defaults"),
+  scannerSaveQueue: document.querySelector("#scanner-save-queue"),
+  scannerClearQueue: document.querySelector("#scanner-clear-queue"),
+  scannerQueueMessage: document.querySelector("#scanner-queue-message"),
   toast: document.querySelector("#toast")
 };
 
@@ -191,6 +212,7 @@ async function initializeApp() {
 
   populateConfiguration();
   updateDuplicateConditionVisibility();
+  renderScannerQueue();
   await refreshCollection();
   renderBackupStatus();
   await refreshStorageStatus();
@@ -208,6 +230,7 @@ function populateConfiguration() {
   const selectedScannerSeries = elements.scannerSeries.value || selectedSeries;
   const selectedScannerCondition = elements.scannerCondition.value || selectedCondition;
   const selectedScannerDuplicateCondition = elements.scannerDuplicateCondition.value || selectedDuplicateCondition;
+  const selectedProgressSeries = elements.progressSeries.value || selectedSeries;
 
   elements.series.replaceChildren();
   elements.series.append(createOption("", "Reihe auswählen"));
@@ -218,6 +241,12 @@ function populateConfiguration() {
   elements.filterSeries.append(createOption("all", "Alle Reihen"));
   availableSeries.forEach((seriesName) => elements.filterSeries.append(createOption(seriesName, seriesName)));
   elements.filterSeries.value = availableSeries.includes(selectedFilterSeries) ? selectedFilterSeries : "all";
+
+  elements.progressSeries.replaceChildren();
+  elements.progressSeries.append(createOption("", "Reihe auswählen"));
+  availableSeries.forEach((seriesName) => elements.progressSeries.append(createOption(seriesName, seriesName)));
+  elements.progressSeries.value = availableSeries.includes(selectedProgressSeries) ? selectedProgressSeries : "";
+  syncProgressTargetInput();
 
   [elements.condition, elements.duplicateCondition].forEach((select) => {
     select.replaceChildren();
@@ -284,6 +313,9 @@ function bindEvents() {
   elements.missingList.addEventListener("click", handleMissingBandClick);
   elements.themeToggle.addEventListener("click", toggleTheme);
   elements.updateApp.addEventListener("click", handleUpdateButtonClick);
+  elements.backupReminderAction.addEventListener("click", handleJsonExport);
+  elements.progressTargetForm.addEventListener("submit", handleProgressTargetSubmit);
+  elements.progressSeries.addEventListener("change", syncProgressTargetInput);
   elements.openScanner.addEventListener("click", openScannerModal);
   elements.closeScanner.addEventListener("click", closeScannerModal);
   elements.scannerStart.addEventListener("click", startScannerCamera);
@@ -300,6 +332,12 @@ function bindEvents() {
   elements.scannerSave.addEventListener("click", handleScannerSave);
   elements.scannerApplyForm.addEventListener("click", handleScannerApplyToForm);
   elements.scannerRescan.addEventListener("click", resetScannerForNext);
+  elements.scannerApplyDefaults.addEventListener("click", applyScannerDefaultsToQueue);
+  elements.scannerSaveQueue.addEventListener("click", saveScannerQueue);
+  elements.scannerClearQueue.addEventListener("click", clearScannerQueue);
+  elements.scannerQueueList.addEventListener("input", handleScannerQueueInput);
+  elements.scannerQueueList.addEventListener("change", handleScannerQueueInput);
+  elements.scannerQueueList.addEventListener("click", handleScannerQueueClick);
   elements.scannerModal.addEventListener("click", (event) => {
     if (event.target.closest("[data-close-scanner]")) closeScannerModal();
   });
@@ -365,6 +403,7 @@ async function handleFormSubmit(event) {
     const wasEditing = Boolean(state.editingId);
     const comic = buildComicFromForm();
     await saveComic(comic);
+    await recordDataChange(1);
     await refreshCollection();
 
     if (action === "save-next" && !wasEditing) {
@@ -499,10 +538,219 @@ async function refreshCollection() {
     renderCollection();
     renderStats();
     renderMissingBands();
+    renderSeriesProgress();
+    renderBackupStatus();
   } catch (error) {
     console.error(error);
     showFormMessage(`Lokale Daten konnten nicht geladen werden: ${error.message}`, "error");
   }
+}
+
+async function saveMeaningfulSettings(patch, changeAmount = 1) {
+  const currentChanges = Number.isSafeInteger(state.settings.changesSinceBackup)
+    ? state.settings.changesSinceBackup
+    : 0;
+
+  state.settings = await saveAppSettings({
+    ...state.settings,
+    ...patch,
+    changesSinceBackup: Math.min(999999, currentChanges + Math.max(0, changeAmount))
+  });
+  renderBackupStatus();
+  return state.settings;
+}
+
+async function recordDataChange(changeAmount = 1) {
+  try {
+    await saveMeaningfulSettings({}, changeAmount);
+  } catch (error) {
+    console.warn("Der Backup-Änderungszähler konnte nicht aktualisiert werden:", error);
+  }
+}
+
+function syncProgressTargetInput() {
+  const series = elements.progressSeries.value;
+  elements.progressTarget.value = series
+    ? (state.settings.knownHighestBandBySeries?.[series] ?? "")
+    : "";
+}
+
+async function handleProgressTargetSubmit(event) {
+  event.preventDefault();
+  const series = elements.progressSeries.value;
+  const rawTarget = elements.progressTarget.value.trim();
+
+  if (!series) {
+    elements.progressMessage.textContent = "Bitte wähle eine Reihe aus.";
+    elements.progressMessage.dataset.type = "error";
+    elements.progressSeries.focus();
+    return;
+  }
+
+  const nextTargets = { ...(state.settings.knownHighestBandBySeries || {}) };
+
+  if (!rawTarget) {
+    if (!(series in nextTargets)) {
+      elements.progressMessage.textContent = "Für diese Reihe ist kein festes Ziel gespeichert.";
+      elements.progressMessage.dataset.type = "info";
+      return;
+    }
+    delete nextTargets[series];
+  } else {
+    const target = Number(rawTarget);
+    if (!Number.isSafeInteger(target) || target < 1 || target > 99999) {
+      elements.progressMessage.textContent = "Die Zielbandnummer muss zwischen 1 und 99.999 liegen.";
+      elements.progressMessage.dataset.type = "error";
+      elements.progressTarget.focus();
+      return;
+    }
+    const highestPresent = state.comics
+      .filter((comic) => comic.series === series && Number.isSafeInteger(comic.numericBandNumber))
+      .reduce((maximum, comic) => Math.max(maximum, comic.numericBandNumber), 0);
+    if (target < highestPresent) {
+      elements.progressMessage.textContent = `Das Ziel kann nicht unter dem bereits vorhandenen Band ${highestPresent} liegen.`;
+      elements.progressMessage.dataset.type = "error";
+      elements.progressTarget.focus();
+      return;
+    }
+    nextTargets[series] = target;
+  }
+
+  try {
+    await saveMeaningfulSettings({ knownHighestBandBySeries: nextTargets });
+    state.missingGroups = calculateMissingBands(state.comics, nextTargets);
+    renderMissingBands();
+    renderStats();
+    renderSeriesProgress();
+    elements.progressMessage.textContent = rawTarget
+      ? `Ziel für „${series}“ gespeichert.`
+      : `Festes Ziel für „${series}“ entfernt.`;
+    elements.progressMessage.dataset.type = "success";
+  } catch (error) {
+    elements.progressMessage.textContent = `Ziel konnte nicht gespeichert werden: ${error.message}`;
+    elements.progressMessage.dataset.type = "error";
+  }
+}
+
+function getSeriesProgressData() {
+  const numericBandsBySeries = new Map();
+
+  state.comics.forEach((comic) => {
+    if (!Number.isSafeInteger(comic.numericBandNumber) || comic.numericBandNumber < 1) return;
+    if (!numericBandsBySeries.has(comic.series)) numericBandsBySeries.set(comic.series, new Set());
+    numericBandsBySeries.get(comic.series).add(comic.numericBandNumber);
+  });
+
+  const configuredTargets = state.settings.knownHighestBandBySeries || {};
+  const seriesNames = new Set([
+    ...numericBandsBySeries.keys(),
+    ...Object.keys(configuredTargets)
+  ]);
+
+  return [...seriesNames].map((series) => {
+    const bands = numericBandsBySeries.get(series) || new Set();
+    const highestPresent = bands.size ? Math.max(...bands) : 0;
+    const configuredTarget = Number(configuredTargets[series]) || 0;
+    const target = configuredTarget || highestPresent;
+    const presentWithinTarget = target > 0
+      ? [...bands].filter((band) => band <= target).length
+      : 0;
+    const missing = Math.max(0, target - presentWithinTarget);
+    const percentage = target > 0 ? Math.min(100, (presentWithinTarget / target) * 100) : 0;
+
+    return {
+      series,
+      target,
+      configuredTarget,
+      highestPresent,
+      presentWithinTarget,
+      missing,
+      percentage
+    };
+  }).filter((entry) => entry.target > 0)
+    .sort((first, second) => first.series.localeCompare(second.series, "de", { sensitivity: "base" }));
+}
+
+function renderSeriesProgress() {
+  const progressData = getSeriesProgressData();
+  elements.progressList.replaceChildren();
+  elements.progressSummary.textContent = progressData.length === 1
+    ? "1 Reihe"
+    : `${progressData.length} Reihen`;
+
+  if (progressData.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "panel empty-state compact-empty-state";
+    const heading = document.createElement("h3");
+    heading.textContent = "Noch kein Fortschritt berechenbar";
+    const copy = document.createElement("p");
+    copy.textContent = "Trage numerische Bände ein oder speichere oben ein Ziel für eine Reihe.";
+    empty.append(heading, copy);
+    elements.progressList.append(empty);
+    return;
+  }
+
+  progressData.forEach((entry) => {
+    const card = document.createElement("article");
+    card.className = "panel progress-card";
+
+    const heading = document.createElement("div");
+    heading.className = "progress-card-heading";
+    const titleWrap = document.createElement("div");
+    const title = document.createElement("h3");
+    title.textContent = entry.series;
+    const meta = document.createElement("p");
+    meta.className = "muted-copy";
+    meta.textContent = entry.configuredTarget
+      ? `Persönliches Ziel: Band ${entry.target}`
+      : `Automatisch bis zum höchsten vorhandenen Band ${entry.target}`;
+    titleWrap.append(title, meta);
+    const percent = document.createElement("strong");
+    percent.className = "progress-percent";
+    percent.textContent = `${entry.percentage.toLocaleString("de-DE", { maximumFractionDigits: 1 })} %`;
+    heading.append(titleWrap, percent);
+
+    const bar = document.createElement("div");
+    bar.className = "progress-bar";
+    bar.setAttribute("role", "progressbar");
+    bar.setAttribute("aria-valuemin", "0");
+    bar.setAttribute("aria-valuemax", "100");
+    bar.setAttribute("aria-valuenow", String(Math.round(entry.percentage)));
+    const fill = document.createElement("span");
+    fill.style.width = `${entry.percentage}%`;
+    bar.append(fill);
+
+    const stats = document.createElement("div");
+    stats.className = "progress-card-stats";
+    const createProgressStat = (value, label) => {
+      const wrapper = document.createElement("span");
+      const strong = document.createElement("strong");
+      strong.textContent = String(value);
+      const small = document.createElement("small");
+      small.textContent = label;
+      wrapper.append(strong, small);
+      return wrapper;
+    };
+    stats.append(
+      createProgressStat(entry.presentWithinTarget, "vorhanden"),
+      createProgressStat(entry.missing, "fehlend"),
+      createProgressStat(entry.target, "Ziel")
+    );
+
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = "text-button progress-edit-button";
+    editButton.textContent = entry.configuredTarget ? "Ziel ändern" : "Festes Ziel setzen";
+    editButton.addEventListener("click", () => {
+      elements.progressSeries.value = entry.series;
+      syncProgressTargetInput();
+      elements.progressTargetForm.scrollIntoView({ behavior: "smooth", block: "center" });
+      window.setTimeout(() => elements.progressTarget.focus({ preventScroll: true }), 350);
+    });
+
+    card.append(heading, bar, stats, editButton);
+    elements.progressList.append(card);
+  });
 }
 
 function renderCollection() {
@@ -952,6 +1200,7 @@ async function confirmAndDelete(comic) {
 
   try {
     await deleteComic(comic.id);
+    await recordDataChange(1);
 
     if (state.editingId === comic.id) {
       resetForm();
@@ -1103,6 +1352,7 @@ async function openScannerModal() {
   elements.scannerIsSealed.checked = elements.isSealed.checked;
   updateScannerDuplicateConditionVisibility();
   clearScannerResult();
+  renderScannerQueue();
   elements.scannerModal.classList.remove("hidden");
   document.body.classList.add("modal-open");
   setScannerStatus("Kamera wird vorbereitet …");
@@ -1316,21 +1566,337 @@ async function handleScannerSave() {
     return;
   }
 
-  const comic = buildComicFromScanner();
-  setScannerControlsBusy(true);
-
   try {
-    await saveComic(comic);
-    await refreshCollection();
-    showToast(`${comic.series}, Band ${comic.volumeNumber} wurde gespeichert.`);
+    const comic = buildComicFromScanner();
+    const alreadyQueued = state.scannerQueue.some((item) => (
+      item.series === comic.series && item.numericBandNumber === comic.numericBandNumber
+    ));
+
+    if (alreadyQueued) {
+      setScannerStatus(`${comic.series}, Band ${comic.volumeNumber} befindet sich bereits in der Warteschlange.`, "error");
+      return;
+    }
+
+    const existingComic = state.comics.find((entry) => (
+      entry.series === comic.series && entry.numericBandNumber === comic.numericBandNumber
+    ));
+
+    state.scannerQueue.push({
+      ...comic,
+      queueId: createStableId(),
+      extension: state.scannerResult.extension,
+      pageUrl: state.scannerResult.pageUrl,
+      existingComicId: existingComic?.id || null,
+      action: existingComic ? "skip" : "add"
+    });
+
+    renderScannerQueue();
     clearScannerResult();
-    setScannerStatus("Gespeichert. Bereit für den nächsten Band.", "success");
+    setScannerStatus(`${comic.series}, Band ${comic.volumeNumber} wurde vorgemerkt. Bereit für den nächsten Scan.`, "success");
     await startScannerCamera();
   } catch (error) {
-    console.error("Gescannter Band konnte nicht gespeichert werden:", error);
-    setScannerStatus(`Speichern fehlgeschlagen: ${error.message}`, "error");
+    console.error("Gescannter Band konnte nicht vorgemerkt werden:", error);
+    setScannerStatus(`Übernahme fehlgeschlagen: ${error.message}`, "error");
+  }
+}
+
+function renderScannerQueue() {
+  elements.scannerQueueList.replaceChildren();
+  const queue = state.scannerQueue;
+  elements.scannerQueueCount.textContent = queue.length === 1 ? "1 Band" : `${queue.length} Bände`;
+  elements.scannerSaveQueue.disabled = queue.length === 0;
+  elements.scannerApplyDefaults.disabled = queue.length === 0;
+  elements.scannerClearQueue.disabled = queue.length === 0;
+
+  if (queue.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "scanner-queue-empty";
+    empty.textContent = "Noch keine Bände vorgemerkt.";
+    elements.scannerQueueList.append(empty);
+    return;
+  }
+
+  queue.forEach((item, index) => {
+    const card = document.createElement("article");
+    card.className = "scanner-queue-card";
+    card.dataset.queueId = item.queueId;
+
+    const heading = document.createElement("div");
+    heading.className = "scanner-queue-card-heading";
+    const titleWrap = document.createElement("div");
+    const kicker = document.createElement("span");
+    kicker.className = "stat-label";
+    kicker.textContent = `Position ${index + 1}`;
+    const title = document.createElement("h4");
+    title.textContent = `${item.series} · Band ${item.volumeNumber}`;
+    titleWrap.append(kicker, title);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "icon-button small-icon-button scanner-queue-remove";
+    remove.dataset.queueAction = "remove";
+    remove.setAttribute("aria-label", `${item.series}, Band ${item.volumeNumber} aus der Warteschlange entfernen`);
+    remove.textContent = "×";
+    heading.append(titleWrap, remove);
+
+    const grid = document.createElement("div");
+    grid.className = "field-grid compact-field-grid scanner-queue-fields";
+    grid.append(
+      createQueueInput("Titel", "title", item.title, "text", 200, "field-full"),
+      createQueueInput("Erscheinungsjahr", "publicationYear", item.publicationYear ?? "", "number", 4),
+      createQueueConditionSelect("Zustand", "condition", item.condition)
+    );
+
+    if (item.existingComicId) {
+      const actionField = document.createElement("label");
+      actionField.className = "field field-full";
+      const actionLabel = document.createElement("span");
+      actionLabel.textContent = "Bereits vorhanden";
+      const actionSelect = document.createElement("select");
+      actionSelect.dataset.queueField = "action";
+      actionSelect.append(
+        createOption("skip", "Überspringen"),
+        createOption("second-copy", "Als zweites Exemplar übernehmen")
+      );
+      const existing = state.comics.find((comic) => comic.id === item.existingComicId);
+      if (existing?.isDuplicate) {
+        actionSelect.value = "skip";
+        actionSelect.disabled = true;
+        const hint = document.createElement("small");
+        hint.className = "field-help";
+        hint.textContent = "Dieser Band ist bereits als doppelt markiert.";
+        actionField.append(actionLabel, actionSelect, hint);
+      } else {
+        actionSelect.value = item.action;
+        actionField.append(actionLabel, actionSelect);
+      }
+      grid.append(actionField);
+    }
+
+    const toggles = document.createElement("div");
+    toggles.className = "scanner-queue-toggles";
+    toggles.append(
+      createQueueCheckbox("Gelesen", "isRead", item.isRead),
+      createQueueCheckbox("Foliert", "isSealed", item.isSealed),
+      createQueueCheckbox("Doppelt", "isDuplicate", item.isDuplicate)
+    );
+
+    const duplicateField = createQueueConditionSelect("Zustand Exemplar 2", "duplicateCondition", item.duplicateCondition || item.condition);
+    duplicateField.classList.toggle("hidden", !item.isDuplicate || Boolean(item.existingComicId));
+    duplicateField.dataset.duplicateField = "true";
+    grid.append(duplicateField);
+
+    const link = document.createElement("a");
+    link.className = "text-link scanner-queue-link";
+    link.href = item.pageUrl || createDuckipediaUrl(item.series, item.volumeNumber, item.title);
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "Duckipedia öffnen";
+
+    card.append(heading, grid, toggles, link);
+    elements.scannerQueueList.append(card);
+  });
+}
+
+function createQueueInput(labelText, fieldName, value, type, maxLength, extraClass = "") {
+  const label = document.createElement("label");
+  label.className = `field ${extraClass}`.trim();
+  const span = document.createElement("span");
+  span.textContent = labelText;
+  const input = document.createElement("input");
+  input.type = type;
+  input.dataset.queueField = fieldName;
+  input.value = String(value ?? "");
+  if (type === "number") {
+    input.inputMode = "numeric";
+    input.min = "1800";
+    input.max = String(APP_CONFIG.publicationYearMaximum);
+  } else if (maxLength) {
+    input.maxLength = maxLength;
+  }
+  label.append(span, input);
+  return label;
+}
+
+function createQueueConditionSelect(labelText, fieldName, value) {
+  const label = document.createElement("label");
+  label.className = "field";
+  const span = document.createElement("span");
+  span.textContent = labelText;
+  const select = document.createElement("select");
+  select.dataset.queueField = fieldName;
+  APP_CONFIG.conditions.forEach((condition) => {
+    select.append(createOption(condition.code, `${condition.label} – ${condition.code}`));
+  });
+  select.value = value;
+  label.append(span, select);
+  return label;
+}
+
+function createQueueCheckbox(labelText, fieldName, checked) {
+  const label = document.createElement("label");
+  label.className = "check-row compact-check";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.dataset.queueField = fieldName;
+  input.checked = Boolean(checked);
+  const span = document.createElement("span");
+  span.textContent = labelText;
+  label.append(input, span);
+  return label;
+}
+
+function handleScannerQueueInput(event) {
+  const control = event.target.closest("[data-queue-field]");
+  const card = event.target.closest("[data-queue-id]");
+  if (!control || !card) return;
+  const item = state.scannerQueue.find((entry) => entry.queueId === card.dataset.queueId);
+  if (!item) return;
+
+  const field = control.dataset.queueField;
+  if (control instanceof HTMLInputElement && control.type === "checkbox") {
+    item[field] = control.checked;
+  } else if (field === "publicationYear") {
+    item.publicationYear = control.value ? Number(control.value) : null;
+  } else {
+    item[field] = control.value;
+  }
+
+  if (field === "isDuplicate") {
+    if (item.isDuplicate && !item.duplicateCondition) item.duplicateCondition = item.condition;
+    renderScannerQueue();
+  }
+}
+
+function handleScannerQueueClick(event) {
+  const button = event.target.closest("button[data-queue-action]");
+  const card = event.target.closest("[data-queue-id]");
+  if (!button || !card) return;
+  if (button.dataset.queueAction === "remove") {
+    state.scannerQueue = state.scannerQueue.filter((entry) => entry.queueId !== card.dataset.queueId);
+    renderScannerQueue();
+  }
+}
+
+function applyScannerDefaultsToQueue() {
+  if (state.scannerQueue.length === 0) return;
+  const condition = elements.scannerCondition.value;
+  const isDuplicate = elements.scannerIsDuplicate.checked;
+  state.scannerQueue.forEach((item) => {
+    item.condition = condition;
+    item.isRead = elements.scannerIsRead.checked;
+    item.isSealed = elements.scannerIsSealed.checked;
+    if (!item.existingComicId) {
+      item.isDuplicate = isDuplicate;
+      item.duplicateCondition = isDuplicate
+        ? (elements.scannerDuplicateCondition.value || condition)
+        : null;
+    }
+  });
+  renderScannerQueue();
+  elements.scannerQueueMessage.textContent = "Die aktuellen Scanner-Einstellungen wurden auf alle vorgemerkten Bände angewendet.";
+  elements.scannerQueueMessage.dataset.type = "success";
+}
+
+function clearScannerQueue() {
+  if (state.scannerQueue.length === 0) return;
+  if (!window.confirm("Die gesamte Scanner-Warteschlange verwerfen? Noch nicht gespeicherte Bände gehen dabei verloren.")) return;
+  state.scannerQueue = [];
+  renderScannerQueue();
+  elements.scannerQueueMessage.textContent = "Warteschlange geleert.";
+  elements.scannerQueueMessage.dataset.type = "info";
+}
+
+async function saveScannerQueue() {
+  if (state.scannerQueue.length === 0) {
+    elements.scannerQueueMessage.textContent = "Die Warteschlange ist leer.";
+    elements.scannerQueueMessage.dataset.type = "error";
+    return;
+  }
+
+  const records = [];
+  let skipped = 0;
+
+  try {
+    state.scannerQueue.forEach((item) => {
+      validateQueuedComic(item);
+      if (item.action === "skip") {
+        skipped += 1;
+        return;
+      }
+
+      if (item.action === "second-copy" && item.existingComicId) {
+        const existing = state.comics.find((comic) => comic.id === item.existingComicId);
+        if (!existing || existing.isDuplicate) {
+          skipped += 1;
+          return;
+        }
+        records.push({
+          ...existing,
+          title: existing.title || item.title,
+          publicationYear: existing.publicationYear || item.publicationYear,
+          isRead: existing.isRead || item.isRead,
+          isSealed: existing.isSealed || item.isSealed,
+          isDuplicate: true,
+          duplicateCondition: item.condition,
+          updatedAt: new Date().toISOString()
+        });
+        return;
+      }
+
+      const { queueId, extension, pageUrl, existingComicId, action, ...comic } = item;
+      records.push({
+        ...comic,
+        duplicateCondition: comic.isDuplicate ? (comic.duplicateCondition || comic.condition) : null,
+        updatedAt: new Date().toISOString()
+      });
+    });
+  } catch (error) {
+    elements.scannerQueueMessage.textContent = error.message;
+    elements.scannerQueueMessage.dataset.type = "error";
+    return;
+  }
+
+  if (records.length === 0) {
+    elements.scannerQueueMessage.textContent = "Alle vorgemerkten Bände sind auf Überspringen gestellt.";
+    elements.scannerQueueMessage.dataset.type = "info";
+    return;
+  }
+
+  setScannerControlsBusy(true);
+  try {
+    await upsertComics(records);
+    await recordDataChange(records.length);
+    state.scannerQueue = [];
+    renderScannerQueue();
+    await refreshCollection();
+    elements.scannerQueueMessage.textContent = `${records.length} Bände gespeichert${skipped ? `, ${skipped} übersprungen` : ""}.`;
+    elements.scannerQueueMessage.dataset.type = "success";
+    showToast(`${records.length} Bände aus der Warteschlange gespeichert.`);
+  } catch (error) {
+    console.error("Scanner-Warteschlange konnte nicht gespeichert werden:", error);
+    elements.scannerQueueMessage.textContent = `Sammelspeicherung fehlgeschlagen: ${error.message}`;
+    elements.scannerQueueMessage.dataset.type = "error";
   } finally {
     setScannerControlsBusy(false);
+  }
+}
+
+function validateQueuedComic(item) {
+  if (item.action === "skip") return;
+  if (!APP_CONFIG.conditions.some((entry) => entry.code === item.condition)) {
+    throw new Error(`${item.series}, Band ${item.volumeNumber}: Ungültiger Zustand.`);
+  }
+  if (item.isDuplicate && !APP_CONFIG.conditions.some((entry) => entry.code === item.duplicateCondition)) {
+    throw new Error(`${item.series}, Band ${item.volumeNumber}: Zustand des zweiten Exemplars fehlt.`);
+  }
+  if (item.title.length > 200) {
+    throw new Error(`${item.series}, Band ${item.volumeNumber}: Der Titel ist zu lang.`);
+  }
+  if (
+    item.publicationYear !== null &&
+    (!Number.isInteger(item.publicationYear) || item.publicationYear < 1800 || item.publicationYear > APP_CONFIG.publicationYearMaximum)
+  ) {
+    throw new Error(`${item.series}, Band ${item.volumeNumber}: Ungültiges Erscheinungsjahr.`);
   }
 }
 
@@ -1458,13 +2024,20 @@ function setScannerControlsBusy(isBusy) {
     elements.scannerSave,
     elements.scannerApplyForm,
     elements.scannerRescan,
+    elements.scannerApplyDefaults,
+    elements.scannerSaveQueue,
+    elements.scannerClearQueue,
     elements.closeScanner
   ].forEach((control) => {
+    control.disabled = isBusy;
+  });
+  elements.scannerQueueList.querySelectorAll("input, select, button").forEach((control) => {
     control.disabled = isBusy;
   });
 
   if (!isBusy) {
     updateScannerDuplicateConditionVisibility();
+    renderScannerQueue();
   }
 }
 
@@ -1512,8 +2085,7 @@ async function handleAddCustomSeries(event) {
   }
 
   try {
-    state.settings = await saveAppSettings({
-      ...state.settings,
+    await saveMeaningfulSettings({
       customSeries: [...(state.settings.customSeries || []), name]
     });
     populateConfiguration();
@@ -1565,8 +2137,7 @@ async function handleRemoveCustomSeries(event) {
     : `„${seriesName}“ aus der persönlichen Auswahlliste entfernen?`;
   if (!window.confirm(prompt)) return;
 
-  state.settings = await saveAppSettings({
-    ...state.settings,
+  await saveMeaningfulSettings({
     customSeries: (state.settings.customSeries || []).filter((entry) => entry !== seriesName)
   });
   populateConfiguration();
@@ -1643,7 +2214,7 @@ async function handleSaveMissingDetail(event) {
     updatedAt: new Date().toISOString()
   };
 
-  state.settings = await saveAppSettings({ ...state.settings, missingBandDetails: nextDetails });
+  await saveMeaningfulSettings({ missingBandDetails: nextDetails });
   renderMissingBands();
   closeMissingDetailModal();
   showToast("Details zum fehlenden Band gespeichert.");
@@ -1653,7 +2224,7 @@ async function handleDeleteMissingDetail() {
   if (!state.selectedMissingBand) return;
   const nextDetails = { ...(state.settings.missingBandDetails || {}) };
   delete nextDetails[state.selectedMissingBand.key];
-  state.settings = await saveAppSettings({ ...state.settings, missingBandDetails: nextDetails });
+  await saveMeaningfulSettings({ missingBandDetails: nextDetails });
   renderMissingBands();
   closeMissingDetailModal();
   showToast("Ergänzende Details gelöscht.");
@@ -1735,7 +2306,12 @@ async function handleJsonExport() {
 
   try {
     const backupTime = new Date().toISOString();
-    const nextSettings = { ...state.settings, lastBackupAt: backupTime };
+    const nextSettings = {
+      ...state.settings,
+      lastBackupAt: backupTime,
+      changesSinceBackup: 0,
+      lastBackupComicCount: state.comics.length
+    };
     const result = await shareOrDownloadText({
       content: createJsonBackup(state.comics, nextSettings),
       filename: createDatedFilename("Sammlerhausen-Backup", "json"),
@@ -1897,6 +2473,7 @@ async function handleImportSubmit() {
 
   try {
     let resultMessage;
+    let importedChangeAmount = 0;
 
     if (mode === "replace") {
       await replaceAllComics(state.importBackup.comics);
@@ -1904,10 +2481,11 @@ async function handleImportSubmit() {
     } else {
       const mergeResult = mergeCollections(state.comics, state.importBackup.comics);
       await replaceAllComics(mergeResult.comics);
+      importedChangeAmount = mergeResult.added + mergeResult.updated;
       resultMessage = `${mergeResult.added} hinzugefügt, ${mergeResult.updated} aktualisiert, ${mergeResult.skipped} übersprungen.`;
     }
 
-    const nextSettings = mergeImportedSettings(mode, state.importBackup);
+    const nextSettings = mergeImportedSettings(mode, state.importBackup, importedChangeAmount);
     state.settings = await saveAppSettings(nextSettings);
     applyTheme(state.settings.theme);
     persistThemeLocally(state.settings.theme);
@@ -1930,13 +2508,15 @@ async function handleImportSubmit() {
   }
 }
 
-function mergeImportedSettings(mode, backup) {
+function mergeImportedSettings(mode, backup, importedChangeAmount = 0) {
   const importedSettings = backup.settings || {};
 
   if (mode === "replace") {
     return {
       ...importedSettings,
-      lastBackupAt: importedSettings.lastBackupAt || backup.exportedAt || state.settings.lastBackupAt
+      lastBackupAt: importedSettings.lastBackupAt || backup.exportedAt || state.settings.lastBackupAt,
+      changesSinceBackup: 0,
+      lastBackupComicCount: backup.comics.length
     };
   }
 
@@ -1953,7 +2533,9 @@ function mergeImportedSettings(mode, backup) {
     missingBandDetails: {
       ...(state.settings.missingBandDetails || {}),
       ...(importedSettings.missingBandDetails || {})
-    }
+    },
+    changesSinceBackup: Math.min(999999, (state.settings.changesSinceBackup || 0) + importedChangeAmount),
+    lastBackupComicCount: state.settings.lastBackupComicCount || 0
   };
 }
 
@@ -1971,9 +2553,47 @@ function setImportControlsBusy(isBusy) {
 }
 
 function renderBackupStatus() {
-  elements.lastBackup.textContent = state.settings.lastBackupAt
-    ? formatDateTime(state.settings.lastBackupAt)
+  const lastBackupAt = state.settings.lastBackupAt;
+  const changes = Number.isSafeInteger(state.settings.changesSinceBackup)
+    ? state.settings.changesSinceBackup
+    : 0;
+  const hasCollectionData = state.comics.length > 0;
+  const daysSinceBackup = lastBackupAt
+    ? Math.floor((Date.now() - Date.parse(lastBackupAt)) / 86400000)
+    : null;
+  const needsBackup = hasCollectionData && (
+    !lastBackupAt ||
+    changes >= 25 ||
+    (changes > 0 && daysSinceBackup !== null && daysSinceBackup >= 14)
+  );
+
+  elements.lastBackup.textContent = lastBackupAt
+    ? formatDateTime(lastBackupAt)
     : "Noch keines";
+  elements.backupChangeCount.textContent = changes === 1
+    ? "1 Änderung seit dem letzten Backup"
+    : `${changes} Änderungen seit dem letzten Backup`;
+
+  if (!hasCollectionData) {
+    elements.backupHealth.textContent = "Noch nicht erforderlich";
+  } else if (!lastBackupAt) {
+    elements.backupHealth.textContent = "Erstes Backup fehlt";
+  } else if (needsBackup) {
+    elements.backupHealth.textContent = "Backup empfohlen";
+  } else {
+    elements.backupHealth.textContent = "Aktuell gesichert";
+  }
+
+  elements.backupReminder.classList.toggle("hidden", !needsBackup);
+  if (needsBackup) {
+    if (!lastBackupAt) {
+      elements.backupReminderText.textContent = `Deine Sammlung enthält ${formatEntryCount(state.comics.length)}, aber noch kein JSON-Backup.`;
+    } else if (changes >= 25) {
+      elements.backupReminderText.textContent = `Seit dem letzten Backup wurden ${changes} Änderungen vorgenommen.`;
+    } else {
+      elements.backupReminderText.textContent = `Das letzte Backup ist ${daysSinceBackup} Tage alt und seitdem wurde die Sammlung geändert.`;
+    }
+  }
 }
 
 async function refreshStorageStatus() {

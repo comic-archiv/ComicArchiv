@@ -1848,3 +1848,218 @@ textarea[aria-invalid="true"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Version 3.2: Backup-Center, Reihenfortschritt und Scanner-Warteschlange */
+.backup-reminder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+  padding: 0.9rem;
+  border: 1px solid rgba(245, 158, 11, 0.55);
+  border-radius: var(--radius-large);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.backup-reminder strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.backup-reminder p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.compact-button {
+  min-height: 2.75rem;
+  flex: 0 0 auto;
+}
+
+.progress-target-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+.progress-target-form > button {
+  grid-column: 1 / -1;
+}
+
+.progress-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.progress-card {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.progress-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.progress-card-heading h3,
+.scanner-queue-card-heading h4 {
+  margin: 0;
+}
+
+.progress-card-heading p {
+  margin: 0.2rem 0 0;
+}
+
+.progress-percent {
+  white-space: nowrap;
+  font-size: 1.1rem;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 0.7rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+.progress-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #38bdf8, #22c55e);
+  transition: width 180ms ease;
+}
+
+.progress-card-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+.progress-card-stats span {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.55rem;
+  text-align: center;
+  border-radius: var(--radius-medium);
+  background: var(--surface-soft);
+}
+
+.progress-card-stats strong {
+  font-size: 1.05rem;
+}
+
+.progress-card-stats small {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.progress-edit-button {
+  justify-self: start;
+}
+
+.compact-empty-state {
+  padding-block: 1.25rem;
+}
+
+.scanner-queue {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.scanner-queue-heading,
+.scanner-queue-heading > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.scanner-queue-toolbar {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.65rem;
+}
+
+.scanner-queue-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.scanner-queue-empty {
+  margin: 0;
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-medium);
+}
+
+.scanner-queue-card {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-large);
+  background: var(--surface-soft);
+}
+
+.scanner-queue-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.scanner-queue-remove {
+  flex: 0 0 auto;
+}
+
+.scanner-queue-fields {
+  gap: 0.6rem;
+}
+
+.scanner-queue-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.scanner-queue-link {
+  justify-self: start;
+}
+
+@media (min-width: 640px) {
+  .progress-target-form {
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto;
+  }
+
+  .progress-target-form > button {
+    grid-column: auto;
+  }
+
+  .scanner-queue-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .backup-reminder {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .backup-reminder .compact-button {
+    width: 100%;
+  }
+}

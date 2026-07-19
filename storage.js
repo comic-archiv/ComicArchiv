@@ -195,12 +195,21 @@ function normalizeSettings(settings) {
     });
   }
 
+  const changesSinceBackup = Number(source.changesSinceBackup);
+  const lastBackupComicCount = Number(source.lastBackupComicCount);
+
   return {
     theme: source.theme === "light" ? "light" : DEFAULT_SETTINGS.theme,
     lastBackupAt: isValidDateString(source.lastBackupAt) ? source.lastBackupAt : null,
     customSeries: [...new Set(customSeries)],
     knownHighestBandBySeries,
-    missingBandDetails
+    missingBandDetails,
+    changesSinceBackup: Number.isSafeInteger(changesSinceBackup) && changesSinceBackup >= 0
+      ? Math.min(changesSinceBackup, 999999)
+      : 0,
+    lastBackupComicCount: Number.isSafeInteger(lastBackupComicCount) && lastBackupComicCount >= 0
+      ? Math.min(lastBackupComicCount, 999999)
+      : 0
   };
 }
 

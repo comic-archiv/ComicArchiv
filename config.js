@@ -1,5 +1,5 @@
 export const APP_CONFIG = Object.freeze({
-  appVersion: "3.1.0",
+  appVersion: "3.2.0",
   dataFormatVersion: 3,
   minimumSupportedBackupVersion: 1,
   storageName: "ComicArchiv",
@@ -54,7 +54,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   lastBackupAt: null,
   customSeries: Object.freeze([]),
   knownHighestBandBySeries: Object.freeze({}),
-  missingBandDetails: Object.freeze({})
+  missingBandDetails: Object.freeze({}),
+  changesSinceBackup: 0,
+  lastBackupComicCount: 0
 });
 
 export function getConditionLabel(code) {

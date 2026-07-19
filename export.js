@@ -86,7 +86,9 @@ export function createJsonBackup(comics, settings) {
       lastBackupAt: settings.lastBackupAt || null,
       customSeries: Array.isArray(settings.customSeries) ? settings.customSeries : [],
       knownHighestBandBySeries: settings.knownHighestBandBySeries || {},
-      missingBandDetails: settings.missingBandDetails || {}
+      missingBandDetails: settings.missingBandDetails || {},
+      changesSinceBackup: Number.isSafeInteger(settings.changesSinceBackup) ? settings.changesSinceBackup : 0,
+      lastBackupComicCount: Number.isSafeInteger(settings.lastBackupComicCount) ? settings.lastBackupComicCount : 0
     },
     seriesConfiguration: {
       defaultSeries: [...APP_CONFIG.series],
@@ -405,12 +407,17 @@ function normalizeImportedSettings(settings, seriesConfiguration) {
     };
   });
 
+  const changesSinceBackup = Number(source.changesSinceBackup);
+  const lastBackupComicCount = Number(source.lastBackupComicCount);
+
   return {
     theme: source.theme === "light" ? "light" : "dark",
     lastBackupAt: isValidDateString(source.lastBackupAt) ? source.lastBackupAt : null,
     customSeries: [...new Set(customSeries)],
     knownHighestBandBySeries,
-    missingBandDetails
+    missingBandDetails,
+    changesSinceBackup: Number.isSafeInteger(changesSinceBackup) && changesSinceBackup >= 0 ? changesSinceBackup : 0,
+    lastBackupComicCount: Number.isSafeInteger(lastBackupComicCount) && lastBackupComicCount >= 0 ? lastBackupComicCount : 0
   };
 }
 
