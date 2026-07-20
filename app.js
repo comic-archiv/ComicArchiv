@@ -2,19 +2,34 @@ import {
   APP_CONFIG,
   DEFAULT_SETTINGS,
   createDuckipediaUrl,
+  createMetadataCacheKey,
   createMissingDetailKey,
   getAvailableSeries,
   getConditionLabel,
   getConditionRank
 } from "./config.js";
 import {
+  clearAllCoverMedia,
+  clearMetadataCache,
   deleteComic,
+  deleteCoverMedia,
   getAllComics,
+  getAllCoverMedia,
+  getAllMetadataCache,
   getAppSettings,
+  getCoverMedia,
+  getCoverMediaStats,
+  getMetadataCache,
   replaceAllComics,
+  replaceAllCoverMedia,
+  replaceMetadataCache,
   saveAppSettings,
   saveComic,
-  upsertComics
+  saveCoverMedia,
+  saveMetadataCache,
+  upsertComics,
+  upsertCoverMedia,
+  upsertMetadataCache
 } from "./storage.js";
 import { calculateMissingBands, countMissingBands } from "./missing.js";
 import { lookupDuckipediaMetadata } from "./duckipedia.js";
@@ -24,11 +39,14 @@ import {
   createCollectionCsv,
   createDatedFilename,
   createJsonBackup,
+  createMediaBackup,
   createMissingCsv,
   mergeCollections,
   readAndValidateBackupFile,
+  shareOrDownloadBlob,
   shareOrDownloadText
 } from "./export.js";
+import { dataUrlToBlob, prepareCoverImage } from "./media.js";
 
 const THEME_STORAGE_KEY = "comicarchiv-theme";
 
@@ -40,11 +58,20 @@ const state = {
   editingId: null,
   editingComic: null,
   importBackup: null,
+  importReturnTarget: null,
   waitingServiceWorker: null,
   selectedMissingBand: null,
   scannerResult: null,
   scannerLookupController: null,
-  scannerQueue: []
+  scannerQueue: [],
+  formMetadata: null,
+  pendingCover: null,
+  removeCoverRequested: false,
+  formCoverObjectUrl: null,
+  formHasLocalCover: false,
+  cardCoverObjectUrls: new Set(),
+  metadataLookupTimer: null,
+  enrichmentRunning: false
 };
 
 const elements = {
@@ -56,6 +83,13 @@ const elements = {
   volumeNumber: document.querySelector("#volume-number"),
   publicationYear: document.querySelector("#publication-year"),
   title: document.querySelector("#title"),
+  coverFile: document.querySelector("#cover-file"),
+  formCoverPreview: document.querySelector("#form-cover-preview"),
+  formCoverPlaceholder: document.querySelector("#form-cover-placeholder"),
+  removeCover: document.querySelector("#remove-cover"),
+  coverStatus: document.querySelector("#cover-status"),
+  lookupMetadata: document.querySelector("#lookup-metadata"),
+  metadataStatus: document.querySelector("#metadata-status"),
   condition: document.querySelector("#condition"),
   duplicateCondition: document.querySelector("#duplicate-condition"),
   duplicateConditionField: document.querySelector("#duplicate-condition-field"),
@@ -108,6 +142,13 @@ const elements = {
   progressMessage: document.querySelector("#progress-message"),
   progressList: document.querySelector("#progress-list"),
   progressSummary: document.querySelector("#progress-summary"),
+  progressPageSummary: document.querySelector("#progress-page-summary"),
+  progressPage: document.querySelector("#progress-page"),
+  openProgress: document.querySelector("#open-progress"),
+  closeProgress: document.querySelector("#close-progress"),
+  progressOverviewPercent: document.querySelector("#progress-overview-percent"),
+  progressOverviewCopy: document.querySelector("#progress-overview-copy"),
+  progressOverviewFill: document.querySelector("#progress-overview-fill"),
   exportJson: document.querySelector("#export-json"),
   exportCsv: document.querySelector("#export-csv"),
   exportMissingCsv: document.querySelector("#export-missing-csv"),
@@ -118,6 +159,28 @@ const elements = {
   storagePersistence: document.querySelector("#storage-persistence"),
   storageUsage: document.querySelector("#storage-usage"),
   requestPersistence: document.querySelector("#request-persistence"),
+  openMedia: document.querySelector("#open-media"),
+  mediaPage: document.querySelector("#media-page"),
+  closeMedia: document.querySelector("#close-media"),
+  mediaPageSummary: document.querySelector("#media-page-summary"),
+  mediaCoverCount: document.querySelector("#media-cover-count"),
+  mediaCoverSize: document.querySelector("#media-cover-size"),
+  mediaCacheCount: document.querySelector("#media-cache-count"),
+  mediaOriginUsage: document.querySelector("#media-origin-usage"),
+  mediaOriginQuota: document.querySelector("#media-origin-quota"),
+  lastMediaBackup: document.querySelector("#last-media-backup"),
+  mediaBackupChanges: document.querySelector("#media-backup-changes"),
+  showCovers: document.querySelector("#show-covers"),
+  autoEnrich: document.querySelector("#auto-enrich"),
+  enrichAll: document.querySelector("#enrich-all"),
+  clearMetadataCache: document.querySelector("#clear-metadata-cache"),
+  enrichmentCount: document.querySelector("#enrichment-count"),
+  enrichmentProgress: document.querySelector("#enrichment-progress"),
+  enrichmentStatus: document.querySelector("#enrichment-status"),
+  exportMediaBackup: document.querySelector("#export-media-backup"),
+  openMediaImport: document.querySelector("#open-media-import"),
+  deleteAllCovers: document.querySelector("#delete-all-covers"),
+  mediaMessage: document.querySelector("#media-message"),
   openImport: document.querySelector("#open-import"),
   importModal: document.querySelector("#import-modal"),
   closeImport: document.querySelector("#close-import"),
@@ -205,6 +268,8 @@ async function initializeApp() {
   try {
     state.settings = await getAppSettings();
     applyTheme(state.settings.theme);
+    elements.showCovers.checked = state.settings.showCovers !== false;
+    elements.autoEnrich.checked = state.settings.duckipediaAutoEnrich !== false;
     persistThemeLocally(state.settings.theme);
   } catch (error) {
     console.warn("Einstellungen konnten nicht geladen werden:", error);
@@ -213,9 +278,11 @@ async function initializeApp() {
   populateConfiguration();
   updateDuplicateConditionVisibility();
   renderScannerQueue();
+  resetCoverEditorState();
   await refreshCollection();
   renderBackupStatus();
   await refreshStorageStatus();
+  await refreshMediaStatus();
   registerServiceWorker();
 }
 
@@ -307,6 +374,11 @@ function createOption(value, label) {
 
 function bindEvents() {
   elements.form.addEventListener("submit", handleFormSubmit);
+  elements.coverFile.addEventListener("change", handleCoverFileSelection);
+  elements.removeCover.addEventListener("click", handleRemoveCoverFromForm);
+  elements.lookupMetadata.addEventListener("click", () => lookupFormMetadata({ force: true }));
+  elements.series.addEventListener("change", scheduleFormMetadataLookup);
+  elements.volumeNumber.addEventListener("input", scheduleFormMetadataLookup);
   elements.isDuplicate.addEventListener("change", updateDuplicateConditionVisibility);
   elements.cancelEdit.addEventListener("click", resetForm);
   elements.comicList.addEventListener("click", handleCardAction);
@@ -316,6 +388,8 @@ function bindEvents() {
   elements.backupReminderAction.addEventListener("click", handleJsonExport);
   elements.progressTargetForm.addEventListener("submit", handleProgressTargetSubmit);
   elements.progressSeries.addEventListener("change", syncProgressTargetInput);
+  elements.openProgress.addEventListener("click", openProgressPage);
+  elements.closeProgress.addEventListener("click", closeProgressPage);
   elements.openScanner.addEventListener("click", openScannerModal);
   elements.closeScanner.addEventListener("click", closeScannerModal);
   elements.scannerStart.addEventListener("click", startScannerCamera);
@@ -361,6 +435,15 @@ function bindEvents() {
   elements.exportCsv.addEventListener("click", handleCollectionCsvExport);
   elements.exportMissingCsv.addEventListener("click", handleMissingCsvExport);
   elements.requestPersistence.addEventListener("click", handlePersistenceRequest);
+  elements.openMedia.addEventListener("click", openMediaPage);
+  elements.closeMedia.addEventListener("click", closeMediaPage);
+  elements.showCovers.addEventListener("change", handleShowCoversChange);
+  elements.autoEnrich.addEventListener("change", handleAutoEnrichChange);
+  elements.enrichAll.addEventListener("click", handleEnrichAll);
+  elements.clearMetadataCache.addEventListener("click", handleClearMetadataCache);
+  elements.exportMediaBackup.addEventListener("click", handleMediaBackupExport);
+  elements.openMediaImport.addEventListener("click", openImportModal);
+  elements.deleteAllCovers.addEventListener("click", handleDeleteAllCovers);
   elements.openImport.addEventListener("click", openImportModal);
   elements.closeImport.addEventListener("click", closeImportModal);
   elements.importFile.addEventListener("change", handleImportFileSelection);
@@ -390,6 +473,8 @@ function bindEvents() {
     if (!elements.seriesModal.classList.contains("hidden")) closeSeriesModal();
     if (!elements.missingDetailModal.classList.contains("hidden")) closeMissingDetailModal();
     if (!elements.scannerModal.classList.contains("hidden")) closeScannerModal();
+    if (!elements.progressPage.classList.contains("hidden")) closeProgressPage();
+    if (!elements.mediaPage.classList.contains("hidden")) closeMediaPage();
   });
 }
 
@@ -403,8 +488,11 @@ async function handleFormSubmit(event) {
     const wasEditing = Boolean(state.editingId);
     const comic = buildComicFromForm();
     await saveComic(comic);
+    const coverChanged = await commitCoverChanges(comic.id);
     await recordDataChange(1);
+    if (coverChanged) await recordMediaChange(1);
     await refreshCollection();
+    if (coverChanged) await refreshMediaStatus();
 
     if (action === "save-next" && !wasEditing) {
       prepareNextComic(comic);
@@ -487,13 +575,25 @@ function buildComicFromForm() {
   }
 
   const now = new Date().toISOString();
+  const numericBandNumber = parseStrictPositiveInteger(volumeNumber);
+  const editingMetadataApplies = Boolean(
+    state.editingComic &&
+    state.editingComic.series === series &&
+    state.editingComic.volumeNumber === volumeNumber
+  );
+  const formMetadataApplies = Boolean(
+    state.formMetadata &&
+    state.formMetadata.series === series &&
+    Number(state.formMetadata.bandNumber) === numericBandNumber
+  );
+  const metadata = formMetadataApplies ? state.formMetadata : null;
 
   return {
     id: state.editingId || createStableId(),
     dataFormatVersion: APP_CONFIG.dataFormatVersion,
     series,
     volumeNumber,
-    numericBandNumber: parseStrictPositiveInteger(volumeNumber),
+    numericBandNumber,
     title,
     publicationYear,
     condition,
@@ -502,9 +602,267 @@ function buildComicFromForm() {
     isDuplicate: elements.isDuplicate.checked,
     isSealed: elements.isSealed.checked,
     notes,
+    duckipediaPageUrl: metadata?.pageUrl || (editingMetadataApplies ? state.editingComic?.duckipediaPageUrl : "") || "",
+    duckipediaCoverUrl: metadata?.coverUrl || (editingMetadataApplies ? state.editingComic?.duckipediaCoverUrl : "") || "",
+    metadataStatus: metadata?.found === true
+      ? "found"
+      : metadata?.found === false
+        ? "not-found"
+        : (editingMetadataApplies ? state.editingComic?.metadataStatus : "") || "",
+    metadataFetchedAt: metadata?.fetchedAt || (editingMetadataApplies ? state.editingComic?.metadataFetchedAt : null) || null,
     createdAt: state.editingComic?.createdAt || now,
     updatedAt: now
   };
+}
+
+async function commitCoverChanges(comicId) {
+  let changed = false;
+
+  if (state.removeCoverRequested) {
+    await deleteCoverMedia(comicId);
+    changed = true;
+  }
+
+  if (state.pendingCover) {
+    await saveCoverMedia({
+      comicId,
+      ...state.pendingCover,
+      source: "user",
+      updatedAt: new Date().toISOString()
+    });
+    changed = true;
+  }
+
+  return changed;
+}
+
+async function recordMediaChange(changeAmount = 1) {
+  try {
+    const current = Number.isSafeInteger(state.settings.mediaChangesSinceBackup)
+      ? state.settings.mediaChangesSinceBackup
+      : 0;
+    state.settings = await saveAppSettings({
+      ...state.settings,
+      mediaChangesSinceBackup: Math.min(999999, current + Math.max(0, changeAmount))
+    });
+    renderBackupStatus();
+  } catch (error) {
+    console.warn("Der Medien-Änderungszähler konnte nicht aktualisiert werden:", error);
+  }
+}
+
+
+
+async function handleCoverFileSelection() {
+  const file = elements.coverFile.files?.[0];
+  elements.coverFile.value = "";
+  if (!file) return;
+
+  elements.coverStatus.textContent = "Cover wird komprimiert …";
+  elements.coverStatus.dataset.type = "info";
+  elements.coverFile.disabled = true;
+
+  try {
+    const prepared = await prepareCoverImage(file);
+    state.pendingCover = prepared;
+    state.removeCoverRequested = false;
+    state.formHasLocalCover = true;
+    const objectUrl = URL.createObjectURL(prepared.blob);
+    setFormCoverPreview(objectUrl, `Eigenes Cover vorbereitet · ${formatBytes(prepared.size)}`, true);
+  } catch (error) {
+    console.error("Cover konnte nicht verarbeitet werden:", error);
+    elements.coverStatus.textContent = error.message;
+    elements.coverStatus.dataset.type = "error";
+  } finally {
+    elements.coverFile.disabled = false;
+  }
+}
+
+function handleRemoveCoverFromForm() {
+  const hadLocalCover = state.formHasLocalCover || Boolean(state.pendingCover);
+  state.pendingCover = null;
+  state.formHasLocalCover = false;
+  state.removeCoverRequested = hadLocalCover && Boolean(state.editingId);
+
+  if (state.formMetadata?.coverUrl || state.editingComic?.duckipediaCoverUrl) {
+    setFormCoverPreview(
+      state.formMetadata?.coverUrl || state.editingComic?.duckipediaCoverUrl,
+      state.removeCoverRequested ? "Eigenes Cover wird beim Speichern entfernt. Duckipedia-Vorschau bleibt sichtbar." : "Duckipedia-Vorschau",
+      false
+    );
+  } else {
+    clearFormCoverPreview(state.removeCoverRequested ? "Eigenes Cover wird beim Speichern entfernt." : "Kein Cover ausgewählt.");
+  }
+}
+
+function resetCoverEditorState() {
+  state.pendingCover = null;
+  state.removeCoverRequested = false;
+  state.formHasLocalCover = false;
+  state.formMetadata = null;
+  clearFormCoverPreview("");
+  elements.coverFile.value = "";
+  elements.metadataStatus.textContent = "Titel, Jahr und Cover werden bei numerischen Bänden automatisch ergänzt.";
+  elements.metadataStatus.dataset.type = "info";
+}
+
+function setFormCoverPreview(source, message = "", isLocal = false) {
+  revokeFormCoverObjectUrl();
+  if (isLocal && source.startsWith("blob:")) state.formCoverObjectUrl = source;
+  elements.formCoverPreview.src = source;
+  elements.formCoverPreview.classList.remove("hidden");
+  elements.formCoverPlaceholder.classList.add("hidden");
+  elements.removeCover.classList.toggle("hidden", !isLocal);
+  elements.coverStatus.textContent = message;
+  elements.coverStatus.dataset.type = "info";
+}
+
+function clearFormCoverPreview(message = "") {
+  revokeFormCoverObjectUrl();
+  elements.formCoverPreview.removeAttribute("src");
+  elements.formCoverPreview.classList.add("hidden");
+  elements.formCoverPlaceholder.classList.remove("hidden");
+  elements.removeCover.classList.add("hidden");
+  elements.coverStatus.textContent = message;
+  elements.coverStatus.dataset.type = "info";
+}
+
+function revokeFormCoverObjectUrl() {
+  if (state.formCoverObjectUrl) {
+    URL.revokeObjectURL(state.formCoverObjectUrl);
+    state.formCoverObjectUrl = null;
+  }
+}
+
+async function loadExistingCoverIntoForm(comic) {
+  state.pendingCover = null;
+  state.removeCoverRequested = false;
+  state.formHasLocalCover = false;
+  clearFormCoverPreview("");
+
+  try {
+    const cover = await getCoverMedia(comic.id);
+    if (state.editingId !== comic.id) return;
+
+    if (cover?.blob instanceof Blob) {
+      state.formHasLocalCover = true;
+      const objectUrl = URL.createObjectURL(cover.blob);
+      setFormCoverPreview(objectUrl, `Eigenes Cover · ${formatBytes(cover.size || cover.blob.size)}`, true);
+      return;
+    }
+
+    if (comic.duckipediaCoverUrl) {
+      setFormCoverPreview(comic.duckipediaCoverUrl, "Duckipedia-Vorschau · nicht lokal gespeichert", false);
+    }
+  } catch (error) {
+    console.warn("Cover konnte nicht geladen werden:", error);
+    elements.coverStatus.textContent = "Das gespeicherte Cover konnte nicht geladen werden.";
+    elements.coverStatus.dataset.type = "error";
+  }
+}
+
+function scheduleFormMetadataLookup() {
+  window.clearTimeout(state.metadataLookupTimer);
+  state.formMetadata = null;
+  const bandNumber = parseStrictPositiveInteger(elements.volumeNumber.value.trim());
+  const series = elements.series.value.trim();
+
+  if (!state.settings.duckipediaAutoEnrich || !series || !bandNumber) {
+    elements.metadataStatus.textContent = bandNumber || !elements.volumeNumber.value.trim()
+      ? "Titel, Jahr und Cover werden bei numerischen Bänden automatisch ergänzt."
+      : "Für nicht rein numerische Bandnummern ist nur der Duckipedia-Link verfügbar.";
+    return;
+  }
+
+  state.metadataLookupTimer = window.setTimeout(() => lookupFormMetadata({ force: false }), 650);
+}
+
+async function lookupFormMetadata({ force = false } = {}) {
+  const series = elements.series.value.trim();
+  const bandNumber = parseStrictPositiveInteger(elements.volumeNumber.value.trim());
+
+  if (!series || !bandNumber) {
+    elements.metadataStatus.textContent = "Bitte wähle eine Reihe und eine rein numerische Bandnummer.";
+    elements.metadataStatus.dataset.type = "error";
+    return null;
+  }
+
+  elements.lookupMetadata.disabled = true;
+  elements.metadataStatus.textContent = force ? "Duckipedia wird aktualisiert …" : "Duckipedia-Daten werden geprüft …";
+  elements.metadataStatus.dataset.type = "info";
+
+  try {
+    const result = await getMetadataForBand(series, bandNumber, { force });
+    state.formMetadata = { ...result, series, bandNumber };
+
+    if (result.found) {
+      if (!elements.title.value.trim() && result.title) elements.title.value = result.title;
+      if (!elements.publicationYear.value.trim() && result.publicationYear) {
+        elements.publicationYear.value = String(result.publicationYear);
+      }
+      if (!state.formHasLocalCover && result.coverUrl) {
+        setFormCoverPreview(result.coverUrl, result.fromCache ? "Duckipedia-Vorschau aus dem lokalen Cache" : "Duckipedia-Vorschau", false);
+      }
+      const parts = [result.title ? "Titel" : "", result.publicationYear ? "Jahr" : "", result.coverUrl ? "Cover" : ""].filter(Boolean);
+      elements.metadataStatus.textContent = parts.length
+        ? `${parts.join(", ")} ${result.fromCache ? "aus dem lokalen Cache geladen" : "aus Duckipedia ergänzt"}.`
+        : "Die Bandseite wurde gefunden, enthielt aber keine automatisch nutzbaren Zusatzdaten.";
+      elements.metadataStatus.dataset.type = "success";
+    } else {
+      elements.metadataStatus.textContent = result.reason || "Keine passenden Duckipedia-Daten gefunden.";
+      elements.metadataStatus.dataset.type = "info";
+    }
+
+    await refreshMediaStatus();
+    return result;
+  } catch (error) {
+    console.error("Duckipedia-Anreicherung fehlgeschlagen:", error);
+    elements.metadataStatus.textContent = `Duckipedia-Daten konnten nicht geladen werden: ${error.message}`;
+    elements.metadataStatus.dataset.type = "error";
+    return null;
+  } finally {
+    elements.lookupMetadata.disabled = false;
+  }
+}
+
+async function getMetadataForBand(series, bandNumber, { force = false, signal } = {}) {
+  const key = createMetadataCacheKey(series, bandNumber);
+  const cached = await getMetadataCache(key);
+
+  if (!force && cached && isMetadataFresh(cached)) {
+    return { ...cached, fromCache: true };
+  }
+
+  if (!navigator.onLine) {
+    if (cached) return { ...cached, fromCache: true };
+    return {
+      key, series, bandNumber, found: false, title: "", publicationYear: null, pageUrl: createDuckipediaUrl(series, bandNumber),
+      coverUrl: "", fetchedAt: new Date().toISOString(), reason: "Offline: Für diesen Band liegen noch keine Metadaten im lokalen Cache vor.", fromCache: false
+    };
+  }
+
+  const result = await lookupDuckipediaMetadata(series, bandNumber, { signal });
+  if (signal?.aborted) return { ...result, key, series, bandNumber, fromCache: false };
+  const record = {
+    key,
+    series,
+    bandNumber,
+    found: Boolean(result.found),
+    title: result.title || "",
+    publicationYear: result.publicationYear || null,
+    pageUrl: result.pageUrl || createDuckipediaUrl(series, bandNumber),
+    coverUrl: result.coverUrl || "",
+    reason: result.reason || "",
+    fetchedAt: result.fetchedAt || new Date().toISOString()
+  };
+  await saveMetadataCache(record);
+  return { ...record, fromCache: false };
+}
+
+function isMetadataFresh(record) {
+  const fetchedAt = Date.parse(record?.fetchedAt || record?.metadataFetchedAt);
+  if (Number.isNaN(fetchedAt)) return false;
+  return Date.now() - fetchedAt < APP_CONFIG.metadataCacheMaximumAgeDays * 86400000;
 }
 
 function parseStrictPositiveInteger(value) {
@@ -566,6 +924,225 @@ async function recordDataChange(changeAmount = 1) {
   } catch (error) {
     console.warn("Der Backup-Änderungszähler konnte nicht aktualisiert werden:", error);
   }
+}
+
+function openProgressPage() {
+  renderSeriesProgress();
+  elements.progressPage.classList.remove("hidden");
+  elements.progressPage.setAttribute("aria-hidden", "false");
+  document.body.classList.add("app-page-open");
+  elements.progressPage.scrollTop = 0;
+  window.setTimeout(() => elements.closeProgress.focus({ preventScroll: true }), 0);
+}
+
+function closeProgressPage() {
+  elements.progressPage.classList.add("hidden");
+  elements.progressPage.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("app-page-open");
+  window.setTimeout(() => elements.openProgress.focus({ preventScroll: true }), 0);
+}
+
+function openMediaPage() {
+  refreshMediaStatus();
+  elements.mediaPage.classList.remove("hidden");
+  elements.mediaPage.setAttribute("aria-hidden", "false");
+  document.body.classList.add("app-page-open");
+  elements.mediaPage.scrollTop = 0;
+  window.setTimeout(() => elements.closeMedia.focus({ preventScroll: true }), 0);
+}
+
+function closeMediaPage() {
+  if (state.enrichmentRunning) {
+    showToast("Bitte warte, bis die laufende Duckipedia-Anreicherung abgeschlossen ist.", "info");
+    return;
+  }
+  elements.mediaPage.classList.add("hidden");
+  elements.mediaPage.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("app-page-open");
+  window.setTimeout(() => elements.openMedia.focus({ preventScroll: true }), 0);
+}
+
+async function refreshMediaStatus() {
+  try {
+    const [coverStats, metadataEntries] = await Promise.all([
+      getCoverMediaStats(),
+      getAllMetadataCache()
+    ]);
+    elements.mediaCoverCount.textContent = formatEntryCount(coverStats.count).replace("Eintrag", "Cover").replace("Einträge", "Cover");
+    elements.mediaCoverSize.textContent = `${formatBytes(coverStats.bytes)} lokal gespeichert`;
+    elements.mediaCacheCount.textContent = metadataEntries.length === 1 ? "1 Eintrag" : `${metadataEntries.length} Einträge`;
+    elements.mediaPageSummary.textContent = coverStats.count === 1 ? "1 Cover" : `${coverStats.count} Cover`;
+    elements.lastMediaBackup.textContent = state.settings.lastMediaBackupAt
+      ? formatDateTime(state.settings.lastMediaBackupAt)
+      : "Noch keines";
+    const mediaChanges = Number(state.settings.mediaChangesSinceBackup || 0);
+    elements.mediaBackupChanges.textContent = mediaChanges === 1 ? "1 Medienänderung seit Backup" : `${mediaChanges} Medienänderungen seit Backup`;
+    elements.showCovers.checked = state.settings.showCovers !== false;
+    elements.autoEnrich.checked = state.settings.duckipediaAutoEnrich !== false;
+
+    const eligibleCount = state.comics.filter((comic) => comic.numericBandNumber && (
+      !comic.title || !comic.publicationYear || !comic.duckipediaCoverUrl || !isMetadataFresh(comic)
+    )).length;
+    elements.enrichmentCount.textContent = eligibleCount === 1 ? "1 Band prüfbar" : `${eligibleCount} Bände prüfbar`;
+
+    if (navigator.storage && typeof navigator.storage.estimate === "function") {
+      const estimate = await navigator.storage.estimate();
+      const usage = Number(estimate.usage || 0);
+      const quota = Number(estimate.quota || 0);
+      elements.mediaOriginUsage.textContent = formatBytes(usage);
+      elements.mediaOriginQuota.textContent = quota > 0 ? `von ungefähr ${formatBytes(quota)} verfügbar` : "Speicherlimit nicht gemeldet";
+    } else {
+      elements.mediaOriginUsage.textContent = "Nicht abrufbar";
+      elements.mediaOriginQuota.textContent = "Der Browser stellt keine Schätzung bereit.";
+    }
+  } catch (error) {
+    console.warn("Medienstatus konnte nicht geladen werden:", error);
+    elements.mediaMessage.textContent = `Speicherübersicht konnte nicht geladen werden: ${error.message}`;
+    elements.mediaMessage.dataset.type = "error";
+  }
+}
+
+async function handleShowCoversChange() {
+  state.settings = await saveAppSettings({ ...state.settings, showCovers: elements.showCovers.checked });
+  renderCollection();
+}
+
+async function handleAutoEnrichChange() {
+  state.settings = await saveAppSettings({ ...state.settings, duckipediaAutoEnrich: elements.autoEnrich.checked });
+  elements.metadataStatus.textContent = elements.autoEnrich.checked
+    ? "Automatische Duckipedia-Anreicherung ist aktiv."
+    : "Automatische Anreicherung ist aus. Der Button bleibt nutzbar.";
+}
+
+async function handleEnrichAll() {
+  if (state.enrichmentRunning) return;
+  const candidates = state.comics.filter((comic) => comic.numericBandNumber);
+
+  if (candidates.length === 0) {
+    elements.enrichmentStatus.textContent = "Es gibt noch keine Comics mit rein numerischer Bandnummer.";
+    elements.enrichmentStatus.dataset.type = "info";
+    return;
+  }
+
+  state.enrichmentRunning = true;
+  setMediaControlsBusy(true);
+  elements.enrichmentProgress.classList.remove("hidden");
+  elements.enrichmentProgress.max = candidates.length;
+  elements.enrichmentProgress.value = 0;
+  elements.enrichmentStatus.textContent = "Duckipedia-Daten werden geprüft …";
+  elements.enrichmentStatus.dataset.type = "info";
+
+  const updates = [];
+  let found = 0;
+  let failed = 0;
+
+  try {
+    for (let index = 0; index < candidates.length; index += 1) {
+      const comic = candidates[index];
+      elements.enrichmentStatus.textContent = `${comic.series}, Band ${comic.volumeNumber} wird geprüft (${index + 1}/${candidates.length}) …`;
+      const metadata = await getMetadataForBand(comic.series, comic.numericBandNumber, { force: false });
+      const { comic: updatedComic, changed } = mergeComicWithMetadata(comic, metadata);
+
+      if (metadata.found) found += 1; else failed += 1;
+      if (changed) updates.push(updatedComic);
+      elements.enrichmentProgress.value = index + 1;
+      if (!metadata.fromCache) await new Promise((resolve) => window.setTimeout(resolve, 180));
+    }
+
+    if (updates.length) {
+      await upsertComics(updates);
+      await recordDataChange(updates.length);
+      await refreshCollection();
+    }
+
+    elements.enrichmentStatus.textContent = `${found} Bandseiten gefunden, ${failed} ohne Treffer. ${updates.length} Einträge wurden ergänzt oder aktualisiert.`;
+    elements.enrichmentStatus.dataset.type = "success";
+    await refreshMediaStatus();
+  } catch (error) {
+    console.error("Sammelanreicherung fehlgeschlagen:", error);
+    elements.enrichmentStatus.textContent = `Anreicherung abgebrochen: ${error.message}`;
+    elements.enrichmentStatus.dataset.type = "error";
+  } finally {
+    state.enrichmentRunning = false;
+    setMediaControlsBusy(false);
+    window.setTimeout(() => elements.enrichmentProgress.classList.add("hidden"), 800);
+  }
+}
+
+async function handleClearMetadataCache() {
+  if (!window.confirm("Den lokalen Duckipedia-Cache leeren? Bereits in Comics gespeicherte Titel, Jahre und Coverlinks bleiben erhalten.")) return;
+  await clearMetadataCache();
+  elements.enrichmentStatus.textContent = "Der Duckipedia-Cache wurde geleert. Bei der nächsten Prüfung werden Daten neu geladen.";
+  elements.enrichmentStatus.dataset.type = "success";
+  await refreshMediaStatus();
+}
+
+async function handleMediaBackupExport() {
+  setMediaControlsBusy(true);
+  elements.mediaMessage.textContent = "Medien-Backup wird vorbereitet …";
+  elements.mediaMessage.dataset.type = "info";
+
+  try {
+    const [covers, metadataCache] = await Promise.all([getAllCoverMedia(), getAllMetadataCache()]);
+    const backupTime = new Date().toISOString();
+    const nextSettings = {
+      ...state.settings,
+      lastBackupAt: backupTime,
+      lastMediaBackupAt: backupTime,
+      changesSinceBackup: 0,
+      mediaChangesSinceBackup: 0,
+      lastBackupComicCount: state.comics.length
+    };
+    const content = await createMediaBackup(state.comics, nextSettings, metadataCache, covers);
+    const result = await shareOrDownloadBlob({
+      blob: new Blob([content], { type: "application/json;charset=utf-8" }),
+      filename: createDatedFilename("Sammlerhausen-Medien-Backup", "json"),
+      mimeType: "application/json;charset=utf-8",
+      title: "Sammlerhausen – vollständiges Medien-Backup",
+      text: "Vollständiges Sammlerhausen-Backup inklusive eigener Coverfotos."
+    });
+
+    if (result.method !== "cancelled") {
+      state.settings = await saveAppSettings(nextSettings);
+      renderBackupStatus();
+      await refreshMediaStatus();
+    }
+
+    elements.mediaMessage.textContent = result.method === "share"
+      ? "Das Medien-Backup wurde an das Teilen-Menü übergeben."
+      : result.method === "download"
+        ? "Das Medien-Backup wurde als Download bereitgestellt."
+        : "Teilen wurde abgebrochen.";
+    elements.mediaMessage.dataset.type = result.method === "cancelled" ? "info" : "success";
+  } catch (error) {
+    console.error("Medien-Backup fehlgeschlagen:", error);
+    elements.mediaMessage.textContent = `Medien-Backup fehlgeschlagen: ${error.message}`;
+    elements.mediaMessage.dataset.type = "error";
+  } finally {
+    setMediaControlsBusy(false);
+  }
+}
+
+async function handleDeleteAllCovers() {
+  const stats = await getCoverMediaStats();
+  if (!stats.count) {
+    elements.mediaMessage.textContent = "Es sind keine eigenen Cover gespeichert.";
+    elements.mediaMessage.dataset.type = "info";
+    return;
+  }
+  if (!window.confirm(`Wirklich alle ${stats.count} eigenen Coverfotos löschen? Ein Daten-Backup ohne Medien kann sie nicht wiederherstellen.`)) return;
+  await clearAllCoverMedia();
+  await recordMediaChange(stats.count);
+  renderCollection();
+  await refreshMediaStatus();
+  elements.mediaMessage.textContent = "Alle eigenen Coverfotos wurden gelöscht. Duckipedia-Vorschauen bleiben erhalten.";
+  elements.mediaMessage.dataset.type = "success";
+}
+
+function setMediaControlsBusy(isBusy) {
+  [elements.enrichAll, elements.clearMetadataCache, elements.exportMediaBackup, elements.openMediaImport, elements.deleteAllCovers].forEach((button) => {
+    button.disabled = isBusy;
+  });
 }
 
 function syncProgressTargetInput() {
@@ -674,9 +1251,22 @@ function getSeriesProgressData() {
 function renderSeriesProgress() {
   const progressData = getSeriesProgressData();
   elements.progressList.replaceChildren();
-  elements.progressSummary.textContent = progressData.length === 1
-    ? "1 Reihe"
-    : `${progressData.length} Reihen`;
+  const seriesCountLabel = progressData.length === 1 ? "1 Reihe" : `${progressData.length} Reihen`;
+  elements.progressSummary.textContent = seriesCountLabel;
+  elements.progressPageSummary.textContent = seriesCountLabel;
+
+  const totalTarget = progressData.reduce((sum, entry) => sum + entry.target, 0);
+  const totalPresent = progressData.reduce((sum, entry) => sum + entry.presentWithinTarget, 0);
+  const totalMissing = progressData.reduce((sum, entry) => sum + entry.missing, 0);
+  const overallPercentage = totalTarget > 0 ? Math.min(100, (totalPresent / totalTarget) * 100) : 0;
+  const roundedOverallPercentage = Math.round(overallPercentage);
+  elements.progressOverviewPercent.textContent = `${overallPercentage.toLocaleString("de-DE", { maximumFractionDigits: 1 })} %`;
+  elements.progressOverviewCopy.textContent = totalTarget > 0
+    ? `${totalPresent} von ${totalTarget} Zielbänden vorhanden · ${totalMissing} fehlen`
+    : "Noch kein Fortschritt berechenbar.";
+  elements.progressOverviewFill.style.width = `${overallPercentage}%`;
+  const overviewBar = elements.progressOverviewFill.parentElement;
+  overviewBar.setAttribute("aria-valuenow", String(roundedOverallPercentage));
 
   if (progressData.length === 0) {
     const empty = document.createElement("div");
@@ -755,6 +1345,7 @@ function renderSeriesProgress() {
 
 function renderCollection() {
   state.filteredComics = getFilteredAndSortedComics();
+  clearCardCoverObjectUrls();
   elements.comicList.replaceChildren();
 
   const hasComics = state.comics.length > 0;
@@ -906,6 +1497,24 @@ function createComicCard(comic) {
   article.className = "comic-card";
   article.dataset.comicId = comic.id;
 
+  const shell = document.createElement("div");
+  shell.className = "comic-card-shell";
+  const content = document.createElement("div");
+  content.className = "comic-card-content";
+
+  if (state.settings.showCovers !== false) {
+    const cover = document.createElement("figure");
+    cover.className = "comic-card-cover hidden";
+    const image = document.createElement("img");
+    image.alt = `Cover von ${comic.series}, Band ${comic.volumeNumber}`;
+    image.loading = "lazy";
+    image.decoding = "async";
+    image.referrerPolicy = "no-referrer";
+    cover.append(image);
+    shell.append(cover);
+    hydrateComicCardCover(shell, cover, image, comic);
+  }
+
   const top = document.createElement("div");
   top.className = "comic-card-top";
 
@@ -953,13 +1562,20 @@ function createComicCard(comic) {
   editButton.dataset.action = "edit";
   editButton.textContent = "Bearbeiten";
 
+  const enrichButton = document.createElement("button");
+  enrichButton.type = "button";
+  enrichButton.className = "menu-action";
+  enrichButton.dataset.action = "enrich";
+  enrichButton.textContent = "Duckipedia aktualisieren";
+  enrichButton.disabled = !comic.numericBandNumber;
+
   const deleteButton = document.createElement("button");
   deleteButton.type = "button";
   deleteButton.className = "menu-action menu-action-danger";
   deleteButton.dataset.action = "delete";
   deleteButton.textContent = "Löschen";
 
-  menuContent.append(editButton, deleteButton);
+  menuContent.append(editButton, enrichButton, deleteButton);
   menu.append(menuSummary, menuContent);
   rightColumn.append(conditions, menu);
   top.append(headingGroup, rightColumn);
@@ -972,22 +1588,70 @@ function createComicCard(comic) {
 
   const duckipediaLink = document.createElement("a");
   duckipediaLink.className = "duckipedia-link";
-  duckipediaLink.href = createDuckipediaUrl(comic.series, comic.volumeNumber, comic.title);
+  duckipediaLink.href = comic.duckipediaPageUrl || createDuckipediaUrl(comic.series, comic.volumeNumber, comic.title);
   duckipediaLink.target = "_blank";
   duckipediaLink.rel = "noopener noreferrer";
   duckipediaLink.textContent = "In Duckipedia nachschlagen ↗";
 
-  article.append(top, tags);
+  content.append(top, tags);
 
   if (comic.notes) {
     const notes = document.createElement("p");
     notes.className = "comic-notes";
     notes.textContent = comic.notes;
-    article.append(notes);
+    content.append(notes);
   }
 
-  article.append(duckipediaLink);
+  if (comic.metadataFetchedAt) {
+    const metadataNote = document.createElement("p");
+    metadataNote.className = "metadata-source-note";
+    metadataNote.textContent = `Duckipedia zuletzt geprüft: ${formatDateTime(comic.metadataFetchedAt)}`;
+    content.append(metadataNote);
+  }
+
+  content.append(duckipediaLink);
+  shell.append(content);
+  article.append(shell);
   return article;
+}
+
+async function hydrateComicCardCover(shell, figure, image, comic) {
+  try {
+    const localCover = await getCoverMedia(comic.id);
+    if (!figure.isConnected) return;
+
+    if (localCover?.blob instanceof Blob) {
+      const objectUrl = URL.createObjectURL(localCover.blob);
+      state.cardCoverObjectUrls.add(objectUrl);
+      image.src = objectUrl;
+      figure.classList.remove("hidden");
+      shell.classList.add("has-cover");
+      return;
+    }
+
+    if (comic.duckipediaCoverUrl) {
+      image.src = comic.duckipediaCoverUrl;
+      image.addEventListener("load", () => {
+        if (!figure.isConnected) return;
+        figure.classList.remove("hidden");
+        shell.classList.add("has-cover");
+      }, { once: true });
+      image.addEventListener("error", () => {
+        figure.remove();
+        shell.classList.remove("has-cover");
+      }, { once: true });
+    } else {
+      figure.remove();
+    }
+  } catch (error) {
+    console.warn("Cover konnte in der Kartenansicht nicht geladen werden:", error);
+    figure.remove();
+  }
+}
+
+function clearCardCoverObjectUrls() {
+  state.cardCoverObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+  state.cardCoverObjectUrls.clear();
 }
 
 function createConditionBadge(conditionCode, contextLabel) {
@@ -1154,8 +1818,59 @@ async function handleCardAction(event) {
     return;
   }
 
+  if (button.dataset.action === "enrich") {
+    await enrichSingleComic(comic, { force: true });
+    return;
+  }
+
   if (button.dataset.action === "delete") {
     await confirmAndDelete(comic);
+  }
+}
+
+function mergeComicWithMetadata(comic, metadata) {
+  const nextValues = {
+    title: comic.title || metadata.title || "",
+    publicationYear: comic.publicationYear || metadata.publicationYear || null,
+    duckipediaPageUrl: metadata.pageUrl || comic.duckipediaPageUrl || createDuckipediaUrl(comic.series, comic.volumeNumber, comic.title),
+    duckipediaCoverUrl: metadata.coverUrl || comic.duckipediaCoverUrl || "",
+    metadataStatus: metadata.found ? "found" : "not-found",
+    metadataFetchedAt: metadata.fetchedAt || comic.metadataFetchedAt || new Date().toISOString(),
+    dataFormatVersion: APP_CONFIG.dataFormatVersion
+  };
+  const changed = Object.entries(nextValues).some(([key, value]) => comic[key] !== value);
+  return {
+    changed,
+    comic: changed ? { ...comic, ...nextValues, updatedAt: new Date().toISOString() } : comic
+  };
+}
+
+async function enrichSingleComic(comic, { force = false, silent = false } = {}) {
+  if (!comic.numericBandNumber) {
+    if (!silent) showToast("Dieser Eintrag besitzt keine rein numerische Bandnummer.", "error");
+    return { changed: false, found: false };
+  }
+
+  try {
+    const metadata = await getMetadataForBand(comic.series, comic.numericBandNumber, { force });
+    const { comic: updatedComic, changed } = mergeComicWithMetadata(comic, metadata);
+
+    if (changed) {
+      await saveComic(updatedComic);
+      if (!silent) await recordDataChange(1);
+    }
+
+    if (!silent) {
+      await refreshCollection();
+      await refreshMediaStatus();
+      showToast(metadata.found ? "Duckipedia-Daten wurden aktualisiert." : (metadata.reason || "Keine Duckipedia-Daten gefunden."), metadata.found ? "success" : "info");
+    }
+
+    return { changed, found: metadata.found };
+  } catch (error) {
+    console.error("Metadaten konnten nicht aktualisiert werden:", error);
+    if (!silent) showToast(`Duckipedia-Aktualisierung fehlgeschlagen: ${error.message}`, "error");
+    return { changed: false, found: false, error };
   }
 }
 
@@ -1173,6 +1888,19 @@ function startEditing(comic) {
   elements.isDuplicate.checked = comic.isDuplicate;
   elements.isSealed.checked = comic.isSealed;
   elements.notes.value = comic.notes;
+  state.formMetadata = {
+    series: comic.series,
+    bandNumber: comic.numericBandNumber,
+    found: comic.metadataStatus === "found",
+    pageUrl: comic.duckipediaPageUrl || createDuckipediaUrl(comic.series, comic.volumeNumber, comic.title),
+    coverUrl: comic.duckipediaCoverUrl || "",
+    fetchedAt: comic.metadataFetchedAt || null
+  };
+  elements.metadataStatus.textContent = comic.metadataFetchedAt
+    ? `Duckipedia-Daten zuletzt geprüft: ${formatDateTime(comic.metadataFetchedAt)}.`
+    : "Für diesen Eintrag wurden noch keine Duckipedia-Metadaten gespeichert.";
+  elements.metadataStatus.dataset.type = "info";
+  loadExistingCoverIntoForm(comic);
   updateDuplicateConditionVisibility();
 
   elements.formTitle.textContent = "Comic bearbeiten";
@@ -1199,14 +1927,17 @@ async function confirmAndDelete(comic) {
   }
 
   try {
+    const hadCover = Boolean(await getCoverMedia(comic.id));
     await deleteComic(comic.id);
     await recordDataChange(1);
+    if (hadCover) await recordMediaChange(1);
 
     if (state.editingId === comic.id) {
       resetForm();
     }
 
     await refreshCollection();
+    if (hadCover) await refreshMediaStatus();
     showToast("Comic gelöscht.");
   } catch (error) {
     console.error(error);
@@ -1221,6 +1952,7 @@ function prepareNextComic(savedComic) {
     : "";
 
   elements.form.reset();
+  resetCoverEditorState();
   elements.series.value = selectedSeries;
   elements.volumeNumber.value = nextBandNumber;
   elements.condition.value = savedComic.condition;
@@ -1237,7 +1969,9 @@ function prepareNextComic(savedComic) {
 }
 
 function resetForm() {
+  window.clearTimeout(state.metadataLookupTimer);
   elements.form.reset();
+  resetCoverEditorState();
   elements.condition.value = "VG";
   elements.duplicateCondition.value = "VG";
   updateDuplicateConditionVisibility();
@@ -1524,7 +2258,7 @@ async function lookupScannerMetadata(token) {
   state.scannerLookupController = controller;
   elements.scannerLookupStatus.textContent = "Duckipedia wird nach Titel und Erscheinungsjahr durchsucht …";
 
-  const result = await lookupDuckipediaMetadata(
+  const result = await getMetadataForBand(
     state.scannerResult.series,
     state.scannerResult.bandNumber,
     { signal: controller.signal }
@@ -1535,6 +2269,9 @@ async function lookupScannerMetadata(token) {
   }
 
   state.scannerResult.pageUrl = result.pageUrl;
+  state.scannerResult.coverUrl = result.coverUrl || "";
+  state.scannerResult.metadataFetchedAt = result.fetchedAt || new Date().toISOString();
+  state.scannerResult.metadataStatus = result.found ? "found" : "not-found";
   elements.scannerDuckipediaLink.href = result.pageUrl;
 
   if (result.title) {
@@ -1949,6 +2686,10 @@ function buildComicFromScanner() {
     isDuplicate,
     isSealed: elements.scannerIsSealed.checked,
     notes: "",
+    duckipediaPageUrl: scan.pageUrl || createDuckipediaUrl(series, scan.bandNumber, title),
+    duckipediaCoverUrl: scan.coverUrl || "",
+    metadataStatus: scan.metadataStatus || "",
+    metadataFetchedAt: scan.metadataFetchedAt || null,
     createdAt: now,
     updatedAt: now
   };
@@ -1965,6 +2706,17 @@ function handleScannerApplyToForm() {
   elements.volumeNumber.value = String(scan.bandNumber);
   elements.title.value = elements.scannerResultName.value.trim();
   elements.publicationYear.value = elements.scannerResultYear.value.trim();
+  state.formMetadata = {
+    series: scan.series,
+    bandNumber: scan.bandNumber,
+    found: scan.metadataStatus === "found",
+    pageUrl: scan.pageUrl || createDuckipediaUrl(scan.series, scan.bandNumber),
+    coverUrl: scan.coverUrl || "",
+    fetchedAt: scan.metadataFetchedAt || null
+  };
+  if (!state.formHasLocalCover && state.formMetadata.coverUrl) {
+    setFormCoverPreview(state.formMetadata.coverUrl, "Duckipedia-Vorschau", false);
+  }
   elements.condition.value = elements.scannerCondition.value;
   elements.duplicateCondition.value = elements.scannerDuplicateCondition.value;
   elements.isRead.checked = elements.scannerIsRead.checked;
@@ -2312,8 +3064,9 @@ async function handleJsonExport() {
       changesSinceBackup: 0,
       lastBackupComicCount: state.comics.length
     };
+    const metadataCache = await getAllMetadataCache();
     const result = await shareOrDownloadText({
-      content: createJsonBackup(state.comics, nextSettings),
+      content: createJsonBackup(state.comics, nextSettings, metadataCache),
       filename: createDatedFilename("Sammlerhausen-Backup", "json"),
       mimeType: "application/json;charset=utf-8",
       title: "Sammlerhausen – JSON-Backup",
@@ -2360,7 +3113,8 @@ function showExportMessage(message, type = "info") {
   elements.exportMessage.dataset.type = type;
 }
 
-function openImportModal() {
+function openImportModal(event) {
+  state.importReturnTarget = event?.currentTarget || elements.openImport;
   state.importBackup = null;
   elements.importFile.value = "";
   elements.importSummary.replaceChildren();
@@ -2383,7 +3137,8 @@ function closeImportModal() {
 
   elements.importModal.classList.add("hidden");
   restoreBodyModalState();
-  elements.openImport.focus();
+  (state.importReturnTarget || elements.openImport).focus();
+  state.importReturnTarget = null;
 }
 
 async function handleImportFileSelection() {
@@ -2424,8 +3179,16 @@ function renderImportSummary(backup, filename) {
   const filenameLine = document.createElement("p");
   filenameLine.textContent = `Datei: ${filename}`;
 
+  const typeLine = document.createElement("p");
+  typeLine.textContent = backup.hasMedia
+    ? `Backup-Typ: vollständig mit ${backup.covers.length} eigenen Coverfotos`
+    : "Backup-Typ: Sammlungsdaten ohne eigene Coverfotos";
+
   const countLine = document.createElement("p");
   countLine.textContent = `Enthaltene Comics: ${backup.comics.length}`;
+
+  const cacheLine = document.createElement("p");
+  cacheLine.textContent = `Duckipedia-Cache: ${backup.metadataCache.length} Einträge`;
 
   const versionLine = document.createElement("p");
   versionLine.textContent = `Datenformat: Version ${backup.dataFormatVersion}`;
@@ -2435,7 +3198,7 @@ function renderImportSummary(backup, filename) {
     ? `Exportiert: ${formatDateTime(backup.exportedAt)}`
     : "Exportdatum: nicht enthalten";
 
-  elements.importSummary.replaceChildren(filenameLine, countLine, versionLine, dateLine);
+  elements.importSummary.replaceChildren(filenameLine, typeLine, countLine, cacheLine, versionLine, dateLine);
   elements.importSummary.classList.remove("hidden");
 }
 
@@ -2485,6 +3248,45 @@ async function handleImportSubmit() {
       resultMessage = `${mergeResult.added} hinzugefügt, ${mergeResult.updated} aktualisiert, ${mergeResult.skipped} übersprungen.`;
     }
 
+    if (state.importBackup.hasMetadataCache) {
+      if (mode === "replace") {
+        await replaceMetadataCache(state.importBackup.metadataCache);
+      } else {
+        await upsertMetadataCache(state.importBackup.metadataCache);
+      }
+    }
+
+    if (mode === "replace" && !state.importBackup.hasMedia) {
+      const validComicIds = new Set(state.importBackup.comics.map((comic) => comic.id));
+      const existingCovers = await getAllCoverMedia();
+      await replaceAllCoverMedia(existingCovers.filter((cover) => validComicIds.has(cover.comicId)));
+    }
+
+    if (state.importBackup.hasMedia) {
+      const importedComicIds = new Set((mode === "replace" ? state.importBackup.comics : (await getAllComics())).map((comic) => comic.id));
+      const coverRecords = state.importBackup.covers
+        .filter((cover) => importedComicIds.has(cover.comicId))
+        .map((cover) => {
+          const blob = dataUrlToBlob(cover.dataUrl);
+          return {
+            comicId: cover.comicId,
+            blob,
+            mimeType: cover.mimeType || blob.type,
+            size: cover.size || blob.size,
+            width: cover.width || 0,
+            height: cover.height || 0,
+            updatedAt: cover.updatedAt || new Date().toISOString(),
+            source: "import"
+          };
+        });
+
+      if (mode === "replace") {
+        await replaceAllCoverMedia(coverRecords);
+      } else {
+        await upsertCoverMedia(coverRecords);
+      }
+    }
+
     const nextSettings = mergeImportedSettings(mode, state.importBackup, importedChangeAmount);
     state.settings = await saveAppSettings(nextSettings);
     applyTheme(state.settings.theme);
@@ -2494,6 +3296,7 @@ async function handleImportSubmit() {
     resetForm();
     await refreshCollection();
     renderBackupStatus();
+    await refreshMediaStatus();
 
     importInProgress = false;
     setImportControlsBusy(false);
@@ -2516,6 +3319,8 @@ function mergeImportedSettings(mode, backup, importedChangeAmount = 0) {
       ...importedSettings,
       lastBackupAt: importedSettings.lastBackupAt || backup.exportedAt || state.settings.lastBackupAt,
       changesSinceBackup: 0,
+      mediaChangesSinceBackup: backup.hasMedia ? 0 : (importedSettings.mediaChangesSinceBackup || state.settings.mediaChangesSinceBackup || 0),
+      lastMediaBackupAt: backup.hasMedia ? (importedSettings.lastMediaBackupAt || backup.exportedAt || state.settings.lastMediaBackupAt) : state.settings.lastMediaBackupAt,
       lastBackupComicCount: backup.comics.length
     };
   }
@@ -2534,6 +3339,10 @@ function mergeImportedSettings(mode, backup, importedChangeAmount = 0) {
       ...(state.settings.missingBandDetails || {}),
       ...(importedSettings.missingBandDetails || {})
     },
+    showCovers: importedSettings.showCovers ?? state.settings.showCovers,
+    duckipediaAutoEnrich: importedSettings.duckipediaAutoEnrich ?? state.settings.duckipediaAutoEnrich,
+    lastMediaBackupAt: backup.hasMedia ? (importedSettings.lastMediaBackupAt || backup.exportedAt || state.settings.lastMediaBackupAt) : state.settings.lastMediaBackupAt,
+    mediaChangesSinceBackup: backup.hasMedia ? 0 : (state.settings.mediaChangesSinceBackup || 0),
     changesSinceBackup: Math.min(999999, (state.settings.changesSinceBackup || 0) + importedChangeAmount),
     lastBackupComicCount: state.settings.lastBackupComicCount || 0
   };

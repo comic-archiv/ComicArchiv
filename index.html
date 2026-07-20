@@ -35,7 +35,7 @@
       <span id="connection-status" class="status-pill">Online</span>
       <span class="status-copy">Lokale Sammlung</span>
       <button id="update-app" class="update-pill" type="button">Updates prüfen</button>
-      <span id="app-version" class="version-pill">v3.2.0</span>
+      <span id="app-version" class="version-pill">v3.3.0</span>
     </section>
 
     <section id="backup-reminder" class="backup-reminder hidden" aria-live="polite">
@@ -63,21 +63,19 @@
         <div class="subsection-heading"><h3 id="condition-stats-title">Verteilung nach Zustand</h3><span id="condition-stats-total" class="muted-copy">0 Exemplare</span></div>
         <div id="condition-stats" class="condition-stats"></div>
       </section>
-    </section>
 
-    <section id="progress" class="section-anchor" aria-labelledby="progress-title">
-      <div class="section-heading collection-heading">
-        <div><p class="eyebrow">Vollständigkeit</p><h2 id="progress-title">Fortschritt je Reihe</h2></div>
-        <span id="progress-summary" class="count-badge">0 Reihen</span>
-      </div>
-      <p class="section-intro">Lege pro Reihe eine höchste gewünschte Bandnummer fest. Ohne Ziel zeigt Sammlerhausen den Fortschritt nur bis zum höchsten vorhandenen Band.</p>
-      <form id="progress-target-form" class="panel progress-target-form" novalidate>
-        <label class="field"><span>Reihe</span><select id="progress-series"></select></label>
-        <label class="field"><span>Höchste gewünschte Bandnummer</span><input id="progress-target" type="number" inputmode="numeric" min="1" max="99999" placeholder="z. B. 600"></label>
-        <button id="progress-save" class="secondary-button" type="submit">Ziel speichern</button>
-        <p id="progress-message" class="form-message field-full" role="status" aria-live="polite"></p>
-      </form>
-      <div id="progress-list" class="progress-list"></div>
+      <section class="panel progress-overview-card" aria-labelledby="progress-overview-title">
+        <div class="progress-overview-heading">
+          <div><p class="eyebrow">Vollständigkeit</p><h3 id="progress-overview-title">Reihenfortschritt</h3></div>
+          <strong id="progress-overview-percent" class="progress-overview-percent">0 %</strong>
+        </div>
+        <p id="progress-overview-copy" class="muted-copy progress-overview-copy">Noch kein Fortschritt berechenbar.</p>
+        <div class="progress-bar progress-overview-bar" role="progressbar" aria-label="Gesamtfortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="progress-overview-fill"></span></div>
+        <div class="progress-overview-actions">
+          <span id="progress-summary" class="count-badge">0 Reihen</span>
+          <button id="open-progress" class="secondary-button compact-button" type="button">Details öffnen</button>
+        </div>
+      </section>
     </section>
 
     <section id="add" class="panel form-panel section-anchor compact-form-panel" aria-labelledby="form-title">
@@ -117,6 +115,30 @@
             <input id="title" name="title" type="text" maxlength="200" autocomplete="off" placeholder="Optional">
             <small class="field-error" id="title-error"></small>
           </label>
+
+          <section class="cover-editor field-full" aria-labelledby="cover-editor-title">
+            <div class="cover-editor-preview">
+              <img id="form-cover-preview" class="hidden" alt="Covervorschau">
+              <div id="form-cover-placeholder" class="cover-placeholder" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5zM7 16l3-3 2.5 2.5L15 13l2 3M8.5 9.5h.01"/></svg>
+                <span>Kein Cover</span>
+              </div>
+            </div>
+            <div class="cover-editor-copy">
+              <div><span id="cover-editor-title" class="field-title">Eigenes Coverfoto</span><small>Optional, lokal komprimiert gespeichert</small></div>
+              <div class="cover-editor-actions">
+                <label class="secondary-button compact-button file-button" for="cover-file">Cover aufnehmen/auswählen</label>
+                <input id="cover-file" class="visually-hidden" type="file" accept="image/*">
+                <button id="remove-cover" class="text-button danger-text hidden" type="button">Entfernen</button>
+              </div>
+              <p id="cover-status" class="field-help" aria-live="polite"></p>
+            </div>
+          </section>
+
+          <div class="metadata-controls field-full">
+            <button id="lookup-metadata" class="secondary-button compact-button" type="button">Duckipedia-Daten laden</button>
+            <p id="metadata-status" class="field-help" aria-live="polite">Titel, Jahr und Cover werden bei numerischen Bänden automatisch ergänzt.</p>
+          </div>
 
           <label class="field" id="primary-condition-field">
             <span id="primary-condition-label">Zustand <strong aria-hidden="true">*</strong></span>
@@ -205,11 +227,12 @@
         <button id="export-json" class="primary-button" type="button">JSON-Backup erstellen</button>
         <button id="export-csv" class="secondary-button" type="button">Sammlung als CSV</button>
         <button id="export-missing-csv" class="secondary-button" type="button">Fehlende Bände als CSV</button>
-        <button id="open-import" class="secondary-button" type="button">JSON-Backup importieren</button>
+        <button id="open-import" class="secondary-button" type="button">Backup importieren</button>
+        <button id="open-media" class="secondary-button" type="button">Medien &amp; Metadaten</button>
         <button id="request-persistence" class="text-button storage-button" type="button">Speicherschutz anfragen</button>
       </div>
       <p id="export-message" class="form-message" role="status" aria-live="polite"></p>
-      <p class="backup-help">Das iPhone-Teilen-Menü wird genutzt, wenn Dateifreigabe unterstützt wird. Sonst startet ein Download.</p>
+      <p class="backup-help">Das normale JSON-Backup enthält Sammlung, Einstellungen und Duckipedia-Cache, aber keine eigenen Coverfotos. Für Cover nutze „Medien &amp; Metadaten“. Das iPhone-Teilen-Menü wird genutzt, wenn Dateifreigabe unterstützt wird; sonst startet ein Download.</p>
     </section>
   </main>
 
@@ -219,6 +242,74 @@
     <a href="#collection"><span aria-hidden="true">▤</span>Sammlung</a>
     <a href="#backup"><span aria-hidden="true">⇩</span>Backup</a>
   </nav>
+
+  <section id="progress-page" class="app-page hidden" aria-labelledby="progress-title" aria-hidden="true">
+    <header class="app-page-header">
+      <button id="close-progress" class="app-page-back" type="button" aria-label="Zurück zur Übersicht">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        <span>Zurück</span>
+      </button>
+      <div class="app-page-title"><p class="eyebrow">Vollständigkeit</p><h2 id="progress-title">Fortschritt je Reihe</h2></div>
+      <span id="progress-page-summary" class="count-badge">0 Reihen</span>
+    </header>
+    <div class="app-page-content">
+      <p class="section-intro">Lege pro Reihe eine höchste gewünschte Bandnummer fest. Ohne Ziel zeigt Sammlerhausen den Fortschritt nur bis zum höchsten vorhandenen Band.</p>
+      <form id="progress-target-form" class="panel progress-target-form" novalidate>
+        <label class="field"><span>Reihe</span><select id="progress-series"></select></label>
+        <label class="field"><span>Höchste gewünschte Bandnummer</span><input id="progress-target" type="number" inputmode="numeric" min="1" max="99999" placeholder="z. B. 600"></label>
+        <button id="progress-save" class="secondary-button" type="submit">Ziel speichern</button>
+        <p id="progress-message" class="form-message field-full" role="status" aria-live="polite"></p>
+      </form>
+      <div id="progress-list" class="progress-list"></div>
+    </div>
+  </section>
+
+  <section id="media-page" class="app-page hidden" aria-labelledby="media-title" aria-hidden="true">
+    <header class="app-page-header">
+      <button id="close-media" class="app-page-back" type="button" aria-label="Zurück zum Backup">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        <span>Zurück</span>
+      </button>
+      <div class="app-page-title"><p class="eyebrow">Lokale Medien</p><h2 id="media-title">Medien &amp; Metadaten</h2></div>
+      <span id="media-page-summary" class="count-badge">0 Cover</span>
+    </header>
+    <div class="app-page-content media-page-content">
+      <section class="media-stats-grid" aria-label="Speicherübersicht">
+        <article class="backup-status-card"><span class="stat-label">Eigene Cover</span><strong id="media-cover-count">0</strong><small id="media-cover-size" class="muted-copy">0 KB</small></article>
+        <article class="backup-status-card"><span class="stat-label">Duckipedia-Cache</span><strong id="media-cache-count">0 Einträge</strong><small class="muted-copy">Titel, Jahr und externe Coverlinks</small></article>
+        <article class="backup-status-card"><span class="stat-label">Gesamter App-Speicher</span><strong id="media-origin-usage">Wird geprüft …</strong><small id="media-origin-quota" class="muted-copy"></small></article>
+        <article class="backup-status-card"><span class="stat-label">Letztes Medien-Backup</span><strong id="last-media-backup">Noch keines</strong><small id="media-backup-changes" class="muted-copy">0 Medienänderungen</small></article>
+      </section>
+
+      <section class="panel media-settings-panel" aria-labelledby="media-display-title">
+        <div class="subsection-heading"><h3 id="media-display-title">Darstellung</h3></div>
+        <label class="check-row"><input id="show-covers" type="checkbox" checked><span><strong>Cover in der Sammlung anzeigen</strong><small>Eigene Fotos haben Vorrang vor Duckipedia-Vorschauen.</small></span></label>
+        <label class="check-row"><input id="auto-enrich" type="checkbox" checked><span><strong>Neue Bände automatisch anreichern</strong><small>Füllt leere Titel und Jahre und merkt sich Duckipedia-Daten lokal.</small></span></label>
+      </section>
+
+      <section class="panel media-action-panel" aria-labelledby="metadata-tools-title">
+        <div class="subsection-heading"><h3 id="metadata-tools-title">Duckipedia-Anreicherung</h3><span id="enrichment-count" class="muted-copy"></span></div>
+        <p class="section-intro compact-intro">Ergänzt bei numerischen Bänden fehlende Titel, Erscheinungsjahre und Coverlinks. Manuell eingetragene Angaben werden nicht überschrieben.</p>
+        <div class="media-action-grid">
+          <button id="enrich-all" class="primary-button" type="button">Fehlende Daten ergänzen</button>
+          <button id="clear-metadata-cache" class="secondary-button" type="button">Cache leeren</button>
+        </div>
+        <progress id="enrichment-progress" class="media-progress hidden" max="1" value="0"></progress>
+        <p id="enrichment-status" class="form-message" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="panel media-action-panel" aria-labelledby="media-backup-title">
+        <div class="subsection-heading"><h3 id="media-backup-title">Vollständiges Medien-Backup</h3></div>
+        <p class="section-intro compact-intro">Enthält alle Sammlungsdaten, den Duckipedia-Cache und deine eigenen komprimierten Coverfotos. Die Datei kann deutlich größer als das normale JSON-Backup sein.</p>
+        <div class="media-action-grid">
+          <button id="export-media-backup" class="primary-button" type="button">Medien-Backup erstellen</button>
+          <button id="open-media-import" class="secondary-button" type="button">Backup importieren</button>
+          <button id="delete-all-covers" class="text-button danger-text" type="button">Alle eigenen Cover löschen</button>
+        </div>
+        <p id="media-message" class="form-message" role="status" aria-live="polite"></p>
+      </section>
+    </div>
+  </section>
 
   <div id="scanner-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="scanner-modal-title">
     <div class="modal-backdrop" data-close-scanner></div>
@@ -343,7 +434,7 @@
     <div class="modal-backdrop" data-close-import></div>
     <section class="modal-card">
       <div class="section-heading"><div><p class="eyebrow">Wiederherstellen</p><h2 id="import-title">JSON-Backup importieren</h2></div><button id="close-import" class="icon-button small-icon-button" type="button" aria-label="Import schließen">×</button></div>
-      <label class="field field-full"><span>Backup-Datei auswählen</span><input id="import-file" type="file" accept=".json,application/json"></label>
+      <label class="field field-full"><span>Backup-Datei auswählen</span><input id="import-file" type="file" accept=".json,application/json"><small class="field-help">Normale Daten-Backups und vollständige Medien-Backups werden erkannt.</small></label>
       <div id="import-summary" class="import-summary hidden" aria-live="polite"></div>
       <ul id="import-issues" class="import-issues hidden"></ul>
       <fieldset class="import-mode"><legend>Importart</legend><label class="check-row"><input id="import-mode-merge" name="importMode" type="radio" value="merge" checked><span><strong>Zusammenführen</strong><small>Vorhandene Einträge bleiben erhalten.</small></span></label><label class="check-row"><input id="import-mode-replace" name="importMode" type="radio" value="replace"><span><strong>Ersetzen</strong><small>Die aktuelle Sammlung wird vollständig ersetzt.</small></span></label></fieldset>

@@ -1,8 +1,15 @@
-import { APP_CONFIG, createDuckipediaSearchUrl, createMissingDetailKey } from "./config.js";
+import {
+  APP_CONFIG,
+  createDuckipediaSearchUrl,
+  createMetadataCacheKey,
+  createMissingDetailKey
+} from "./config.js";
+import { blobToDataUrl } from "./media.js";
 
 const CSV_SEPARATOR = ";";
 const UTF8_BOM = "\uFEFF";
-const MAX_IMPORT_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_IMPORT_SIZE_BYTES = 250 * 1024 * 1024;
+const MAX_MEDIA_ITEMS = 10000;
 
 export class BackupValidationError extends Error {
   constructor(message, issues = []) {
@@ -24,7 +31,8 @@ export function createCollectionCsv(comics) {
       "Gelesen",
       "Foliert",
       "Doppelt",
-      "Notizen"
+      "Notizen",
+      "Duckipedia"
     ],
     ...comics.map((comic) => [
       comic.series,
@@ -36,7 +44,8 @@ export function createCollectionCsv(comics) {
       comic.isRead ? "Ja" : "Nein",
       comic.isSealed ? "Ja" : "Nein",
       comic.isDuplicate ? "Ja" : "Nein",
-      comic.notes || ""
+      comic.notes || "",
+      comic.duckipediaPageUrl || createDuckipediaSearchUrl(comic.series, comic.volumeNumber, comic.title || "")
     ])
   ];
 
@@ -73,23 +82,53 @@ export function createMissingCsv(missingGroups, settings = {}) {
   return UTF8_BOM + rows.map(createCsvRow).join("\r\n");
 }
 
-export function createJsonBackup(comics, settings) {
+export function createJsonBackup(comics, settings, metadataCache = []) {
+  return JSON.stringify(createBackupObject({
+    backupType: "data",
+    comics,
+    settings,
+    metadataCache,
+    covers: null
+  }), null, 2);
+}
+
+export async function createMediaBackup(comics, settings, metadataCache = [], coverRecords = []) {
+  const covers = [];
+
+  for (const record of coverRecords) {
+    if (!record?.comicId || !(record.blob instanceof Blob)) continue;
+    covers.push({
+      comicId: String(record.comicId),
+      mimeType: String(record.mimeType || record.blob.type || "image/jpeg"),
+      size: Number(record.size || record.blob.size || 0),
+      width: Number(record.width || 0),
+      height: Number(record.height || 0),
+      updatedAt: isValidDateString(record.updatedAt) ? record.updatedAt : new Date().toISOString(),
+      dataUrl: await blobToDataUrl(record.blob)
+    });
+  }
+
+  return JSON.stringify(createBackupObject({
+    backupType: "media",
+    comics,
+    settings,
+    metadataCache,
+    covers
+  }), null, 2);
+}
+
+function createBackupObject({ backupType, comics, settings, metadataCache, covers }) {
   const backup = {
     app: APP_CONFIG.storageName,
     appVersion: APP_CONFIG.appVersion,
+    backupType,
     dataFormatVersion: APP_CONFIG.dataFormatVersion,
+    mediaFormatVersion: backupType === "media" ? 1 : null,
     exportedAt: new Date().toISOString(),
-    sourceOrigin: window.location.origin,
+    sourceOrigin: typeof window !== "undefined" ? window.location.origin : "",
     comics,
-    settings: {
-      theme: settings.theme === "light" ? "light" : "dark",
-      lastBackupAt: settings.lastBackupAt || null,
-      customSeries: Array.isArray(settings.customSeries) ? settings.customSeries : [],
-      knownHighestBandBySeries: settings.knownHighestBandBySeries || {},
-      missingBandDetails: settings.missingBandDetails || {},
-      changesSinceBackup: Number.isSafeInteger(settings.changesSinceBackup) ? settings.changesSinceBackup : 0,
-      lastBackupComicCount: Number.isSafeInteger(settings.lastBackupComicCount) ? settings.lastBackupComicCount : 0
-    },
+    settings: serializeSettings(settings),
+    metadataCache: Array.isArray(metadataCache) ? metadataCache : [],
     seriesConfiguration: {
       defaultSeries: [...APP_CONFIG.series],
       customSeries: Array.isArray(settings.customSeries) ? settings.customSeries : [],
@@ -98,7 +137,27 @@ export function createJsonBackup(comics, settings) {
     }
   };
 
-  return JSON.stringify(backup, null, 2);
+  if (backupType === "media") {
+    backup.covers = covers || [];
+  }
+
+  return backup;
+}
+
+function serializeSettings(settings = {}) {
+  return {
+    theme: settings.theme === "light" ? "light" : "dark",
+    lastBackupAt: settings.lastBackupAt || null,
+    lastMediaBackupAt: settings.lastMediaBackupAt || null,
+    customSeries: Array.isArray(settings.customSeries) ? settings.customSeries : [],
+    knownHighestBandBySeries: settings.knownHighestBandBySeries || {},
+    missingBandDetails: settings.missingBandDetails || {},
+    changesSinceBackup: Number.isSafeInteger(settings.changesSinceBackup) ? settings.changesSinceBackup : 0,
+    mediaChangesSinceBackup: Number.isSafeInteger(settings.mediaChangesSinceBackup) ? settings.mediaChangesSinceBackup : 0,
+    lastBackupComicCount: Number.isSafeInteger(settings.lastBackupComicCount) ? settings.lastBackupComicCount : 0,
+    showCovers: settings.showCovers !== false,
+    duckipediaAutoEnrich: settings.duckipediaAutoEnrich !== false
+  };
 }
 
 export async function readAndValidateBackupFile(file) {
@@ -107,7 +166,7 @@ export async function readAndValidateBackupFile(file) {
   }
 
   if (file.size > MAX_IMPORT_SIZE_BYTES) {
-    throw new BackupValidationError("Die Datei ist größer als 10 MB und wird aus Sicherheitsgründen nicht importiert.");
+    throw new BackupValidationError("Die Datei ist größer als 250 MB und wird aus Sicherheitsgründen nicht importiert.");
   }
 
   const text = await file.text();
@@ -129,19 +188,22 @@ export function parseAndValidateBackup(text) {
 
   const issues = [];
   const version = Number(parsedBackup.dataFormatVersion);
+  const backupType = parsedBackup.backupType === "media" ? "media" : "data";
 
   if (!Number.isInteger(version)) {
     issues.push("Die Versionsnummer des Datenformats fehlt oder ist ungültig.");
   } else if (version < APP_CONFIG.minimumSupportedBackupVersion) {
     issues.push(`Datenformat-Version ${version} ist zu alt.`);
   } else if (version > APP_CONFIG.dataFormatVersion) {
-    issues.push(
-      `Datenformat-Version ${version} ist neuer als diese App-Version unterstützt. Bitte aktualisiere zuerst Sammlerhausen.`
-    );
+    issues.push(`Datenformat-Version ${version} ist neuer als diese App-Version unterstützt. Bitte aktualisiere zuerst Sammlerhausen.`);
   }
 
   if (!Array.isArray(parsedBackup.comics)) {
     issues.push("Das Feld „comics“ fehlt oder ist keine Liste.");
+  }
+
+  if (backupType === "media" && !Array.isArray(parsedBackup.covers)) {
+    issues.push("Das Medien-Backup enthält keine gültige Cover-Liste.");
   }
 
   if (issues.length > 0) {
@@ -154,7 +216,6 @@ export function parseAndValidateBackup(text) {
   parsedBackup.comics.forEach((comic, index) => {
     try {
       const normalizedComic = normalizeImportedComic(comic, index);
-
       if (seenIds.has(normalizedComic.id)) {
         issues.push(`Eintrag ${index + 1}: Die ID „${normalizedComic.id}“ kommt mehrfach vor.`);
       } else {
@@ -177,11 +238,23 @@ export function parseAndValidateBackup(text) {
     throw new BackupValidationError("Die App-Einstellungen im Backup sind ungültig.", [error.message]);
   }
 
+  const metadataCache = normalizeMetadataCache(parsedBackup.metadataCache, issues);
+  const covers = backupType === "media" ? normalizeMediaCovers(parsedBackup.covers, seenIds, issues) : [];
+
+  if (issues.length > 0) {
+    throw new BackupValidationError("Das Backup enthält ungültige Medien- oder Metadaten.", issues.slice(0, 20));
+  }
+
   return {
+    backupType,
     dataFormatVersion: version,
     exportedAt: isValidDateString(parsedBackup.exportedAt) ? parsedBackup.exportedAt : null,
     comics: normalizedComics,
-    settings: normalizedSettings
+    settings: normalizedSettings,
+    metadataCache,
+    hasMetadataCache: Array.isArray(parsedBackup.metadataCache),
+    covers,
+    hasMedia: backupType === "media"
   };
 }
 
@@ -217,20 +290,18 @@ export function mergeCollections(existingComics, importedComics) {
     added += 1;
   });
 
-  return {
-    comics: [...mergedById.values()],
-    added,
-    updated,
-    skipped
-  };
+  return { comics: [...mergedById.values()], added, updated, skipped };
 }
 
 export async function shareOrDownloadText({ content, filename, mimeType, title, text }) {
+  const blob = new Blob([content], { type: mimeType });
+  return shareOrDownloadBlob({ blob, filename, mimeType, title, text });
+}
+
+export async function shareOrDownloadBlob({ blob, filename, mimeType, title, text }) {
+  const normalizedBlob = blob.type === mimeType ? blob : new Blob([blob], { type: mimeType });
   const file = typeof File === "function"
-    ? new File([content], filename, { type: mimeType })
-    : null;
-  const shareData = file
-    ? { files: [file], title, text }
+    ? new File([normalizedBlob], filename, { type: mimeType })
     : null;
 
   if (
@@ -240,18 +311,15 @@ export async function shareOrDownloadText({ content, filename, mimeType, title, 
     navigator.canShare({ files: [file] })
   ) {
     try {
-      await navigator.share(shareData);
+      await navigator.share({ files: [file], title, text });
       return { method: "share" };
     } catch (error) {
-      if (error?.name === "AbortError") {
-        return { method: "cancelled" };
-      }
-
+      if (error?.name === "AbortError") return { method: "cancelled" };
       console.warn("Teilen war nicht möglich, Download-Fallback wird verwendet:", error);
     }
   }
 
-  downloadText(content, filename, mimeType);
+  downloadBlob(normalizedBlob, filename);
   return { method: "download" };
 }
 
@@ -272,8 +340,7 @@ function escapeCsvValue(value) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
-function downloadText(content, filename, mimeType) {
-  const blob = new Blob([content], { type: mimeType });
+function downloadBlob(blob, filename) {
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = objectUrl;
@@ -283,16 +350,12 @@ function downloadText(content, filename, mimeType) {
   document.body.append(link);
   link.click();
   link.remove();
-
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
 }
 
 function normalizeImportedComic(comic, index) {
   const label = `Eintrag ${index + 1}`;
-
-  if (!isPlainObject(comic)) {
-    throw new Error(`${label}: Der Eintrag ist kein Objekt.`);
-  }
+  if (!isPlainObject(comic)) throw new Error(`${label}: Der Eintrag ist kein Objekt.`);
 
   const id = normalizeRequiredString(comic.id, 200, `${label}: ID`);
   const series = normalizeRequiredString(comic.series, 100, `${label}: Reihe`);
@@ -346,6 +409,10 @@ function normalizeImportedComic(comic, index) {
     isDuplicate: comic.isDuplicate,
     isSealed: comic.isSealed,
     notes,
+    duckipediaPageUrl: normalizeOptionalHttpUrl(comic.duckipediaPageUrl),
+    duckipediaCoverUrl: normalizeOptionalHttpUrl(comic.duckipediaCoverUrl),
+    metadataStatus: ["found", "not-found", "manual", ""].includes(comic.metadataStatus) ? comic.metadataStatus : "",
+    metadataFetchedAt: isValidDateString(comic.metadataFetchedAt) ? comic.metadataFetchedAt : null,
     createdAt,
     updatedAt
   };
@@ -354,30 +421,20 @@ function normalizeImportedComic(comic, index) {
 function normalizeImportedSettings(settings, seriesConfiguration) {
   const source = isPlainObject(settings) ? settings : {};
   const seriesSource = isPlainObject(seriesConfiguration) ? seriesConfiguration : {};
-  const customSeriesCandidate = Array.isArray(source.customSeries)
-    ? source.customSeries
-    : seriesSource.customSeries;
+  const customSeriesCandidate = Array.isArray(source.customSeries) ? source.customSeries : seriesSource.customSeries;
   const highestCandidate = isPlainObject(source.knownHighestBandBySeries)
     ? source.knownHighestBandBySeries
     : seriesSource.knownHighestBandBySeries;
 
   const customSeries = Array.isArray(customSeriesCandidate)
-    ? customSeriesCandidate
-        .filter((entry) => typeof entry === "string" && entry.trim())
-        .map((entry) => entry.trim().slice(0, 100))
+    ? customSeriesCandidate.filter((entry) => typeof entry === "string" && entry.trim()).map((entry) => entry.trim().slice(0, 100))
     : [];
 
   const knownHighestBandBySeries = {};
   if (isPlainObject(highestCandidate)) {
     Object.entries(highestCandidate).forEach(([series, value]) => {
       const parsedValue = Number(value);
-      if (
-        typeof series === "string" &&
-        series.trim() &&
-        Number.isSafeInteger(parsedValue) &&
-        parsedValue >= 1 &&
-        parsedValue <= 99999
-      ) {
+      if (typeof series === "string" && series.trim() && Number.isSafeInteger(parsedValue) && parsedValue >= 1 && parsedValue <= 99999) {
         knownHighestBandBySeries[series.trim().slice(0, 100)] = parsedValue;
       }
     });
@@ -385,10 +442,9 @@ function normalizeImportedSettings(settings, seriesConfiguration) {
 
   const missingSource = isPlainObject(source.missingBandDetails)
     ? source.missingBandDetails
-    : isPlainObject(seriesSource.missingBandDetails)
-      ? seriesSource.missingBandDetails
-      : {};
+    : isPlainObject(seriesSource.missingBandDetails) ? seriesSource.missingBandDetails : {};
   const missingBandDetails = {};
+
   Object.entries(missingSource).forEach(([key, detail]) => {
     if (!key || !isPlainObject(detail)) return;
     const publicationYear = detail.publicationYear === null || detail.publicationYear === undefined || detail.publicationYear === ""
@@ -408,65 +464,114 @@ function normalizeImportedSettings(settings, seriesConfiguration) {
   });
 
   const changesSinceBackup = Number(source.changesSinceBackup);
+  const mediaChangesSinceBackup = Number(source.mediaChangesSinceBackup);
   const lastBackupComicCount = Number(source.lastBackupComicCount);
 
   return {
     theme: source.theme === "light" ? "light" : "dark",
     lastBackupAt: isValidDateString(source.lastBackupAt) ? source.lastBackupAt : null,
+    lastMediaBackupAt: isValidDateString(source.lastMediaBackupAt) ? source.lastMediaBackupAt : null,
     customSeries: [...new Set(customSeries)],
     knownHighestBandBySeries,
     missingBandDetails,
     changesSinceBackup: Number.isSafeInteger(changesSinceBackup) && changesSinceBackup >= 0 ? changesSinceBackup : 0,
-    lastBackupComicCount: Number.isSafeInteger(lastBackupComicCount) && lastBackupComicCount >= 0 ? lastBackupComicCount : 0
+    mediaChangesSinceBackup: Number.isSafeInteger(mediaChangesSinceBackup) && mediaChangesSinceBackup >= 0 ? mediaChangesSinceBackup : 0,
+    lastBackupComicCount: Number.isSafeInteger(lastBackupComicCount) && lastBackupComicCount >= 0 ? lastBackupComicCount : 0,
+    showCovers: source.showCovers !== false,
+    duckipediaAutoEnrich: source.duckipediaAutoEnrich !== false
   };
 }
 
+function normalizeMetadataCache(source, issues) {
+  if (source === undefined) return [];
+  if (!Array.isArray(source)) {
+    issues.push("Der Duckipedia-Metadaten-Cache ist keine Liste.");
+    return [];
+  }
+
+  return source.slice(0, MAX_MEDIA_ITEMS).map((entry, index) => {
+    if (!isPlainObject(entry)) {
+      issues.push(`Metadaten ${index + 1}: Eintrag ist ungültig.`);
+      return null;
+    }
+    const series = normalizeOptionalString(entry.series, 100, `Metadaten ${index + 1}: Reihe`);
+    const bandNumber = parseStrictPositiveInteger(entry.bandNumber);
+    const key = normalizeOptionalString(entry.key, 500, `Metadaten ${index + 1}: Schlüssel`)
+      || (series && bandNumber ? createMetadataCacheKey(series, bandNumber) : "");
+    if (!key) {
+      issues.push(`Metadaten ${index + 1}: Schlüssel fehlt.`);
+      return null;
+    }
+    return {
+      key,
+      series,
+      bandNumber,
+      found: Boolean(entry.found),
+      title: normalizeOptionalString(entry.title, 200, `Metadaten ${index + 1}: Titel`),
+      publicationYear: normalizePublicationYear(entry.publicationYear, `Metadaten ${index + 1}`),
+      pageUrl: normalizeOptionalHttpUrl(entry.pageUrl),
+      coverUrl: normalizeOptionalHttpUrl(entry.coverUrl),
+      reason: normalizeOptionalString(entry.reason, 500, `Metadaten ${index + 1}: Hinweis`),
+      fetchedAt: isValidDateString(entry.fetchedAt) ? entry.fetchedAt : new Date().toISOString()
+    };
+  }).filter(Boolean);
+}
+
+function normalizeMediaCovers(source, comicIds, issues) {
+  if (source.length > MAX_MEDIA_ITEMS) {
+    issues.push(`Das Medien-Backup enthält mehr als ${MAX_MEDIA_ITEMS} Coverbilder.`);
+    return [];
+  }
+
+  return source.map((entry, index) => {
+    if (!isPlainObject(entry)) {
+      issues.push(`Cover ${index + 1}: Eintrag ist ungültig.`);
+      return null;
+    }
+    const comicId = normalizeOptionalString(entry.comicId, 200, `Cover ${index + 1}: Comic-ID`);
+    if (!comicId || !comicIds.has(comicId)) {
+      issues.push(`Cover ${index + 1}: Die zugehörige Comic-ID fehlt im Backup.`);
+      return null;
+    }
+    const dataUrl = typeof entry.dataUrl === "string" ? entry.dataUrl : "";
+    if (!/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=\s]+$/i.test(dataUrl)) {
+      issues.push(`Cover ${index + 1}: Bilddaten sind ungültig.`);
+      return null;
+    }
+    return {
+      comicId,
+      mimeType: /^data:(image\/(?:jpeg|png|webp));/i.exec(dataUrl)?.[1]?.toLowerCase() || "image/jpeg",
+      size: Number.isFinite(Number(entry.size)) ? Math.max(0, Number(entry.size)) : 0,
+      width: Number.isFinite(Number(entry.width)) ? Math.max(0, Number(entry.width)) : 0,
+      height: Number.isFinite(Number(entry.height)) ? Math.max(0, Number(entry.height)) : 0,
+      updatedAt: isValidDateString(entry.updatedAt) ? entry.updatedAt : new Date().toISOString(),
+      dataUrl
+    };
+  }).filter(Boolean);
+}
+
 function normalizePublicationYear(value, label) {
-  if (value === null || value === undefined || value === "") {
-    return null;
-  }
-
+  if (value === null || value === undefined || value === "") return null;
   const parsedValue = Number(value);
-  const maximumYear = APP_CONFIG.publicationYearMaximum;
-
-  if (!Number.isInteger(parsedValue) || parsedValue < 1800 || parsedValue > maximumYear) {
-    throw new Error(`${label}: Das Erscheinungsjahr muss zwischen 1800 und ${maximumYear} liegen.`);
+  if (!Number.isInteger(parsedValue) || parsedValue < 1800 || parsedValue > APP_CONFIG.publicationYearMaximum) {
+    throw new Error(`${label}: Das Erscheinungsjahr muss zwischen 1800 und ${APP_CONFIG.publicationYearMaximum} liegen.`);
   }
-
   return parsedValue;
 }
 
 function normalizeRequiredString(value, maximumLength, label) {
-  if (typeof value !== "string" && typeof value !== "number") {
-    throw new Error(`${label} fehlt oder ist ungültig.`);
-  }
-
+  if (typeof value !== "string" && typeof value !== "number") throw new Error(`${label} fehlt oder ist ungültig.`);
   const normalized = String(value).trim();
-  if (!normalized) {
-    throw new Error(`${label} darf nicht leer sein.`);
-  }
-
-  if (normalized.length > maximumLength) {
-    throw new Error(`${label} ist länger als ${maximumLength} Zeichen.`);
-  }
-
+  if (!normalized) throw new Error(`${label} darf nicht leer sein.`);
+  if (normalized.length > maximumLength) throw new Error(`${label} ist länger als ${maximumLength} Zeichen.`);
   return normalized;
 }
 
 function normalizeOptionalString(value, maximumLength, label) {
-  if (value === null || value === undefined) {
-    return "";
-  }
-
-  if (typeof value !== "string" && typeof value !== "number") {
-    throw new Error(`${label} ist ungültig.`);
-  }
-
+  if (value === null || value === undefined) return "";
+  if (typeof value !== "string" && typeof value !== "number") throw new Error(`${label} ist ungültig.`);
   const normalized = String(value).trim();
-  if (normalized.length > maximumLength) {
-    throw new Error(`${label} ist länger als ${maximumLength} Zeichen.`);
-  }
-
+  if (normalized.length > maximumLength) throw new Error(`${label} ist länger als ${maximumLength} Zeichen.`);
   return normalized;
 }
 
@@ -475,21 +580,16 @@ function normalizeOptionalHttpUrl(value) {
   if (typeof value !== "string") return "";
   try {
     const url = new URL(value.trim());
-    return url.protocol === "http:" || url.protocol === "https:" ? url.href.slice(0, 1000) : "";
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href.slice(0, 2000) : "";
   } catch (error) {
     return "";
   }
 }
 
 function parseStrictPositiveInteger(value) {
-  if (!/^\d+$/.test(String(value))) {
-    return null;
-  }
-
+  if (!/^\d+$/.test(String(value))) return null;
   const parsedValue = Number(value);
-  return Number.isSafeInteger(parsedValue) && parsedValue >= 1 && parsedValue <= 99999
-    ? parsedValue
-    : null;
+  return Number.isSafeInteger(parsedValue) && parsedValue >= 1 && parsedValue <= 99999 ? parsedValue : null;
 }
 
 function createComicFingerprint(comic) {

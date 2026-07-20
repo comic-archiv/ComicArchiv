@@ -1,10 +1,11 @@
 export const APP_CONFIG = Object.freeze({
-  appVersion: "3.2.0",
-  dataFormatVersion: 3,
+  appVersion: "3.3.0",
+  dataFormatVersion: 4,
   minimumSupportedBackupVersion: 1,
   storageName: "ComicArchiv",
   displayName: "Sammlerhausen",
   publicationYearMaximum: 2035,
+  metadataCacheMaximumAgeDays: 90,
   duckipediaBase: "https://de.duckipedia.org/",
   duckipediaSearchBase: "https://de.duckipedia.org/index.php?title=Spezial%3ASuche&fulltext=1&search=",
   series: Object.freeze([
@@ -52,11 +53,15 @@ export const APP_CONFIG = Object.freeze({
 export const DEFAULT_SETTINGS = Object.freeze({
   theme: "dark",
   lastBackupAt: null,
+  lastMediaBackupAt: null,
   customSeries: Object.freeze([]),
   knownHighestBandBySeries: Object.freeze({}),
   missingBandDetails: Object.freeze({}),
   changesSinceBackup: 0,
-  lastBackupComicCount: 0
+  mediaChangesSinceBackup: 0,
+  lastBackupComicCount: 0,
+  showCovers: true,
+  duckipediaAutoEnrich: true
 });
 
 export function getConditionLabel(code) {
@@ -144,9 +149,13 @@ export function createDuckipediaUrl(series, volumeNumber, title = "") {
   return `${APP_CONFIG.duckipediaBase}${encodeURIComponent(pageName).replace(/%2F/gi, "/")}`;
 }
 
-// Beibehaltung des bisherigen Funktionsnamens für ältere Module und Backups.
 export const createDuckipediaSearchUrl = createDuckipediaUrl;
 
 export function createMissingDetailKey(series, bandNumber) {
   return `${encodeURIComponent(String(series).trim())}::${Number(bandNumber)}`;
+}
+
+export function createMetadataCacheKey(series, bandNumber) {
+  const numericBand = Number(bandNumber);
+  return `${encodeURIComponent(String(series || "").trim())}::${Number.isSafeInteger(numericBand) ? numericBand : String(bandNumber || "").trim()}`;
 }
