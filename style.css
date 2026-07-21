@@ -1,5 +1,6 @@
 :root {
   color-scheme: dark;
+
   --page-bg: #0b1020;
   --surface: #111827;
   --surface-raised: #182235;
@@ -7,12 +8,24 @@
   --text: #f8fafc;
   --text-muted: #a7b0c0;
   --border: #344258;
-  --accent: #f6c344;
-  --accent-strong: #ffd86b;
-  --accent-text: #17120a;
+
+  --primary: #58a6e7;
+  --primary-strong: #78baf0;
+  --primary-text: #0b1020;
+
+  --secondary: #f6c344;
+  --secondary-strong: #ffd86b;
+  --secondary-text: #17120a;
+
   --success: #4ade80;
   --danger: #fb7185;
   --focus: #93c5fd;
+
+  /* Kompatibilitäts-Aliasse: aktive Elemente sind ab Version 3.4 blau. */
+  --accent: var(--primary);
+  --accent-strong: var(--primary-strong);
+  --accent-text: var(--primary-text);
+
   --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
   --radius-large: 22px;
   --radius-medium: 15px;
@@ -23,6 +36,7 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
+
   --page-bg: #f7f4ee;
   --surface: #ffffff;
   --surface-raised: #fffdf8;
@@ -30,12 +44,23 @@
   --text: #172033;
   --text-muted: #5d6573;
   --border: #d7d0c4;
-  --accent: #efb423;
-  --accent-strong: #c98d00;
-  --accent-text: #17120a;
+
+  --primary: #005ea8;
+  --primary-strong: #004b87;
+  --primary-text: #ffffff;
+
+  --secondary: #efb423;
+  --secondary-strong: #c98d00;
+  --secondary-text: #17120a;
+
   --success: #16834a;
   --danger: #c9344d;
   --focus: #1d70c9;
+
+  --accent: var(--primary);
+  --accent-strong: var(--primary-strong);
+  --accent-text: var(--primary-text);
+
   --shadow: 0 18px 48px rgba(66, 50, 22, 0.12);
 }
 
@@ -56,7 +81,7 @@ body {
   margin: 0;
   padding-bottom: calc(94px + env(safe-area-inset-bottom));
   background:
-    radial-gradient(circle at top right, rgba(246, 195, 68, 0.13), transparent 32rem),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--secondary) 13%, transparent), transparent 32rem),
     var(--page-bg);
   color: var(--text);
   line-height: 1.5;
@@ -2114,7 +2139,7 @@ body.app-page-open {
   overflow-y: auto;
   overscroll-behavior: contain;
   background:
-    radial-gradient(circle at top right, rgba(246, 195, 68, 0.13), transparent 32rem),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--secondary) 13%, transparent), transparent 32rem),
     var(--page-bg);
   -webkit-overflow-scrolling: touch;
 }
@@ -2725,4 +2750,360 @@ body.app-page-open {
     grid-column: auto;
     grid-template-columns: auto;
   }
+}
+
+/* Version 3.4: Farbkonzept, Flohmarkt-Modus und erweiterte Reihenverwaltung */
+.brand-mark {
+  background: var(--secondary);
+  color: var(--secondary-text);
+}
+
+.stat-card-highlight {
+  border-color: color-mix(in srgb, var(--secondary) 48%, var(--border));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--secondary) 18%, var(--surface)), var(--surface));
+}
+
+.required-note strong,
+.progress-percent,
+.progress-overview-percent,
+.progress-target-details > summary::after {
+  color: var(--secondary-strong);
+}
+
+.count-badge,
+.collection-hub-count {
+  border-color: color-mix(in srgb, var(--secondary) 40%, var(--border));
+  background: color-mix(in srgb, var(--secondary) 10%, var(--surface-soft));
+  color: var(--secondary-strong);
+}
+
+.condition-stat-fill,
+.progress-bar > span {
+  background: var(--primary);
+}
+
+.missing-band {
+  border-color: color-mix(in srgb, var(--secondary) 55%, var(--border));
+  background: color-mix(in srgb, var(--secondary) 12%, var(--surface));
+  color: var(--secondary-strong);
+}
+
+.check-row input,
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--primary);
+}
+
+.bottom-nav a:active,
+.bottom-nav a:focus-visible {
+  background: color-mix(in srgb, var(--primary) 13%, var(--surface-soft));
+  color: var(--primary-strong);
+}
+
+.backup-reminder {
+  border-color: color-mix(in srgb, var(--secondary) 62%, var(--border));
+  background: color-mix(in srgb, var(--secondary) 13%, var(--surface));
+}
+
+.missing-tools-row {
+  margin-top: 12px;
+}
+
+.flea-market-launch {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.flea-market-launch svg {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.action-count {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary-text) 15%, transparent);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.flea-market-content {
+  display: grid;
+  gap: 12px;
+  padding-bottom: calc(118px + env(safe-area-inset-bottom));
+}
+
+.flea-market-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.flea-market-summary > div {
+  display: grid;
+  gap: 2px;
+  padding: 12px;
+  border-radius: var(--radius-medium);
+  background: var(--surface-soft);
+  text-align: center;
+}
+
+.flea-market-summary strong {
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.flea-market-controls {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 0;
+}
+
+.flea-market-controls .secondary-button {
+  justify-self: stretch;
+}
+
+.flea-market-list,
+.flea-market-group-list {
+  display: grid;
+  gap: 9px;
+}
+
+.flea-market-group {
+  display: grid;
+  gap: 9px;
+}
+
+.flea-market-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 2px;
+}
+
+.flea-market-group-heading h3 {
+  font-size: 1rem;
+}
+
+.compact-count-badge {
+  min-height: 28px;
+  padding: 3px 8px;
+  font-size: 0.78rem;
+}
+
+.flea-market-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-medium);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.flea-market-item.is-found {
+  border-color: color-mix(in srgb, var(--success) 58%, var(--border));
+  background: color-mix(in srgb, var(--success) 9%, var(--surface));
+}
+
+.flea-market-item > input {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  margin: 0;
+}
+
+.flea-market-item-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.flea-market-item-copy strong,
+.flea-market-item-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flea-market-item-copy span {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.flea-market-item select {
+  min-height: 40px;
+  padding: 7px 8px;
+  text-align: center;
+  font-weight: 850;
+}
+
+.flea-market-link {
+  grid-column: 2 / -1;
+  justify-self: start;
+  color: var(--primary-strong);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.flea-market-sticky-actions {
+  position: fixed;
+  z-index: 85;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
+  gap: 8px;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--page-bg) 94%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.flea-market-sticky-actions .form-message {
+  grid-column: 1 / -1;
+  min-height: 0;
+  margin: 0;
+}
+
+.series-manager-card {
+  width: min(100%, 720px);
+}
+
+.series-manager-form {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-large);
+  background: var(--surface-soft);
+}
+
+.series-manager-actions,
+.management-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.series-manager-actions > * {
+  flex: 1 1 180px;
+}
+
+.series-management-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.series-management-row {
+  align-items: center;
+}
+
+.management-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.management-copy small {
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.standard-series-details {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.standard-series-details summary {
+  color: var(--primary-strong);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.compact-management-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.compact-management-row {
+  align-items: start;
+  font-size: 0.78rem;
+}
+
+.compact-management-row code {
+  max-width: 55%;
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.duplicate-actions {
+  align-items: stretch;
+}
+
+@media (min-width: 560px) {
+  .flea-market-item {
+    grid-template-columns: 28px minmax(0, 1fr) 72px auto;
+  }
+
+  .flea-market-link {
+    grid-column: auto;
+  }
+
+  .flea-market-sticky-actions {
+    left: 50%;
+    width: min(100%, 820px);
+    transform: translateX(-50%);
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+  }
+}
+
+@media (max-width: 390px) {
+  .flea-market-launch {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .flea-market-launch .action-count {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .management-actions {
+    width: 100%;
+  }
+}
+
+.secondary-button {
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface-soft));
+  color: var(--primary-strong);
+}
+
+.secondary-button:hover {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, var(--surface-soft));
 }

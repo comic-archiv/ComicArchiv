@@ -3,8 +3,8 @@ import { APP_CONFIG, createDuckipediaUrl } from "./config.js";
 const DUCKIPEDIA_HOST = "de.duckipedia.org";
 const LOOKUP_TIMEOUT_MS = 10000;
 
-export async function lookupDuckipediaMetadata(series, bandNumber, { signal } = {}) {
-  const pageUrl = createDuckipediaUrl(series, bandNumber);
+export async function lookupDuckipediaMetadata(series, bandNumber, { signal, settings } = {}) {
+  const pageUrl = createDuckipediaUrl(series, bandNumber, "", settings);
   const parsedUrl = new URL(pageUrl);
 
   if (parsedUrl.hostname !== DUCKIPEDIA_HOST || parsedUrl.pathname.startsWith("/index.php")) {

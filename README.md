@@ -1,19 +1,22 @@
-# Sammlerhausen 3.3.2
+# Sammlerhausen 3.4.0
 
 Mobile Progressive Web App für eine private Sammlung von Lustigen Taschenbüchern und Sonderbänden.
 
-Neu in 3.3.2:
+## Neu in 3.4.0
 
-- Fehlende Bände sind auf der Startseite in Hauptreihe und Sonderreihen getrennt
-- eigene bildschirmfüllende Fehlband-Ansichten
-- geöffnete Reihe bleibt nach dem Speichern von Banddetails geöffnet
-- fehlender Band kann mit einem Klick als vorhanden übernommen werden; erforderlich ist nur der Zustand
-- gespeicherte Zielbandnummern können über einen eigenen Button entfernt werden
-- korrekte Duckipedia-Links für `LTB präsentiert` einschließlich Umlaut
-- gestalteter PDF-Export als Flohmarkt- und Comicbörsen-Suchliste
-- PDF mit Reihenblöcken, großen Bandnummern, Abhakfeldern, Wunschzustand, Notizen und klickbaren Duckipedia-Links
+- Flohmarkt-Modus mit dauerhaft gespeicherten Markierungen
+- fehlende Bände unterwegs als gefunden markieren
+- Zustand je Fund auswählen oder gesammelt anwenden
+- alle gefundenen Bände gesammelt in die Sammlung übernehmen
+- erweiterte Reihenverwaltung mit Bearbeiten, Umbenennen und Entfernen
+- eigener Duckipedia-Pfad pro benutzerdefinierter Reihe
+- Platzhalter `{band}` für direkte Duckipedia-Bandseiten
+- nachträgliches Hinzufügen und Entfernen eines zweiten Exemplars direkt in der Comic-Karte
+- das zweite Exemplar bleibt Bestandteil desselben Sammlungsdatensatzes und erzeugt keine Dublette
+- neues Farbkonzept mit Archiv-Blau für Aktionen, Comic-Gelb für Akzente, Grün für Erfolg und Rot für Fehler beziehungsweise destruktive Aktionen
+- aktualisiertes Backupformat mit Reihenpfaden und optionalem Flohmarkt-Zwischenstand
 
-Die bestehende IndexedDB und alle gespeicherten Daten bleiben unverändert.
+Die bestehende IndexedDB bleibt erhalten. Vorhandene eigene Reihen werden beim ersten Start automatisch in das neue Reihenformat übernommen.
 
 ## Drittanbieter-Komponenten
 
@@ -22,4 +25,4 @@ Die bestehende IndexedDB und alle gespeicherten Daten bleiben unverändert.
 
 Die minifizierten Browserdateien und die jeweiligen MIT-Lizenztexte liegen im Ordner `vendor/`.
 
-Sammlungsdaten, fehlende Bände und eigene Coverfotos bleiben in der lokalen IndexedDB des Geräts. Die PDF-Datei wird vollständig auf dem Gerät erzeugt. Duckipedia wird nur zur optionalen Abfrage bibliografischer Zusatzinformationen kontaktiert.
+Sammlungsdaten, Flohmarkt-Markierungen und eigene Coverfotos bleiben in der lokalen IndexedDB des Geräts. Duckipedia wird nur zur optionalen Abfrage bibliografischer Zusatzinformationen kontaktiert.

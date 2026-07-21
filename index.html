@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#111827">
+  <meta name="theme-color" content="#0B1020">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Sammlerhausen">
@@ -35,7 +35,7 @@
       <span id="connection-status" class="status-pill">Online</span>
       <span class="status-copy">Lokale Sammlung</span>
       <button id="update-app" class="update-pill" type="button">Updates prüfen</button>
-      <span id="app-version" class="version-pill">v3.3.2</span>
+      <span id="app-version" class="version-pill">v3.4.0</span>
     </section>
 
     <section id="backup-reminder" class="backup-reminder hidden" aria-live="polite">
@@ -212,6 +212,13 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
         </button>
       </div>
+      <div class="missing-tools-row">
+        <button id="open-flea-market" class="primary-button flea-market-launch" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16l-1 11H5L4 8Zm3 0V6a5 5 0 0 1 10 0v2M9 12v3m6-3v3"/></svg>
+          <span>Flohmarkt-Modus öffnen</span>
+          <span id="flea-market-found-count" class="action-count">0 gefunden</span>
+        </button>
+      </div>
     </section>
 
     <section id="backup" class="panel backup-panel section-anchor" aria-labelledby="backup-title">
@@ -291,6 +298,43 @@
     <div class="app-page-content missing-page-content">
       <div id="missing-empty" class="panel empty-state"><div class="empty-icon" aria-hidden="true">✓</div><h3>Keine Lücken erkannt</h3><p>In diesem Bereich wurden aktuell keine fehlenden numerischen Bände erkannt.</p></div>
       <div id="missing-list" class="missing-list"></div>
+    </div>
+  </section>
+
+  <section id="flea-market-page" class="app-page hidden" aria-labelledby="flea-market-title" aria-hidden="true">
+    <header class="app-page-header">
+      <button id="close-flea-market" class="app-page-back" type="button" aria-label="Zurück zu den fehlenden Bänden">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        <span>Zurück</span>
+      </button>
+      <div class="app-page-title"><p class="eyebrow">Unterwegs suchen</p><h2 id="flea-market-title">Flohmarkt-Modus</h2></div>
+      <span id="flea-market-page-count" class="count-badge">0 gefunden</span>
+    </header>
+    <div class="app-page-content flea-market-content">
+      <section class="panel flea-market-summary" aria-label="Flohmarkt-Status">
+        <div><span class="stat-label">Noch auf der Liste</span><strong id="flea-market-missing-count">0</strong></div>
+        <div><span class="stat-label">Als gefunden markiert</span><strong id="flea-market-selected-count">0</strong></div>
+      </section>
+
+      <section class="panel flea-market-controls" aria-label="Flohmarkt-Liste filtern">
+        <div class="field-grid compact-field-grid">
+          <label class="field field-full"><span>Suche</span><input id="flea-market-search" type="search" placeholder="Reihe, Bandnummer oder Titel"></label>
+          <label class="field"><span>Bereich</span><select id="flea-market-scope"><option value="all">Alle Reihen</option><option value="main">Nur Hauptreihe</option><option value="other">Nur Sonderreihen</option></select></label>
+          <label class="field"><span>Standardzustand</span><select id="flea-market-default-condition"></select></label>
+        </div>
+        <button id="flea-market-apply-condition" class="secondary-button compact-button" type="button">Zustand auf gefundene Bände anwenden</button>
+      </section>
+
+      <div id="flea-market-empty" class="panel empty-state hidden">
+        <div class="empty-icon" aria-hidden="true">✓</div><h3>Keine passenden fehlenden Bände</h3><p>Ändere den Filter oder ergänze zunächst Zielbandnummern.</p>
+      </div>
+      <div id="flea-market-list" class="flea-market-list" aria-live="polite"></div>
+
+      <div class="flea-market-sticky-actions">
+        <button id="flea-market-save" class="success-button" type="button">Gefundene Bände speichern</button>
+        <button id="flea-market-clear" class="secondary-button" type="button">Markierungen zurücksetzen</button>
+        <p id="flea-market-message" class="form-message" role="status" aria-live="polite"></p>
+      </div>
     </div>
   </section>
 
@@ -456,14 +500,23 @@
 
   <div id="series-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="series-modal-title">
     <div class="modal-backdrop" data-close-series></div>
-    <section class="modal-card">
-      <div class="section-heading"><div><p class="eyebrow">Auswahlliste</p><h2 id="series-modal-title">Eigene Reihen</h2></div><button id="close-series" class="icon-button small-icon-button" type="button" aria-label="Reihenverwaltung schließen">×</button></div>
-      <form id="series-form" class="inline-form">
-        <label class="field field-full"><span>Neue Reihe</span><input id="custom-series-name" type="text" maxlength="100" placeholder="z. B. Donald Duck Sonderheft" required></label>
-        <button class="primary-button" type="submit">Hinzufügen</button>
+    <section class="modal-card series-manager-card">
+      <div class="section-heading"><div><p class="eyebrow">Reihenverwaltung</p><h2 id="series-modal-title">Eigene Reihen</h2></div><button id="close-series" class="icon-button small-icon-button" type="button" aria-label="Reihenverwaltung schließen">×</button></div>
+      <form id="series-form" class="series-manager-form" novalidate>
+        <input id="custom-series-original-name" type="hidden">
+        <label class="field field-full"><span>Name der Reihe</span><input id="custom-series-name" type="text" maxlength="100" placeholder="z. B. LTB Mini Pocket" required></label>
+        <label class="field field-full"><span>Duckipedia-Pfad</span><input id="custom-series-pattern" type="text" maxlength="200" placeholder="z. B. LTB_Mini_Pocket_{band}"><small class="field-help">Optional. Verwende <strong>{band}</strong> als Platzhalter. Ohne Platzhalter wird die Bandnummer automatisch angehängt.</small></label>
+        <div class="series-manager-actions">
+          <button id="save-custom-series" class="primary-button" type="submit">Reihe hinzufügen</button>
+          <button id="cancel-custom-series-edit" class="secondary-button hidden" type="button">Bearbeiten abbrechen</button>
+        </div>
       </form>
       <p id="series-message" class="form-message" role="status" aria-live="polite"></p>
-      <div id="custom-series-list" class="management-list"></div>
+      <div id="custom-series-list" class="management-list series-management-list"></div>
+      <details class="standard-series-details">
+        <summary>Standardreihen und Duckipedia-Pfade anzeigen</summary>
+        <div id="standard-series-list" class="management-list compact-management-list"></div>
+      </details>
     </section>
   </div>
 
@@ -488,6 +541,23 @@
           <button class="secondary-button" type="button" data-close-missing-detail>Abbrechen</button>
         </div>
         <p id="missing-detail-message" class="form-message" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+  </div>
+
+  <div id="duplicate-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="duplicate-modal-title">
+    <div class="modal-backdrop" data-close-duplicate></div>
+    <section class="modal-card">
+      <div class="section-heading"><div><p class="eyebrow">Exemplare verwalten</p><h2 id="duplicate-modal-title">Zweites Exemplar</h2></div><button id="close-duplicate" class="icon-button small-icon-button" type="button" aria-label="Exemplarverwaltung schließen">×</button></div>
+      <p id="duplicate-context" class="modal-context"></p>
+      <form id="duplicate-form" novalidate>
+        <label class="field field-full"><span>Zustand des zweiten Exemplars</span><select id="duplicate-modal-condition"></select></label>
+        <div class="modal-actions duplicate-actions">
+          <button id="duplicate-save" class="primary-button" type="submit">Zweites Exemplar hinzufügen</button>
+          <button id="duplicate-remove" class="danger-button hidden" type="button">Zweites Exemplar entfernen</button>
+          <button class="secondary-button" type="button" data-close-duplicate>Abbrechen</button>
+        </div>
+        <p id="duplicate-message" class="form-message" role="status" aria-live="polite"></p>
       </form>
     </section>
   </div>

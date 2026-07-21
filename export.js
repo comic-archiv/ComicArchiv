@@ -2,7 +2,8 @@ import {
   APP_CONFIG,
   createDuckipediaSearchUrl,
   createMetadataCacheKey,
-  createMissingDetailKey
+  createMissingDetailKey,
+  normalizeDuckipediaPattern
 } from "./config.js";
 import { blobToDataUrl } from "./media.js";
 
@@ -19,7 +20,7 @@ export class BackupValidationError extends Error {
   }
 }
 
-export function createCollectionCsv(comics) {
+export function createCollectionCsv(comics, settings = {}) {
   const rows = [
     [
       "Reihe",
@@ -45,7 +46,7 @@ export function createCollectionCsv(comics) {
       comic.isSealed ? "Ja" : "Nein",
       comic.isDuplicate ? "Ja" : "Nein",
       comic.notes || "",
-      comic.duckipediaPageUrl || createDuckipediaSearchUrl(comic.series, comic.volumeNumber, comic.title || "")
+      comic.duckipediaPageUrl || createDuckipediaSearchUrl(comic.series, comic.volumeNumber, comic.title || "", settings)
     ])
   ];
 
@@ -74,7 +75,7 @@ export function createMissingCsv(missingGroups, settings = {}) {
         detail.publicationYear ?? "",
         detail.desiredCondition || "",
         detail.notes || "",
-        detail.duckipediaUrl || createDuckipediaSearchUrl(group.series, bandNumber, detail.title || "")
+        detail.duckipediaUrl || createDuckipediaSearchUrl(group.series, bandNumber, detail.title || "", settings)
       ]);
     });
   });
@@ -240,7 +241,7 @@ export function createMissingPdfBlob(missingGroups, settings = {}) {
       title,
       notes,
       meta: metaParts.join(" | "),
-      url: detail.duckipediaUrl || createDuckipediaSearchUrl(group.series, bandNumber, title)
+      url: detail.duckipediaUrl || createDuckipediaSearchUrl(group.series, bandNumber, title, settings)
     };
   }
 
@@ -373,6 +374,7 @@ function createBackupObject({ backupType, comics, settings, metadataCache, cover
     seriesConfiguration: {
       defaultSeries: [...APP_CONFIG.series],
       customSeries: Array.isArray(settings.customSeries) ? settings.customSeries : [],
+      customSeriesConfigs: Array.isArray(settings.customSeriesConfigs) ? settings.customSeriesConfigs : [],
       knownHighestBandBySeries: settings.knownHighestBandBySeries || {},
       missingBandDetails: settings.missingBandDetails || {}
     }
@@ -391,8 +393,10 @@ function serializeSettings(settings = {}) {
     lastBackupAt: settings.lastBackupAt || null,
     lastMediaBackupAt: settings.lastMediaBackupAt || null,
     customSeries: Array.isArray(settings.customSeries) ? settings.customSeries : [],
+    customSeriesConfigs: Array.isArray(settings.customSeriesConfigs) ? settings.customSeriesConfigs : [],
     knownHighestBandBySeries: settings.knownHighestBandBySeries || {},
     missingBandDetails: settings.missingBandDetails || {},
+    fleaMarketSession: settings.fleaMarketSession || { items: {}, updatedAt: null },
     changesSinceBackup: Number.isSafeInteger(settings.changesSinceBackup) ? settings.changesSinceBackup : 0,
     mediaChangesSinceBackup: Number.isSafeInteger(settings.mediaChangesSinceBackup) ? settings.mediaChangesSinceBackup : 0,
     lastBackupComicCount: Number.isSafeInteger(settings.lastBackupComicCount) ? settings.lastBackupComicCount : 0,
@@ -663,6 +667,9 @@ function normalizeImportedSettings(settings, seriesConfiguration) {
   const source = isPlainObject(settings) ? settings : {};
   const seriesSource = isPlainObject(seriesConfiguration) ? seriesConfiguration : {};
   const customSeriesCandidate = Array.isArray(source.customSeries) ? source.customSeries : seriesSource.customSeries;
+  const customSeriesConfigCandidate = Array.isArray(source.customSeriesConfigs)
+    ? source.customSeriesConfigs
+    : seriesSource.customSeriesConfigs;
   const highestCandidate = isPlainObject(source.knownHighestBandBySeries)
     ? source.knownHighestBandBySeries
     : seriesSource.knownHighestBandBySeries;
@@ -670,6 +677,7 @@ function normalizeImportedSettings(settings, seriesConfiguration) {
   const customSeries = Array.isArray(customSeriesCandidate)
     ? customSeriesCandidate.filter((entry) => typeof entry === "string" && entry.trim()).map((entry) => entry.trim().slice(0, 100))
     : [];
+  const customSeriesConfigs = normalizeImportedCustomSeriesConfigs(customSeriesConfigCandidate, customSeries);
 
   const knownHighestBandBySeries = {};
   if (isPlainObject(highestCandidate)) {
@@ -712,14 +720,62 @@ function normalizeImportedSettings(settings, seriesConfiguration) {
     theme: source.theme === "light" ? "light" : "dark",
     lastBackupAt: isValidDateString(source.lastBackupAt) ? source.lastBackupAt : null,
     lastMediaBackupAt: isValidDateString(source.lastMediaBackupAt) ? source.lastMediaBackupAt : null,
-    customSeries: [...new Set(customSeries)],
+    customSeries: [...new Set(customSeriesConfigs.map((entry) => entry.name))],
+    customSeriesConfigs,
     knownHighestBandBySeries,
     missingBandDetails,
+    fleaMarketSession: normalizeImportedFleaMarketSession(source.fleaMarketSession),
     changesSinceBackup: Number.isSafeInteger(changesSinceBackup) && changesSinceBackup >= 0 ? changesSinceBackup : 0,
     mediaChangesSinceBackup: Number.isSafeInteger(mediaChangesSinceBackup) && mediaChangesSinceBackup >= 0 ? mediaChangesSinceBackup : 0,
     lastBackupComicCount: Number.isSafeInteger(lastBackupComicCount) && lastBackupComicCount >= 0 ? lastBackupComicCount : 0,
     showCovers: source.showCovers !== false,
     duckipediaAutoEnrich: source.duckipediaAutoEnrich !== false
+  };
+}
+
+function normalizeImportedCustomSeriesConfigs(value, legacySeries = []) {
+  const normalized = [];
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      if (!isPlainObject(entry)) return;
+      const name = normalizeOptionalString(entry.name, 100, "Reihenname");
+      if (!name) return;
+      const duckipediaPattern = normalizeDuckipediaPattern(normalizeOptionalString(entry.duckipediaPattern, 200, "Duckipedia-Pfad"));
+      normalized.push({ name, duckipediaPattern });
+    });
+  }
+  legacySeries.forEach((name) => {
+    if (!normalized.some((entry) => entry.name.localeCompare(name, "de", { sensitivity: "base" }) === 0)) {
+      normalized.push({ name, duckipediaPattern: "" });
+    }
+  });
+  return normalized.filter((entry, index, list) =>
+    list.findIndex((candidate) => candidate.name.localeCompare(entry.name, "de", { sensitivity: "base" }) === 0) === index
+  );
+}
+
+function normalizeImportedFleaMarketSession(value) {
+  const source = isPlainObject(value) ? value : {};
+  const sourceItems = isPlainObject(source.items) ? source.items : {};
+  const items = {};
+  Object.entries(sourceItems).forEach(([key, item]) => {
+    if (!key || !isPlainObject(item)) return;
+    const series = normalizeOptionalString(item.series, 100, "Flohmarkt-Reihe");
+    const bandNumber = Number(item.bandNumber);
+    const condition = typeof item.condition === "string" && APP_CONFIG.conditions.some((entry) => entry.code === item.condition)
+      ? item.condition
+      : "VG";
+    if (!series || !Number.isSafeInteger(bandNumber) || bandNumber < 1 || bandNumber > 99999) return;
+    items[key.slice(0, 500)] = {
+      series,
+      bandNumber,
+      condition,
+      markedAt: isValidDateString(item.markedAt) ? item.markedAt : new Date().toISOString()
+    };
+  });
+  return {
+    items,
+    updatedAt: isValidDateString(source.updatedAt) ? source.updatedAt : null
   };
 }
 

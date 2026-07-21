@@ -1,4 +1,4 @@
-const CACHE_NAME = "comicarchiv-shell-v3-3-2";
+const CACHE_NAME = "comicarchiv-shell-v3-4-0";
 const APP_SHELL = [
   "./",
   "./index.html",

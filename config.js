@@ -1,6 +1,6 @@
 export const APP_CONFIG = Object.freeze({
-  appVersion: "3.3.2",
-  dataFormatVersion: 4,
+  appVersion: "3.4.0",
+  dataFormatVersion: 5,
   minimumSupportedBackupVersion: 1,
   storageName: "ComicArchiv",
   displayName: "Sammlerhausen",
@@ -51,13 +51,46 @@ export const APP_CONFIG = Object.freeze({
   knownHighestBandBySeries: Object.freeze({})
 });
 
+export const STANDARD_DUCKIPEDIA_PATTERNS = Object.freeze({
+  "Lustiges Taschenbuch": "LTB_{band}",
+  "LTB Spezial": "LTB_Spezial_{band}",
+  "LTB Premium": "LTB_Premium_{band}",
+  "LTB Enten-Edition": "LTB_Enten-Edition_{band}",
+  "LTB Maus-Edition": "LTB_Maus-Edition_{band}",
+  "LTB Ultimate Phantomias": "LTB_Ultimate_{band}",
+  "LTB Collection": "LTB_Collection_{band}",
+  "LTB Fantasy": "LTB_Fantasy_{band}",
+  "LTB Crime": "LTB_Crime_{band}",
+  "LTB Royal": "LTB_Royal_{band}",
+  "LTB History": "LTB_History_{band}",
+  "LTB Weihnachten": "LTB_Weihnachten_{band}",
+  "LTB Ostern": "LTB_Ostern_{band}",
+  "LTB Halloween": "LTB_Halloween_{band}",
+  "LTB Sommer": "LTB_Sommer_{band}",
+  "LTB Abenteuer": "LTB_Abenteuer_{band}",
+  "LTB Young Comics": "LTB_Young_Comics_{band}",
+  "LTB Galaxy": "LTB_Galaxy_{band}",
+  "LTB Weltreise": "LTB_Weltreise_{band}",
+  "LTB Fantasy Entenhausen": "LTB_Fantasy_Entenhausen_{band}",
+  "LTB Space": "LTB_Space_{band}",
+  "LTB Phantomias Collection": "LTB_Phantomias_Collection_{band}",
+  "LTB Europareise": "LTB_Europareise_{band}",
+  "LTB Mystery": "LTB_Mystery_{band}",
+  "LTB Extra": "LTB_Extra_{band}",
+  "LTB Sommerspiele": "LTB_Sommerspiele_{band}",
+  "LTB präsentiert": "LTB_präsentiert_{band}",
+  "Lustiges Taschenbuch präsentiert": "LTB_präsentiert_{band}"
+});
+
 export const DEFAULT_SETTINGS = Object.freeze({
   theme: "dark",
   lastBackupAt: null,
   lastMediaBackupAt: null,
   customSeries: Object.freeze([]),
+  customSeriesConfigs: Object.freeze([]),
   knownHighestBandBySeries: Object.freeze({}),
   missingBandDetails: Object.freeze({}),
+  fleaMarketSession: Object.freeze({ items: Object.freeze({}), updatedAt: null }),
   changesSinceBackup: 0,
   mediaChangesSinceBackup: 0,
   lastBackupComicCount: 0,
@@ -79,6 +112,11 @@ export function getAvailableSeries(settings = DEFAULT_SETTINGS, comics = []) {
   const customSeries = Array.isArray(settings.customSeries)
     ? settings.customSeries.filter((entry) => typeof entry === "string" && entry.trim())
     : [];
+  const configuredSeries = Array.isArray(settings.customSeriesConfigs)
+    ? settings.customSeriesConfigs
+        .map((entry) => entry?.name)
+        .filter((entry) => typeof entry === "string" && entry.trim())
+    : [];
   const usedSeries = Array.isArray(comics)
     ? comics
         .map((comic) => comic?.series)
@@ -88,47 +126,57 @@ export function getAvailableSeries(settings = DEFAULT_SETTINGS, comics = []) {
   return [...new Set([
     ...APP_CONFIG.series,
     ...customSeries.map((entry) => entry.trim()),
+    ...configuredSeries.map((entry) => entry.trim()),
     ...usedSeries.map((entry) => entry.trim())
   ])];
 }
 
-const DUCKIPEDIA_SERIES_SLUGS = Object.freeze({
-  "Lustiges Taschenbuch": "LTB",
-  "LTB Spezial": "LTB_Spezial",
-  "LTB Premium": "LTB_Premium",
-  "LTB Enten-Edition": "LTB_Enten-Edition",
-  "LTB Maus-Edition": "LTB_Maus-Edition",
-  "LTB Ultimate Phantomias": "LTB_Ultimate",
-  "LTB Collection": "LTB_Collection",
-  "LTB Fantasy": "LTB_Fantasy",
-  "LTB Crime": "LTB_Crime",
-  "LTB Royal": "LTB_Royal",
-  "LTB History": "LTB_History",
-  "LTB Weihnachten": "LTB_Weihnachten",
-  "LTB Ostern": "LTB_Ostern",
-  "LTB Halloween": "LTB_Halloween",
-  "LTB Sommer": "LTB_Sommer",
-  "LTB Abenteuer": "LTB_Abenteuer",
-  "LTB Young Comics": "LTB_Young_Comics",
-  "LTB Galaxy": "LTB_Galaxy",
-  "LTB Weltreise": "LTB_Weltreise",
-  "LTB Fantasy Entenhausen": "LTB_Fantasy_Entenhausen",
-  "LTB Space": "LTB_Space",
-  "LTB Phantomias Collection": "LTB_Phantomias_Collection",
-  "LTB Europareise": "LTB_Europareise",
-  "LTB Mystery": "LTB_Mystery",
-  "LTB Extra": "LTB_Extra",
-  "LTB Sommerspiele": "LTB_Sommerspiele",
-  "LTB präsentiert": "LTB_präsentiert",
-  "Lustiges Taschenbuch präsentiert": "LTB_präsentiert"
-});
+export function getCustomSeriesConfig(series, settings = DEFAULT_SETTINGS) {
+  const normalizedSeries = String(series || "").trim();
+  if (!normalizedSeries || !Array.isArray(settings.customSeriesConfigs)) return null;
+  return settings.customSeriesConfigs.find(
+    (entry) => entry?.name?.localeCompare(normalizedSeries, "de", { sensitivity: "base" }) === 0
+  ) || null;
+}
+
+export function getDuckipediaPattern(series, settings = DEFAULT_SETTINGS) {
+  const normalizedSeries = String(series || "").trim().normalize("NFC");
+  const customConfig = getCustomSeriesConfig(normalizedSeries, settings);
+  if (customConfig?.duckipediaPattern) return customConfig.duckipediaPattern;
+  return STANDARD_DUCKIPEDIA_PATTERNS[normalizedSeries] || "";
+}
+
+export function normalizeDuckipediaPattern(value) {
+  let pattern = String(value || "").trim();
+  if (!pattern) return "";
+
+  try {
+    const url = new URL(pattern);
+    if (url.hostname !== "de.duckipedia.org") return "";
+    pattern = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+  } catch (error) {
+    // Ein relativer Duckipedia-Pfad ist ausdrücklich erlaubt.
+  }
+
+  pattern = pattern
+    .replace(/^\/+/, "")
+    .replace(/\s+/g, "_")
+    .slice(0, 200);
+
+  if (!pattern.includes("{band}")) {
+    pattern = pattern.replace(/_+$/, "");
+    if (pattern) pattern = `${pattern}_{band}`;
+  }
+
+  return pattern;
+}
 
 function createDuckipediaFallbackSearchUrl(series, volumeNumber, title = "") {
   const searchTerm = [series, `Band ${volumeNumber}`, title].filter(Boolean).join(" ");
   return `${APP_CONFIG.duckipediaSearchBase}${encodeURIComponent(searchTerm)}`;
 }
 
-export function createDuckipediaUrl(series, volumeNumber, title = "") {
+export function createDuckipediaUrl(series, volumeNumber, title = "", settings = DEFAULT_SETTINGS) {
   const normalizedSeries = String(series || "").trim().normalize("NFC");
   const normalizedBand = String(volumeNumber || "").trim();
 
@@ -136,19 +184,19 @@ export function createDuckipediaUrl(series, volumeNumber, title = "") {
     return createDuckipediaFallbackSearchUrl(normalizedSeries, normalizedBand, title);
   }
 
-  let seriesSlug = DUCKIPEDIA_SERIES_SLUGS[normalizedSeries];
+  let pattern = getDuckipediaPattern(normalizedSeries, settings);
 
-  if (!seriesSlug && normalizedSeries.startsWith("LTB ")) {
-    seriesSlug = normalizedSeries
+  if (!pattern && normalizedSeries.startsWith("LTB ")) {
+    pattern = `${normalizedSeries
       .replace(/\s+/g, "_")
-      .replace(/[^\p{L}\p{N}_+\-]/gu, "");
+      .replace(/[^\p{L}\p{N}_+\-]/gu, "")}_{band}`;
   }
 
-  if (!seriesSlug) {
+  if (!pattern) {
     return createDuckipediaFallbackSearchUrl(normalizedSeries, normalizedBand, title);
   }
 
-  const pageName = `${seriesSlug}_${normalizedBand}`;
+  const pageName = pattern.replaceAll("{band}", normalizedBand);
   return `${APP_CONFIG.duckipediaBase}${encodeURIComponent(pageName).replace(/%2F/gi, "/")}`;
 }
 

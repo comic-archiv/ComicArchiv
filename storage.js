@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS } from "./config.js";
+import { DEFAULT_SETTINGS, normalizeDuckipediaPattern } from "./config.js";
 
 const DATABASE_NAME = "comicarchiv-db";
 const DATABASE_VERSION = 4;
@@ -312,6 +312,8 @@ function normalizeSettings(settings) {
         .map((entry) => entry.trim().slice(0, 100))
     : [];
 
+  const customSeriesConfigs = normalizeCustomSeriesConfigs(source.customSeriesConfigs, customSeries);
+
   const knownHighestBandBySeries = {};
   const knownSource = source.knownHighestBandBySeries;
 
@@ -356,9 +358,11 @@ function normalizeSettings(settings) {
     theme: source.theme === "light" ? "light" : DEFAULT_SETTINGS.theme,
     lastBackupAt: isValidDateString(source.lastBackupAt) ? source.lastBackupAt : null,
     lastMediaBackupAt: isValidDateString(source.lastMediaBackupAt) ? source.lastMediaBackupAt : null,
-    customSeries: [...new Set(customSeries)],
+    customSeries: [...new Set(customSeriesConfigs.map((entry) => entry.name))],
+    customSeriesConfigs,
     knownHighestBandBySeries,
     missingBandDetails,
+    fleaMarketSession: normalizeFleaMarketSession(source.fleaMarketSession),
     changesSinceBackup: Number.isSafeInteger(changesSinceBackup) && changesSinceBackup >= 0
       ? Math.min(changesSinceBackup, 999999)
       : 0,
@@ -370,6 +374,61 @@ function normalizeSettings(settings) {
       : 0,
     showCovers: source.showCovers !== false,
     duckipediaAutoEnrich: source.duckipediaAutoEnrich !== false
+  };
+}
+
+
+function normalizeCustomSeriesConfigs(value, legacySeries = []) {
+  const entries = Array.isArray(value) ? value : [];
+  const normalized = [];
+
+  entries.forEach((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
+    const name = typeof entry.name === "string" ? entry.name.trim().slice(0, 100) : "";
+    if (!name) return;
+    const duckipediaPattern = normalizeDuckipediaPattern(entry.duckipediaPattern);
+    normalized.push({ name, duckipediaPattern });
+  });
+
+  legacySeries.forEach((name) => {
+    if (!normalized.some((entry) => entry.name.localeCompare(name, "de", { sensitivity: "base" }) === 0)) {
+      normalized.push({ name, duckipediaPattern: "" });
+    }
+  });
+
+  const deduplicated = [];
+  normalized.forEach((entry) => {
+    if (!deduplicated.some((item) => item.name.localeCompare(entry.name, "de", { sensitivity: "base" }) === 0)) {
+      deduplicated.push(entry);
+    }
+  });
+  return deduplicated;
+}
+
+function normalizeFleaMarketSession(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const sourceItems = source.items && typeof source.items === "object" && !Array.isArray(source.items)
+    ? source.items
+    : {};
+  const items = {};
+
+  Object.entries(sourceItems).forEach(([key, item]) => {
+    if (typeof key !== "string" || !key || !item || typeof item !== "object" || Array.isArray(item)) return;
+    const series = typeof item.series === "string" ? item.series.trim().slice(0, 100) : "";
+    const bandNumber = Number(item.bandNumber);
+    const condition = typeof item.condition === "string" ? item.condition.slice(0, 10) : "VG";
+    if (!series || !Number.isSafeInteger(bandNumber) || bandNumber < 1 || bandNumber > 99999) return;
+    items[key.slice(0, 500)] = {
+      series,
+      bandNumber,
+      condition,
+      markedAt: isValidDateString(item.markedAt) ? item.markedAt : new Date().toISOString()
+    };
+  });
+
+  return {
+    items,
+    updatedAt: isValidDateString(source.updatedAt) ? source.updatedAt : null
   };
 }
 
