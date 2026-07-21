@@ -44,7 +44,7 @@ export class MagazineBarcodeScanner {
 
     if (!this.isSupported()) {
       throw new Error(
-        "Die Kamera kann hier nicht gestartet werden. Öffne Sammlerhausen über die HTTPS-Adresse oder nutze den Foto-Fallback."
+        "Die Kamera kann hier nicht gestartet werden. Öffne Entenarchiv über die HTTPS-Adresse oder nutze den Foto-Fallback."
       );
     }
 
@@ -55,7 +55,7 @@ export class MagazineBarcodeScanner {
 
     const config = {
       inputStream: {
-        name: "Sammlerhausen Kamera",
+        name: "Entenarchiv Kamera",
         type: "LiveStream",
         target: this.targetElement,
         area: {
@@ -400,7 +400,7 @@ function normalizeCameraError(error) {
 
   if (name === "NotAllowedError" || name === "PermissionDeniedError" || /permission|denied|not allowed/i.test(message)) {
     return new Error(
-      "Der Kamerazugriff wurde nicht erlaubt. Erlaube Sammlerhausen den Kamerazugriff in den iPhone-Einstellungen oder nutze ein Foto."
+      "Der Kamerazugriff wurde nicht erlaubt. Erlaube Entenarchiv den Kamerazugriff in den iPhone-Einstellungen oder nutze ein Foto."
     );
   }
 

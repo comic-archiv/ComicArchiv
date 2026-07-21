@@ -3107,3 +3107,16 @@ input[type="radio"] {
   border-color: var(--primary);
   background: color-mix(in srgb, var(--primary) 14%, var(--surface-soft));
 }
+
+/* Version 3.4.1: Entenarchiv-Logo */
+.brand-mark.brand-logo {
+  display: block;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  transform: none;
+  border: 0;
+  border-radius: 14px;
+  background: var(--page-bg);
+  box-shadow: 0 6px 18px color-mix(in srgb, #000 32%, transparent);
+}

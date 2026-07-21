@@ -1,9 +1,9 @@
 export const APP_CONFIG = Object.freeze({
-  appVersion: "3.4.0",
+  appVersion: "3.4.1",
   dataFormatVersion: 5,
   minimumSupportedBackupVersion: 1,
   storageName: "ComicArchiv",
-  displayName: "Sammlerhausen",
+  displayName: "Entenarchiv",
   publicationYearMaximum: 2035,
   metadataCacheMaximumAgeDays: 90,
   duckipediaBase: "https://de.duckipedia.org/",

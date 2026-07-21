@@ -1,4 +1,4 @@
-const CACHE_NAME = "comicarchiv-shell-v3-4-0";
+const CACHE_NAME = "comicarchiv-shell-v3-4-1";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -16,6 +16,7 @@ const APP_SHELL = [
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
+  "./icons/icon-1024.png",
   "./icons/apple-touch-icon.png"
 ];
 

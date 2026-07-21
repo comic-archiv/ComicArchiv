@@ -321,7 +321,7 @@ let barcodeScanner;
 
 initializeApp().catch((error) => {
   console.error(error);
-  showToast(`Sammlerhausen konnte nicht gestartet werden: ${error.message}`, "error");
+  showToast(`Entenarchiv konnte nicht gestartet werden: ${error.message}`, "error");
 });
 
 async function initializeApp() {
@@ -1613,10 +1613,10 @@ async function handleMediaBackupExport() {
     const content = await createMediaBackup(state.comics, nextSettings, metadataCache, covers);
     const result = await shareOrDownloadBlob({
       blob: new Blob([content], { type: "application/json;charset=utf-8" }),
-      filename: createDatedFilename("Sammlerhausen-Medien-Backup", "json"),
+      filename: createDatedFilename("Entenarchiv-Medien-Backup", "json"),
       mimeType: "application/json;charset=utf-8",
-      title: "Sammlerhausen – vollständiges Medien-Backup",
-      text: "Vollständiges Sammlerhausen-Backup inklusive eigener Coverfotos."
+      title: "Entenarchiv – vollständiges Medien-Backup",
+      text: "Vollständiges Entenarchiv-Backup inklusive eigener Coverfotos."
     });
 
     if (result.method !== "cancelled") {
@@ -3964,10 +3964,10 @@ async function handleCollectionCsvExport() {
   try {
     const result = await shareOrDownloadText({
       content: createCollectionCsv(state.comics, state.settings),
-      filename: createDatedFilename("Sammlerhausen-Sammlung", "csv"),
+      filename: createDatedFilename("Entenarchiv-Sammlung", "csv"),
       mimeType: "text/csv;charset=utf-8",
-      title: "Sammlerhausen – Sammlung",
-      text: "Meine Sammlerhausen-Sammlung als CSV-Datei."
+      title: "Entenarchiv – Sammlung",
+      text: "Meine Entenarchiv-Sammlung als CSV-Datei."
     });
     reportExportResult(result, "Die Sammlung");
   } catch (error) {
@@ -3992,10 +3992,10 @@ async function handleMissingCsvExport() {
   try {
     const result = await shareOrDownloadText({
       content: createMissingCsv(state.missingGroups, state.settings),
-      filename: createDatedFilename("Sammlerhausen-Fehlende-Baende", "csv"),
+      filename: createDatedFilename("Entenarchiv-Fehlende-Baende", "csv"),
       mimeType: "text/csv;charset=utf-8",
-      title: "Sammlerhausen – Fehlende Bände",
-      text: "Meine Such- und Wunschliste aus Sammlerhausen."
+      title: "Entenarchiv – Fehlende Bände",
+      text: "Meine Such- und Wunschliste aus Entenarchiv."
     });
     reportExportResult(result, "Die Liste der fehlenden Bände");
   } catch (error) {
@@ -4021,9 +4021,9 @@ async function handleMissingPdfExport() {
     const pdfBlob = createMissingPdfBlob(state.missingGroups, state.settings);
     const result = await shareOrDownloadBlob({
       blob: pdfBlob,
-      filename: createDatedFilename("Sammlerhausen-Flohmarkt-Suchliste", "pdf"),
+      filename: createDatedFilename("Entenarchiv-Flohmarkt-Suchliste", "pdf"),
       mimeType: "application/pdf",
-      title: "Sammlerhausen - Flohmarkt-Suchliste",
+      title: "Entenarchiv - Flohmarkt-Suchliste",
       text: "Meine übersichtliche Liste fehlender Bände für Flohmärkte und Comicbörsen."
     });
     reportExportResult(result, "Die Flohmarkt-Suchliste");
@@ -4050,10 +4050,10 @@ async function handleJsonExport() {
     const metadataCache = await getAllMetadataCache();
     const result = await shareOrDownloadText({
       content: createJsonBackup(state.comics, nextSettings, metadataCache),
-      filename: createDatedFilename("Sammlerhausen-Backup", "json"),
+      filename: createDatedFilename("Entenarchiv-Backup", "json"),
       mimeType: "application/json;charset=utf-8",
-      title: "Sammlerhausen – JSON-Backup",
-      text: "Vollständiges Backup meiner Sammlerhausen-Daten."
+      title: "Entenarchiv – JSON-Backup",
+      text: "Vollständiges Backup meiner Entenarchiv-Daten."
     });
 
     if (result.method !== "cancelled") {
@@ -4610,7 +4610,7 @@ function showAvailableUpdate(worker) {
   elements.updateApp.classList.remove("hidden");
   elements.updateApp.textContent = "Jetzt aktualisieren";
   elements.updateApp.disabled = false;
-  showToast("Eine neue Sammlerhausen-Version ist verfügbar.");
+  showToast("Eine neue Entenarchiv-Version ist verfügbar.");
 }
 
 async function handleUpdateButtonClick() {
@@ -4642,7 +4642,7 @@ async function handleUpdateButtonClick() {
       return;
     }
 
-    showToast(`Sammlerhausen v${APP_CONFIG.appVersion} ist aktuell.`);
+    showToast(`Entenarchiv v${APP_CONFIG.appVersion} ist aktuell.`);
   } catch (error) {
     console.error("Updateprüfung fehlgeschlagen:", error);
 

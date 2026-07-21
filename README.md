@@ -1,8 +1,8 @@
-# Sammlerhausen 3.4.0
+# Entenarchiv 3.4.1
 
 Mobile Progressive Web App für eine private Sammlung von Lustigen Taschenbüchern und Sonderbänden.
 
-## Neu in 3.4.0
+## Neu in 3.4.1
 
 - Flohmarkt-Modus mit dauerhaft gespeicherten Markierungen
 - fehlende Bände unterwegs als gefunden markieren

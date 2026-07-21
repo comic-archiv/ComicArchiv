@@ -60,7 +60,7 @@ function createDatabaseConnection() {
     };
 
     request.onblocked = () => {
-      reject(new Error("Die Datenbank-Aktualisierung ist blockiert. Bitte schließe andere geöffnete Sammlerhausen-Fenster."));
+      reject(new Error("Die Datenbank-Aktualisierung ist blockiert. Bitte schließe andere geöffnete Entenarchiv-Fenster."));
     };
   });
 }

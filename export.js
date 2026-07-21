@@ -168,7 +168,7 @@ export function createMissingPdfBlob(missingGroups, settings = {}) {
     setTextColor(colors.muted);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.2);
-    doc.text("Sammlerhausen - private Such- und Wunschliste", margin, footerY + 1);
+    doc.text("Entenarchiv - private Such- und Wunschliste", margin, footerY + 1);
     doc.text(`Seite ${pageNumber}`, pageWidth - margin, footerY + 1, { align: "right" });
   }
 
@@ -440,7 +440,7 @@ export function parseAndValidateBackup(text) {
   } else if (version < APP_CONFIG.minimumSupportedBackupVersion) {
     issues.push(`Datenformat-Version ${version} ist zu alt.`);
   } else if (version > APP_CONFIG.dataFormatVersion) {
-    issues.push(`Datenformat-Version ${version} ist neuer als diese App-Version unterstützt. Bitte aktualisiere zuerst Sammlerhausen.`);
+    issues.push(`Datenformat-Version ${version} ist neuer als diese App-Version unterstützt. Bitte aktualisiere zuerst Entenarchiv.`);
   }
 
   if (!Array.isArray(parsedBackup.comics)) {
