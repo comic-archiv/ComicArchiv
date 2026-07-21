@@ -82,6 +82,247 @@ export function createMissingCsv(missingGroups, settings = {}) {
   return UTF8_BOM + rows.map(createCsvRow).join("\r\n");
 }
 
+
+export function createMissingPdfBlob(missingGroups, settings = {}) {
+  const JsPdf = globalThis.jspdf?.jsPDF;
+
+  if (typeof JsPdf !== "function") {
+    throw new Error("Das lokale PDF-Modul konnte nicht geladen werden. Bitte lade die App neu und versuche es erneut.");
+  }
+
+  const groups = (Array.isArray(missingGroups) ? missingGroups : [])
+    .filter((group) => Array.isArray(group?.missingBands) && group.missingBands.length > 0)
+    .map((group) => ({ ...group, missingBands: [...group.missingBands].sort((a, b) => a - b) }))
+    .sort((first, second) => {
+      const mainSeries = "Lustiges Taschenbuch";
+      if (first.series === mainSeries && second.series !== mainSeries) return -1;
+      if (second.series === mainSeries && first.series !== mainSeries) return 1;
+      return String(first.series).localeCompare(String(second.series), "de", { sensitivity: "base" });
+    });
+
+  const totalMissing = groups.reduce((sum, group) => sum + group.missingBands.length, 0);
+  if (totalMissing === 0) {
+    throw new Error("Aktuell wurden keine fehlenden Bände erkannt.");
+  }
+
+  const doc = new JsPdf({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+  const columnGap = 6;
+  const cardWidth = (contentWidth - columnGap) / 2;
+  const footerY = pageHeight - 10;
+  const details = settings.missingBandDetails || {};
+  const exportedAt = new Date();
+  let pageNumber = 1;
+  let cursorY = 0;
+
+  const colors = {
+    navy: [17, 24, 39],
+    navySoft: [30, 41, 59],
+    accent: [250, 204, 21],
+    cyan: [14, 116, 144],
+    text: [31, 41, 55],
+    muted: [100, 116, 139],
+    border: [218, 224, 232],
+    card: [248, 250, 252],
+    white: [255, 255, 255]
+  };
+
+  const formatDate = (date) => new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(date);
+
+  const setTextColor = (color) => doc.setTextColor(...color);
+  const setFillColor = (color) => doc.setFillColor(...color);
+  const setDrawColor = (color) => doc.setDrawColor(...color);
+
+  function drawPageHeader() {
+    setFillColor(colors.navy);
+    doc.rect(0, 0, pageWidth, 43, "F");
+    setFillColor(colors.accent);
+    doc.roundedRect(margin, 9, 37, 8, 2, 2, "F");
+    setTextColor(colors.navy);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("SAMMLERHAUSEN", margin + 18.5, 14.3, { align: "center" });
+
+    setTextColor(colors.white);
+    doc.setFontSize(21);
+    doc.text("Flohmarkt-Suchliste", margin, 28);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.text(`${totalMissing} fehlende Bände | ${groups.length} Reihen | Stand ${formatDate(exportedAt)}`, margin, 35.2);
+
+    cursorY = 51;
+  }
+
+  function drawPageFooter() {
+    setDrawColor(colors.border);
+    doc.setLineWidth(0.25);
+    doc.line(margin, footerY - 3, pageWidth - margin, footerY - 3);
+    setTextColor(colors.muted);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.2);
+    doc.text("Sammlerhausen - private Such- und Wunschliste", margin, footerY + 1);
+    doc.text(`Seite ${pageNumber}`, pageWidth - margin, footerY + 1, { align: "right" });
+  }
+
+  function addPage() {
+    drawPageFooter();
+    doc.addPage();
+    pageNumber += 1;
+    drawPageHeader();
+  }
+
+  function ensureSpace(requiredHeight) {
+    if (cursorY + requiredHeight > footerY - 6) addPage();
+  }
+
+  function drawSummaryCards() {
+    const gap = 5;
+    const width = (contentWidth - gap * 2) / 3;
+    const summaries = [
+      { value: String(totalMissing), label: "fehlende Bände" },
+      { value: String(groups.length), label: "betroffene Reihen" },
+      { value: "A4", label: "druckfertig & übersichtlich" }
+    ];
+
+    summaries.forEach((item, index) => {
+      const x = margin + index * (width + gap);
+      setFillColor(index === 0 ? [255, 248, 214] : colors.card);
+      setDrawColor(index === 0 ? [232, 190, 35] : colors.border);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(x, cursorY, width, 19, 3, 3, "FD");
+      setTextColor(index === 0 ? [113, 63, 18] : colors.text);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(index === 2 ? 12 : 13);
+      doc.text(item.value, x + 5, cursorY + 8.1);
+      setTextColor(colors.muted);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.3);
+      doc.text(item.label, x + 5, cursorY + 14.2);
+    });
+
+    cursorY += 27;
+  }
+
+  function drawSeriesHeading(group) {
+    ensureSpace(18);
+    setFillColor(colors.navySoft);
+    doc.roundedRect(margin, cursorY, contentWidth, 12, 2.5, 2.5, "F");
+    setFillColor(colors.accent);
+    doc.roundedRect(margin, cursorY, 3.2, 12, 1.6, 1.6, "F");
+    setTextColor(colors.white);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.text(String(group.series), margin + 7, cursorY + 7.7);
+    doc.setFontSize(8);
+    doc.text(`${group.missingBands.length} fehlen`, pageWidth - margin - 5, cursorY + 7.7, { align: "right" });
+    cursorY += 16;
+  }
+
+  function getCardData(group, bandNumber) {
+    const detail = details[createMissingDetailKey(group.series, bandNumber)] || {};
+    const condition = APP_CONFIG.conditions.find((entry) => entry.code === detail.desiredCondition)?.label || "";
+    const title = String(detail.title || "").trim();
+    const notes = String(detail.notes || "").trim();
+    const metaParts = [
+      detail.publicationYear ? String(detail.publicationYear) : "",
+      condition ? `Wunsch: ${condition}` : ""
+    ].filter(Boolean);
+
+    return {
+      bandNumber,
+      title,
+      notes,
+      meta: metaParts.join(" | "),
+      url: detail.duckipediaUrl || createDuckipediaSearchUrl(group.series, bandNumber, title)
+    };
+  }
+
+  function measureCard(data) {
+    const titleLines = data.title ? doc.splitTextToSize(data.title, cardWidth - 15).slice(0, 2) : [];
+    const metaLines = data.meta ? doc.splitTextToSize(data.meta, cardWidth - 10).slice(0, 2) : [];
+    const notesLines = data.notes ? doc.splitTextToSize(data.notes, cardWidth - 10).slice(0, 2) : [];
+    const contentLines = titleLines.length + metaLines.length + notesLines.length;
+    const height = Math.max(20, 15 + contentLines * 3.5);
+    return { ...data, titleLines, metaLines, notesLines, height };
+  }
+
+  function drawBandCard(data, x, y, height) {
+    setFillColor(colors.card);
+    setDrawColor(colors.border);
+    doc.setLineWidth(0.28);
+    doc.roundedRect(x, y, cardWidth, height, 2.8, 2.8, "FD");
+
+    setDrawColor(colors.cyan);
+    doc.setLineWidth(0.55);
+    doc.roundedRect(x + 4, y + 5, 4.3, 4.3, 0.7, 0.7, "S");
+
+    setTextColor(colors.text);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.text(`Band ${data.bandNumber}`, x + 11, y + 8.5);
+
+    let textY = y + 13.3;
+    if (data.titleLines.length) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.6);
+      doc.text(data.titleLines, x + 5, textY);
+      textY += data.titleLines.length * 3.3 + 0.8;
+    }
+
+    if (data.metaLines.length) {
+      setTextColor(colors.cyan);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.text(data.metaLines, x + 5, textY);
+      textY += data.metaLines.length * 3.2 + 0.8;
+    }
+
+    if (data.notesLines.length) {
+      setTextColor(colors.muted);
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(6.8);
+      doc.text(data.notesLines, x + 5, textY);
+    }
+
+    if (data.url) {
+      setTextColor(colors.cyan);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      doc.textWithLink("Info", x + cardWidth - 5, y + 8.2, { url: data.url, align: "right" });
+    }
+  }
+
+  drawPageHeader();
+  drawSummaryCards();
+
+  groups.forEach((group) => {
+    drawSeriesHeading(group);
+    const cards = group.missingBands.map((bandNumber) => measureCard(getCardData(group, bandNumber)));
+
+    for (let index = 0; index < cards.length; index += 2) {
+      const first = cards[index];
+      const second = cards[index + 1] || null;
+      const rowHeight = Math.max(first.height, second?.height || 0);
+      ensureSpace(rowHeight + 5);
+      drawBandCard(first, margin, cursorY, rowHeight);
+      if (second) drawBandCard(second, margin + cardWidth + columnGap, cursorY, rowHeight);
+      cursorY += rowHeight + 5;
+    }
+
+    cursorY += 2;
+  });
+
+  drawPageFooter();
+  return doc.output("blob");
+}
+
 export function createJsonBackup(comics, settings, metadataCache = []) {
   return JSON.stringify(createBackupObject({
     backupType: "data",

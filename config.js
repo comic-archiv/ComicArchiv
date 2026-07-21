@@ -1,5 +1,5 @@
 export const APP_CONFIG = Object.freeze({
-  appVersion: "3.3.1",
+  appVersion: "3.3.2",
   dataFormatVersion: 4,
   minimumSupportedBackupVersion: 1,
   storageName: "ComicArchiv",
@@ -35,6 +35,7 @@ export const APP_CONFIG = Object.freeze({
     "LTB Mystery",
     "LTB Extra",
     "LTB Sommerspiele",
+    "LTB präsentiert",
     "Sonstige"
   ]),
   conditions: Object.freeze([
@@ -117,7 +118,9 @@ const DUCKIPEDIA_SERIES_SLUGS = Object.freeze({
   "LTB Europareise": "LTB_Europareise",
   "LTB Mystery": "LTB_Mystery",
   "LTB Extra": "LTB_Extra",
-  "LTB Sommerspiele": "LTB_Sommerspiele"
+  "LTB Sommerspiele": "LTB_Sommerspiele",
+  "LTB präsentiert": "LTB_präsentiert",
+  "Lustiges Taschenbuch präsentiert": "LTB_präsentiert"
 });
 
 function createDuckipediaFallbackSearchUrl(series, volumeNumber, title = "") {
@@ -126,7 +129,7 @@ function createDuckipediaFallbackSearchUrl(series, volumeNumber, title = "") {
 }
 
 export function createDuckipediaUrl(series, volumeNumber, title = "") {
-  const normalizedSeries = String(series || "").trim();
+  const normalizedSeries = String(series || "").trim().normalize("NFC");
   const normalizedBand = String(volumeNumber || "").trim();
 
   if (!/^[1-9]\d*$/.test(normalizedBand)) {
@@ -138,7 +141,7 @@ export function createDuckipediaUrl(series, volumeNumber, title = "") {
   if (!seriesSlug && normalizedSeries.startsWith("LTB ")) {
     seriesSlug = normalizedSeries
       .replace(/\s+/g, "_")
-      .replace(/[^A-Za-z0-9_+\-]/g, "");
+      .replace(/[^\p{L}\p{N}_+\-]/gu, "");
   }
 
   if (!seriesSlug) {

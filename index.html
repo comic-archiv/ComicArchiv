@@ -35,7 +35,7 @@
       <span id="connection-status" class="status-pill">Online</span>
       <span class="status-copy">Lokale Sammlung</span>
       <button id="update-app" class="update-pill" type="button">Updates prüfen</button>
-      <span id="app-version" class="version-pill">v3.3.1</span>
+      <span id="app-version" class="version-pill">v3.3.2</span>
     </section>
 
     <section id="backup-reminder" class="backup-reminder hidden" aria-live="polite">
@@ -198,9 +198,20 @@
         <div><p class="eyebrow">Automatische Prüfung</p><h2 id="missing-title">Fehlende Bände</h2></div>
         <span id="missing-count" class="count-badge">0 fehlen</span>
       </div>
-      <p class="section-intro">Tippe eine Reihe auf, um alle erkannten Lücken zu sehen. Ein fehlender Band lässt sich mit Titel, Jahr, Wunschzustand und Notiz ergänzen.</p>
-      <div id="missing-empty" class="panel empty-state"><div class="empty-icon" aria-hidden="true">✓</div><h3>Keine Lücken erkannt</h3><p>Geprüft werden reine Bandnummern von 1 bis zur höchsten eingetragenen Nummer je Reihe.</p></div>
-      <div id="missing-list" class="missing-list"></div>
+      <div class="collection-hub-grid">
+        <button id="open-main-missing" class="collection-hub-card" type="button">
+          <span class="collection-hub-icon" aria-hidden="true">LTB</span>
+          <span class="collection-hub-copy"><strong>Lustige Taschenbücher</strong><small>Fehlende Bände der Hauptreihe</small></span>
+          <span id="main-missing-count" class="collection-hub-count">0</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <button id="open-other-missing" class="collection-hub-card" type="button">
+          <span class="collection-hub-icon collection-hub-icon-alt" aria-hidden="true">＋</span>
+          <span class="collection-hub-copy"><strong>Sonderbände &amp; weitere Reihen</strong><small>Fehlende Bände aller Nebenreihen</small></span>
+          <span id="other-missing-count" class="collection-hub-count">0</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </div>
     </section>
 
     <section id="backup" class="panel backup-panel section-anchor" aria-labelledby="backup-title">
@@ -214,6 +225,7 @@
         <button id="export-json" class="primary-button" type="button">JSON-Backup erstellen</button>
         <button id="export-csv" class="secondary-button" type="button">Sammlung als CSV</button>
         <button id="export-missing-csv" class="secondary-button" type="button">Fehlende Bände als CSV</button>
+        <button id="export-missing-pdf" class="secondary-button pdf-export-button" type="button">Flohmarkt-Liste als PDF</button>
         <button id="open-import" class="secondary-button" type="button">Backup importieren</button>
         <button id="open-media" class="secondary-button" type="button">Medien &amp; Metadaten</button>
         <button id="request-persistence" class="text-button storage-button" type="button">Speicherschutz anfragen</button>
@@ -267,6 +279,21 @@
     </div>
   </section>
 
+  <section id="missing-page" class="app-page hidden" aria-labelledby="missing-page-title" aria-hidden="true">
+    <header class="app-page-header">
+      <button id="close-missing-page" class="app-page-back" type="button" aria-label="Zurück zur Fehlband-Auswahl">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        <span>Zurück</span>
+      </button>
+      <div class="app-page-title"><p class="eyebrow">Such- &amp; Wunschliste</p><h2 id="missing-page-title">Lustige Taschenbücher</h2></div>
+      <span id="missing-page-count" class="count-badge">0 fehlen</span>
+    </header>
+    <div class="app-page-content missing-page-content">
+      <div id="missing-empty" class="panel empty-state"><div class="empty-icon" aria-hidden="true">✓</div><h3>Keine Lücken erkannt</h3><p>In diesem Bereich wurden aktuell keine fehlenden numerischen Bände erkannt.</p></div>
+      <div id="missing-list" class="missing-list"></div>
+    </div>
+  </section>
+
   <section id="progress-page" class="app-page hidden" aria-labelledby="progress-title" aria-hidden="true">
     <header class="app-page-header">
       <button id="close-progress" class="app-page-back" type="button" aria-label="Zurück zur Übersicht">
@@ -284,7 +311,10 @@
           <form id="progress-target-form" class="panel progress-target-form" novalidate>
             <label class="field"><span>Reihe</span><select id="progress-series"></select></label>
             <label class="field"><span>Höchste gewünschte Bandnummer</span><input id="progress-target" type="number" inputmode="numeric" min="1" max="99999" placeholder="z. B. 600"></label>
-            <button id="progress-save" class="secondary-button" type="submit">Ziel speichern</button>
+            <div class="progress-target-actions">
+              <button id="progress-save" class="secondary-button" type="submit">Ziel speichern</button>
+              <button id="progress-remove" class="text-button danger-text hidden" type="button">Ziel entfernen</button>
+            </div>
             <p id="progress-message" class="form-message field-full" role="status" aria-live="polite"></p>
           </form>
         </div>
@@ -446,12 +476,17 @@
         <div class="field-grid compact-field-grid">
           <label class="field field-full"><span>Titel / Name</span><input id="missing-detail-name" type="text" maxlength="200" placeholder="Optional"></label>
           <label class="field"><span>Erscheinungsjahr</span><input id="missing-detail-year" type="number" inputmode="numeric" min="1800" max="2035" placeholder="Optional"></label>
-          <label class="field"><span>Wunschzustand</span><select id="missing-detail-condition"></select></label>
+          <label class="field"><span>Zustand (Wunsch / gefunden)</span><select id="missing-detail-condition"></select></label>
           <label class="field field-full"><span>Exakter Duckipedia-Link</span><input id="missing-detail-url" type="url" inputmode="url" maxlength="1000" placeholder="Optional – sonst wird die Suche geöffnet"></label>
           <label class="field field-full"><span>Notizen</span><textarea id="missing-detail-notes" rows="3" maxlength="2000" placeholder="Optional"></textarea></label>
         </div>
         <div class="modal-link-row"><a id="missing-duckipedia-link" class="secondary-button link-button" href="#" target="_blank" rel="noopener noreferrer">In Duckipedia suchen</a></div>
-        <div class="modal-actions"><button class="primary-button" type="submit">Details speichern</button><button id="delete-missing-detail" class="danger-button hidden" type="button">Details löschen</button><button class="secondary-button" type="button" data-close-missing-detail>Abbrechen</button></div>
+        <div class="modal-actions missing-detail-actions">
+          <button class="primary-button" type="submit">Details speichern</button>
+          <button id="missing-mark-owned" class="success-button" type="button">Als vorhanden eintragen</button>
+          <button id="delete-missing-detail" class="danger-button hidden" type="button">Details löschen</button>
+          <button class="secondary-button" type="button" data-close-missing-detail>Abbrechen</button>
+        </div>
         <p id="missing-detail-message" class="form-message" role="status" aria-live="polite"></p>
       </form>
     </section>
@@ -472,6 +507,7 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
   <script src="./vendor/quagga.min.js"></script>
+  <script src="./vendor/jspdf.umd.min.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

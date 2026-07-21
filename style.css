@@ -2665,3 +2665,64 @@ body.app-page-open {
     min-height: 100px;
   }
 }
+
+/* Version 3.3.2: kompakte Fehlband-Navigation, Zielverwaltung und PDF-Export */
+.success-button {
+  min-height: 46px;
+  padding: 10px 15px;
+  border: 1px solid color-mix(in srgb, var(--success) 70%, var(--border));
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--success) 18%, var(--surface));
+  color: var(--success);
+  font-weight: 850;
+  transition: transform 150ms ease, background-color 150ms ease, border-color 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.success-button:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+.success-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.pdf-export-button {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface-soft));
+}
+
+.missing-page-content {
+  display: grid;
+  gap: 12px;
+}
+
+.progress-target-actions {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.progress-target-actions .text-button {
+  white-space: nowrap;
+}
+
+.missing-detail-actions {
+  align-items: stretch;
+}
+
+@media (min-width: 560px) {
+  .missing-detail-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 640px) {
+  .progress-target-actions {
+    grid-column: auto;
+    grid-template-columns: auto;
+  }
+}

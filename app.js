@@ -41,6 +41,7 @@ import {
   createJsonBackup,
   createMediaBackup,
   createMissingCsv,
+  createMissingPdfBlob,
   mergeCollections,
   readAndValidateBackupFile,
   shareOrDownloadBlob,
@@ -73,6 +74,8 @@ const state = {
   metadataLookupTimer: null,
   enrichmentRunning: false,
   collectionScope: "main",
+  missingScope: "main",
+  openMissingSeries: new Set(),
   missingLookupSequence: 0
 };
 
@@ -137,6 +140,14 @@ const elements = {
   missingList: document.querySelector("#missing-list"),
   missingEmpty: document.querySelector("#missing-empty"),
   missingCount: document.querySelector("#missing-count"),
+  missingPage: document.querySelector("#missing-page"),
+  missingPageTitle: document.querySelector("#missing-page-title"),
+  missingPageCount: document.querySelector("#missing-page-count"),
+  closeMissingPage: document.querySelector("#close-missing-page"),
+  openMainMissing: document.querySelector("#open-main-missing"),
+  openOtherMissing: document.querySelector("#open-other-missing"),
+  mainMissingCount: document.querySelector("#main-missing-count"),
+  otherMissingCount: document.querySelector("#other-missing-count"),
   themeToggle: document.querySelector("#theme-toggle"),
   themeIcon: document.querySelector("#theme-icon"),
   connectionStatus: document.querySelector("#connection-status"),
@@ -150,6 +161,7 @@ const elements = {
   progressSeries: document.querySelector("#progress-series"),
   progressTarget: document.querySelector("#progress-target"),
   progressSave: document.querySelector("#progress-save"),
+  progressRemove: document.querySelector("#progress-remove"),
   progressMessage: document.querySelector("#progress-message"),
   progressList: document.querySelector("#progress-list"),
   progressSummary: document.querySelector("#progress-summary"),
@@ -163,6 +175,7 @@ const elements = {
   exportJson: document.querySelector("#export-json"),
   exportCsv: document.querySelector("#export-csv"),
   exportMissingCsv: document.querySelector("#export-missing-csv"),
+  exportMissingPdf: document.querySelector("#export-missing-pdf"),
   exportMessage: document.querySelector("#export-message"),
   lastBackup: document.querySelector("#last-backup"),
   backupHealth: document.querySelector("#backup-health"),
@@ -220,6 +233,7 @@ const elements = {
   missingDetailNotes: document.querySelector("#missing-detail-notes"),
   missingDuckipediaLink: document.querySelector("#missing-duckipedia-link"),
   deleteMissingDetail: document.querySelector("#delete-missing-detail"),
+  missingMarkOwned: document.querySelector("#missing-mark-owned"),
   missingDetailMessage: document.querySelector("#missing-detail-message"),
   openScanner: document.querySelector("#open-scanner"),
   scannerModal: document.querySelector("#scanner-modal"),
@@ -396,9 +410,13 @@ function bindEvents() {
   elements.backupReminderAction.addEventListener("click", handleJsonExport);
   elements.progressTargetForm.addEventListener("submit", handleProgressTargetSubmit);
   elements.progressSeries.addEventListener("change", syncProgressTargetInput);
+  elements.progressRemove.addEventListener("click", handleRemoveProgressTarget);
   elements.openMainCollection.addEventListener("click", () => openCollectionPage("main"));
   elements.openOtherCollection.addEventListener("click", () => openCollectionPage("other"));
   elements.closeCollection.addEventListener("click", closeCollectionPage);
+  elements.openMainMissing.addEventListener("click", () => openMissingPage("main"));
+  elements.openOtherMissing.addEventListener("click", () => openMissingPage("other"));
+  elements.closeMissingPage.addEventListener("click", closeMissingPage);
   elements.openProgress.addEventListener("click", openProgressPage);
   elements.closeProgress.addEventListener("click", closeProgressPage);
   elements.openScanner.addEventListener("click", openScannerModal);
@@ -445,6 +463,7 @@ function bindEvents() {
   elements.exportJson.addEventListener("click", handleJsonExport);
   elements.exportCsv.addEventListener("click", handleCollectionCsvExport);
   elements.exportMissingCsv.addEventListener("click", handleMissingCsvExport);
+  elements.exportMissingPdf.addEventListener("click", handleMissingPdfExport);
   elements.requestPersistence.addEventListener("click", handlePersistenceRequest);
   elements.openMedia.addEventListener("click", openMediaPage);
   elements.closeMedia.addEventListener("click", closeMediaPage);
@@ -469,6 +488,7 @@ function bindEvents() {
   elements.closeMissingDetail.addEventListener("click", closeMissingDetailModal);
   elements.missingDetailForm.addEventListener("submit", handleSaveMissingDetail);
   elements.deleteMissingDetail.addEventListener("click", handleDeleteMissingDetail);
+  elements.missingMarkOwned.addEventListener("click", handleMarkMissingBandOwned);
   elements.missingDetailModal.addEventListener("click", (event) => {
     if (event.target.closest("[data-close-missing-detail]")) closeMissingDetailModal();
   });
@@ -480,13 +500,14 @@ function bindEvents() {
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    if (!elements.importModal.classList.contains("hidden")) closeImportModal();
-    if (!elements.seriesModal.classList.contains("hidden")) closeSeriesModal();
-    if (!elements.missingDetailModal.classList.contains("hidden")) closeMissingDetailModal();
-    if (!elements.scannerModal.classList.contains("hidden")) closeScannerModal();
-    if (!elements.collectionPage.classList.contains("hidden")) closeCollectionPage();
-    if (!elements.progressPage.classList.contains("hidden")) closeProgressPage();
-    if (!elements.mediaPage.classList.contains("hidden")) closeMediaPage();
+    if (!elements.importModal.classList.contains("hidden")) return closeImportModal();
+    if (!elements.seriesModal.classList.contains("hidden")) return closeSeriesModal();
+    if (!elements.missingDetailModal.classList.contains("hidden")) return closeMissingDetailModal();
+    if (!elements.scannerModal.classList.contains("hidden")) return closeScannerModal();
+    if (!elements.collectionPage.classList.contains("hidden")) return closeCollectionPage();
+    if (!elements.missingPage.classList.contains("hidden")) return closeMissingPage();
+    if (!elements.progressPage.classList.contains("hidden")) return closeProgressPage();
+    if (!elements.mediaPage.classList.contains("hidden")) return closeMediaPage();
   });
 }
 
@@ -904,6 +925,7 @@ async function refreshCollection() {
       state.settings.knownHighestBandBySeries
     );
     renderCollectionHub();
+    renderMissingHub();
     renderCollection();
     renderStats();
     renderMissingBands();
@@ -989,6 +1011,58 @@ function closeCollectionPage({ returnFocus = true } = {}) {
   if (returnFocus) {
     window.setTimeout(() => {
       const target = state.collectionScope === "main" ? elements.openMainCollection : elements.openOtherCollection;
+      target.focus({ preventScroll: true });
+    }, 0);
+  }
+}
+
+function getScopedMissingGroups() {
+  const mainSeries = "Lustiges Taschenbuch";
+  return state.missingGroups.filter((group) => (
+    state.missingScope === "main"
+      ? group.series === mainSeries
+      : group.series !== mainSeries
+  ));
+}
+
+function renderMissingHub() {
+  const mainSeries = "Lustiges Taschenbuch";
+  const mainMissing = state.missingGroups
+    .filter((group) => group.series === mainSeries)
+    .reduce((sum, group) => sum + group.missingBands.length, 0);
+  const otherMissing = state.missingGroups
+    .filter((group) => group.series !== mainSeries)
+    .reduce((sum, group) => sum + group.missingBands.length, 0);
+  const totalMissing = mainMissing + otherMissing;
+
+  elements.mainMissingCount.textContent = String(mainMissing);
+  elements.otherMissingCount.textContent = String(otherMissing);
+  elements.mainMissingCount.setAttribute("aria-label", `${mainMissing} fehlende Bände`);
+  elements.otherMissingCount.setAttribute("aria-label", `${otherMissing} fehlende Bände`);
+  elements.missingCount.textContent = totalMissing === 1 ? "1 fehlt" : `${totalMissing} fehlen`;
+}
+
+function openMissingPage(scope) {
+  state.missingScope = scope === "other" ? "other" : "main";
+  state.openMissingSeries = new Set();
+  elements.missingPageTitle.textContent = state.missingScope === "main"
+    ? "Lustige Taschenbücher"
+    : "Sonderbände & weitere Reihen";
+  renderMissingBands();
+  elements.missingPage.classList.remove("hidden");
+  elements.missingPage.setAttribute("aria-hidden", "false");
+  document.body.classList.add("app-page-open");
+  elements.missingPage.scrollTop = 0;
+  window.setTimeout(() => elements.closeMissingPage.focus({ preventScroll: true }), 0);
+}
+
+function closeMissingPage({ returnFocus = true } = {}) {
+  elements.missingPage.classList.add("hidden");
+  elements.missingPage.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("app-page-open");
+  if (returnFocus) {
+    window.setTimeout(() => {
+      const target = state.missingScope === "main" ? elements.openMainMissing : elements.openOtherMissing;
       target.focus({ preventScroll: true });
     }, 0);
   }
@@ -1215,9 +1289,10 @@ function setMediaControlsBusy(isBusy) {
 
 function syncProgressTargetInput() {
   const series = elements.progressSeries.value;
-  elements.progressTarget.value = series
-    ? (state.settings.knownHighestBandBySeries?.[series] ?? "")
-    : "";
+  const targets = state.settings.knownHighestBandBySeries || {};
+  const hasConfiguredTarget = Boolean(series && Object.prototype.hasOwnProperty.call(targets, series));
+  elements.progressTarget.value = hasConfiguredTarget ? targets[series] : "";
+  elements.progressRemove.classList.toggle("hidden", !hasConfiguredTarget);
 }
 
 async function handleProgressTargetSubmit(event) {
@@ -1267,12 +1342,44 @@ async function handleProgressTargetSubmit(event) {
     renderMissingBands();
     renderStats();
     renderSeriesProgress();
+    syncProgressTargetInput();
     elements.progressMessage.textContent = rawTarget
       ? `Ziel für „${series}“ gespeichert.`
       : `Festes Ziel für „${series}“ entfernt.`;
     elements.progressMessage.dataset.type = "success";
   } catch (error) {
     elements.progressMessage.textContent = `Ziel konnte nicht gespeichert werden: ${error.message}`;
+    elements.progressMessage.dataset.type = "error";
+  }
+}
+
+async function handleRemoveProgressTarget() {
+  const series = elements.progressSeries.value;
+  const targets = state.settings.knownHighestBandBySeries || {};
+
+  if (!series || !Object.prototype.hasOwnProperty.call(targets, series)) {
+    elements.progressMessage.textContent = "Für die ausgewählte Reihe ist kein festes Ziel gespeichert.";
+    elements.progressMessage.dataset.type = "info";
+    syncProgressTargetInput();
+    return;
+  }
+
+  if (!window.confirm(`Festes Ziel für „${series}“ entfernen? Danach wird wieder bis zum höchsten vorhandenen Band gerechnet.`)) return;
+
+  try {
+    const nextTargets = { ...targets };
+    delete nextTargets[series];
+    await saveMeaningfulSettings({ knownHighestBandBySeries: nextTargets });
+    state.missingGroups = calculateMissingBands(state.comics, nextTargets);
+    renderMissingHub();
+    renderMissingBands();
+    renderStats();
+    renderSeriesProgress();
+    syncProgressTargetInput();
+    elements.progressMessage.textContent = `Festes Ziel für „${series}“ entfernt.`;
+    elements.progressMessage.dataset.type = "success";
+  } catch (error) {
+    elements.progressMessage.textContent = `Ziel konnte nicht entfernt werden: ${error.message}`;
     elements.progressMessage.dataset.type = "error";
   }
 }
@@ -1818,17 +1925,31 @@ function renderStats() {
   });
 }
 
-function renderMissingBands() {
-  const groupsWithMissing = state.missingGroups.filter((group) => group.missingBands.length > 0);
+function renderMissingBands({ forceOpenSeries = "" } = {}) {
+  const currentlyOpen = new Set(state.openMissingSeries || []);
+  elements.missingList.querySelectorAll("details[open][data-series]").forEach((details) => {
+    currentlyOpen.add(details.dataset.series);
+  });
+  if (forceOpenSeries) currentlyOpen.add(forceOpenSeries);
+  state.openMissingSeries = currentlyOpen;
+
+  const groupsWithMissing = getScopedMissingGroups().filter((group) => group.missingBands.length > 0);
   const totalMissing = countMissingBands(groupsWithMissing);
 
   elements.missingList.replaceChildren();
   elements.missingEmpty.classList.toggle("hidden", groupsWithMissing.length > 0);
-  elements.missingCount.textContent = totalMissing === 1 ? "1 fehlt" : `${totalMissing} fehlen`;
+  elements.missingPageCount.textContent = totalMissing === 1 ? "1 fehlt" : `${totalMissing} fehlen`;
+  renderMissingHub();
 
   groupsWithMissing.forEach((group) => {
     const details = document.createElement("details");
     details.className = "missing-card missing-series-details";
+    details.dataset.series = group.series;
+    details.open = currentlyOpen.has(group.series);
+    details.addEventListener("toggle", () => {
+      if (details.open) state.openMissingSeries.add(group.series);
+      else state.openMissingSeries.delete(group.series);
+    });
 
     const summary = document.createElement("summary");
     const summaryText = document.createElement("span");
@@ -2994,6 +3115,7 @@ async function openMissingDetailModal(series, bandNumber) {
   const detail = state.settings.missingBandDetails?.[key] || {};
   const lookupSequence = ++state.missingLookupSequence;
   state.selectedMissingBand = { series, bandNumber, key };
+  state.openMissingSeries.add(series);
   elements.missingDetailContext.textContent = `${series} · Band ${bandNumber}`;
   elements.missingDetailName.value = detail.title || "";
   elements.missingDetailYear.value = detail.publicationYear ?? "";
@@ -3036,7 +3158,7 @@ async function openMissingDetailModal(series, bandNumber) {
     if (metadata.found && changed) {
       const nextDetails = { ...(state.settings.missingBandDetails || {}), [key]: enrichedDetail };
       await saveMeaningfulSettings({ missingBandDetails: nextDetails });
-      renderMissingBands();
+      renderMissingBands({ forceOpenSeries: series });
       elements.deleteMissingDetail.classList.remove("hidden");
     }
 
@@ -3100,18 +3222,98 @@ async function handleSaveMissingDetail(event) {
     updatedAt: new Date().toISOString()
   };
 
+  const openSeries = state.selectedMissingBand.series;
   await saveMeaningfulSettings({ missingBandDetails: nextDetails });
-  renderMissingBands();
+  renderMissingBands({ forceOpenSeries: openSeries });
   closeMissingDetailModal();
   showToast("Details zum fehlenden Band gespeichert.");
+}
+
+async function handleMarkMissingBandOwned() {
+  if (!state.selectedMissingBand) return;
+
+  const selected = { ...state.selectedMissingBand };
+  const condition = elements.missingDetailCondition.value;
+  if (!APP_CONFIG.conditions.some((entry) => entry.code === condition)) {
+    elements.missingDetailMessage.textContent = "Bitte wähle zuerst den Zustand des gefundenen Bands aus.";
+    elements.missingDetailMessage.dataset.type = "error";
+    elements.missingDetailCondition.focus();
+    return;
+  }
+
+  const yearRaw = elements.missingDetailYear.value.trim();
+  let publicationYear = null;
+  if (yearRaw) {
+    publicationYear = Number(yearRaw);
+    if (!Number.isInteger(publicationYear) || publicationYear < 1800 || publicationYear > APP_CONFIG.publicationYearMaximum) {
+      elements.missingDetailMessage.textContent = `Das Erscheinungsjahr muss zwischen 1800 und ${APP_CONFIG.publicationYearMaximum} liegen.`;
+      elements.missingDetailMessage.dataset.type = "error";
+      elements.missingDetailYear.focus();
+      return;
+    }
+  }
+
+  const typedUrl = elements.missingDetailUrl.value.trim();
+  const duckipediaUrl = normalizeHttpUrl(typedUrl);
+  if (typedUrl && !duckipediaUrl) {
+    elements.missingDetailMessage.textContent = "Der Duckipedia-Link muss mit http:// oder https:// beginnen.";
+    elements.missingDetailMessage.dataset.type = "error";
+    return;
+  }
+
+  elements.missingMarkOwned.disabled = true;
+  elements.missingDetailMessage.textContent = "Band wird in die Sammlung übernommen …";
+  elements.missingDetailMessage.dataset.type = "info";
+
+  try {
+    const metadata = await getMetadataCache(createMetadataCacheKey(selected.series, selected.bandNumber));
+    const now = new Date().toISOString();
+    const comic = {
+      id: createStableId(),
+      dataFormatVersion: APP_CONFIG.dataFormatVersion,
+      series: selected.series,
+      volumeNumber: String(selected.bandNumber),
+      numericBandNumber: selected.bandNumber,
+      title: elements.missingDetailName.value.trim(),
+      publicationYear,
+      condition,
+      duplicateCondition: null,
+      isRead: false,
+      isDuplicate: false,
+      isSealed: false,
+      notes: elements.missingDetailNotes.value.trim(),
+      duckipediaPageUrl: duckipediaUrl || metadata?.pageUrl || createDuckipediaUrl(selected.series, selected.bandNumber),
+      duckipediaCoverUrl: metadata?.coverUrl || "",
+      metadataStatus: metadata?.found === true ? "found" : "",
+      metadataFetchedAt: metadata?.fetchedAt || null,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await saveComic(comic);
+    const nextDetails = { ...(state.settings.missingBandDetails || {}) };
+    delete nextDetails[selected.key];
+    await saveMeaningfulSettings({ missingBandDetails: nextDetails });
+    state.openMissingSeries.add(selected.series);
+    closeMissingDetailModal();
+    await refreshCollection();
+    showToast(`${selected.series} Band ${selected.bandNumber} wurde als vorhanden eingetragen.`);
+  } catch (error) {
+    console.error(error);
+    elements.missingDetailMessage.textContent = `Band konnte nicht übernommen werden: ${error.message}`;
+    elements.missingDetailMessage.dataset.type = "error";
+  } finally {
+    elements.missingMarkOwned.disabled = false;
+  }
 }
 
 async function handleDeleteMissingDetail() {
   if (!state.selectedMissingBand) return;
   const nextDetails = { ...(state.settings.missingBandDetails || {}) };
   delete nextDetails[state.selectedMissingBand.key];
+  const openSeries = state.selectedMissingBand.series;
   await saveMeaningfulSettings({ missingBandDetails: nextDetails });
-  renderMissingBands();
+  renderMissingBands({ forceOpenSeries: openSeries });
   closeMissingDetailModal();
   showToast("Ergänzende Details gelöscht.");
 }
@@ -3186,6 +3388,35 @@ async function handleMissingCsvExport() {
   }
 }
 
+async function handleMissingPdfExport() {
+  const totalMissing = countMissingBands(state.missingGroups);
+
+  if (totalMissing === 0) {
+    showExportMessage("Aktuell wurden keine fehlenden Bände erkannt.");
+    return;
+  }
+
+  setExportButtonsBusy(true);
+  showExportMessage("PDF wird gestaltet …");
+
+  try {
+    const pdfBlob = createMissingPdfBlob(state.missingGroups, state.settings);
+    const result = await shareOrDownloadBlob({
+      blob: pdfBlob,
+      filename: createDatedFilename("Sammlerhausen-Flohmarkt-Suchliste", "pdf"),
+      mimeType: "application/pdf",
+      title: "Sammlerhausen - Flohmarkt-Suchliste",
+      text: "Meine übersichtliche Liste fehlender Bände für Flohmärkte und Comicbörsen."
+    });
+    reportExportResult(result, "Die Flohmarkt-Suchliste");
+  } catch (error) {
+    console.error(error);
+    showExportMessage(`PDF-Export fehlgeschlagen: ${error.message}`, "error");
+  } finally {
+    setExportButtonsBusy(false);
+  }
+}
+
 async function handleJsonExport() {
   setExportButtonsBusy(true);
   showExportMessage("");
@@ -3236,6 +3467,7 @@ function setExportButtonsBusy(isBusy) {
     elements.exportJson,
     elements.exportCsv,
     elements.exportMissingCsv,
+    elements.exportMissingPdf,
     elements.openImport
   ].forEach((button) => {
     button.disabled = isBusy;

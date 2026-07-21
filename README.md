@@ -1,22 +1,25 @@
-# Sammlerhausen 3.3.1
+# Sammlerhausen 3.3.2
 
 Mobile Progressive Web App für eine private Sammlung von Lustigen Taschenbüchern und Sonderbänden.
 
-Neu in 3.3.1:
+Neu in 3.3.2:
 
-- kompakte Sammlungsauswahl mit getrennten Ansichten für Hauptreihe und weitere Reihen
-- automatische Duckipedia-Anreicherung beim Öffnen eines fehlenden Bands
-- zentrierte, unverzerrte Coverdarstellung
-- funktionierende Zustandsbalken ohne Abkürzungen in den Beschriftungen
-- kompakteres Dashboard mit drei Karten pro Reihe
-- Reihenfortschritt: Hauptreihe zuerst, danach nach Vollständigkeit sortiert
-- Zielbandnummern hinter einer diskreten, standardmäßig geschlossenen Verwaltung
-- überflüssige Hilfstexte in Formular und Scanner entfernt
+- Fehlende Bände sind auf der Startseite in Hauptreihe und Sonderreihen getrennt
+- eigene bildschirmfüllende Fehlband-Ansichten
+- geöffnete Reihe bleibt nach dem Speichern von Banddetails geöffnet
+- fehlender Band kann mit einem Klick als vorhanden übernommen werden; erforderlich ist nur der Zustand
+- gespeicherte Zielbandnummern können über einen eigenen Button entfernt werden
+- korrekte Duckipedia-Links für `LTB präsentiert` einschließlich Umlaut
+- gestalteter PDF-Export als Flohmarkt- und Comicbörsen-Suchliste
+- PDF mit Reihenblöcken, großen Bandnummern, Abhakfeldern, Wunschzustand, Notizen und klickbaren Duckipedia-Links
 
 Die bestehende IndexedDB und alle gespeicherten Daten bleiben unverändert.
 
-## Drittanbieter-Komponente
+## Drittanbieter-Komponenten
 
-Für die Barcode-Erkennung wird Quagga2 1.12.1 verwendet. Die minifizierte Browserdatei und die MIT-Lizenz liegen im Ordner `vendor/`.
+- Quagga2 1.12.1 für die lokale Barcode-Erkennung
+- jsPDF 4.2.1 für die lokale PDF-Erzeugung
 
-Sammlungsdaten und eigene Coverfotos bleiben in der lokalen IndexedDB des Geräts. Duckipedia wird nur zur optionalen Abfrage bibliografischer Zusatzinformationen kontaktiert.
+Die minifizierten Browserdateien und die jeweiligen MIT-Lizenztexte liegen im Ordner `vendor/`.
+
+Sammlungsdaten, fehlende Bände und eigene Coverfotos bleiben in der lokalen IndexedDB des Geräts. Die PDF-Datei wird vollständig auf dem Gerät erzeugt. Duckipedia wird nur zur optionalen Abfrage bibliografischer Zusatzinformationen kontaktiert.
