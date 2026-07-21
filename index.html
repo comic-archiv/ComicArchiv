@@ -35,7 +35,7 @@
       <span id="connection-status" class="status-pill">Online</span>
       <span class="status-copy">Lokale Sammlung</span>
       <button id="update-app" class="update-pill" type="button">Updates prüfen</button>
-      <span id="app-version" class="version-pill">v3.3.0</span>
+      <span id="app-version" class="version-pill">v3.3.1</span>
     </section>
 
     <section id="backup-reminder" class="backup-reminder hidden" aria-live="polite">
@@ -100,7 +100,6 @@
           <label class="field paired-field">
             <span>Bandnummer <strong aria-hidden="true">*</strong></span>
             <input id="volume-number" name="volumeNumber" type="text" inputmode="numeric" maxlength="30" required autocomplete="off" placeholder="z. B. 42">
-            <small class="field-help">Reine Zahlen zählen für Fehlbände.</small>
             <small class="field-error" id="volume-number-error"></small>
           </label>
 
@@ -137,7 +136,7 @@
 
           <div class="metadata-controls field-full">
             <button id="lookup-metadata" class="secondary-button compact-button" type="button">Duckipedia-Daten laden</button>
-            <p id="metadata-status" class="field-help" aria-live="polite">Titel, Jahr und Cover werden bei numerischen Bänden automatisch ergänzt.</p>
+            <p id="metadata-status" class="field-help" aria-live="polite"></p>
           </div>
 
           <label class="field" id="primary-condition-field">
@@ -177,33 +176,21 @@
     <section id="collection" class="collection-section section-anchor" aria-labelledby="collection-title">
       <div class="section-heading collection-heading">
         <div><p class="eyebrow">Gespeicherte Einträge</p><h2 id="collection-title">Meine Sammlung</h2></div>
-        <span id="collection-count" class="count-badge">0 Einträge</span>
       </div>
-
-      <details id="filter-panel" class="panel filter-panel collapsible-panel">
-        <summary>
-          <span><strong>Suchen &amp; filtern</strong><small id="filter-summary">Standardansicht</small></span>
-          <span class="disclosure-icon" aria-hidden="true">⌄</span>
-        </summary>
-        <div class="collapsible-content">
-          <div class="filter-toolbar"><span id="filter-result" class="filter-result" aria-live="polite"></span><button id="reset-filters" class="text-button" type="button">Zurücksetzen</button></div>
-          <div class="filter-grid">
-            <label class="field field-full"><span>Suche</span><input id="search" type="search" placeholder="Titel, Reihe, Bandnummer oder Notiz"></label>
-            <label class="field"><span>Reihe</span><select id="filter-series"></select></label>
-            <label class="field"><span>Zustand</span><select id="filter-condition"></select></label>
-            <label class="field"><span>Lesestatus</span><select id="filter-read"><option value="all">Alle</option><option value="read">Nur gelesen</option><option value="unread">Nur ungelesen</option></select></label>
-            <label class="field"><span>Sortierung</span><select id="sort-by"><option value="series">Reihe &amp; Bandnummer</option><option value="volume">Bandnummer</option><option value="title">Titel</option><option value="condition">Zustand</option></select></label>
-          </div>
-          <div class="filter-toggles">
-            <label class="check-row compact-check"><input id="filter-sealed" type="checkbox"><span>Nur foliert</span></label>
-            <label class="check-row compact-check"><input id="filter-duplicate" type="checkbox"><span>Nur doppelt</span></label>
-          </div>
-        </div>
-      </details>
-
-      <div id="empty-state" class="panel empty-state"><div class="empty-icon" aria-hidden="true">＋</div><h3>Noch keine Comics eingetragen</h3><p>Lege oben deinen ersten Band an. Die Speicherung erfolgt automatisch.</p></div>
-      <div id="no-results" class="panel empty-state hidden"><div class="empty-icon" aria-hidden="true">⌕</div><h3>Keine passenden Einträge</h3><p>Ändere die Suche oder setze die Filter zurück.</p></div>
-      <div id="comic-list" class="comic-list" aria-live="polite"></div>
+      <div class="collection-hub-grid">
+        <button id="open-main-collection" class="collection-hub-card" type="button">
+          <span class="collection-hub-icon" aria-hidden="true">LTB</span>
+          <span class="collection-hub-copy"><strong>Lustige Taschenbücher</strong><small>Nur die Hauptreihe</small></span>
+          <span id="main-collection-count" class="collection-hub-count">0</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <button id="open-other-collection" class="collection-hub-card" type="button">
+          <span class="collection-hub-icon collection-hub-icon-alt" aria-hidden="true">＋</span>
+          <span class="collection-hub-copy"><strong>Sonderbände &amp; weitere Reihen</strong><small>Alle Reihen außer der Hauptreihe</small></span>
+          <span id="other-collection-count" class="collection-hub-count">0</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </div>
     </section>
 
     <section id="missing" class="section-anchor" aria-labelledby="missing-title">
@@ -243,6 +230,43 @@
     <a href="#backup"><span aria-hidden="true">⇩</span>Backup</a>
   </nav>
 
+
+  <section id="collection-page" class="app-page hidden" aria-labelledby="collection-page-title" aria-hidden="true">
+    <header class="app-page-header">
+      <button id="close-collection" class="app-page-back" type="button" aria-label="Zurück zur Sammlungsauswahl">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        <span>Zurück</span>
+      </button>
+      <div class="app-page-title"><p class="eyebrow">Meine Sammlung</p><h2 id="collection-page-title">Lustige Taschenbücher</h2></div>
+      <span id="collection-count" class="count-badge">0 Einträge</span>
+    </header>
+    <div class="app-page-content collection-page-content">
+      <details id="filter-panel" class="panel filter-panel collapsible-panel">
+        <summary>
+          <span><strong>Suchen &amp; filtern</strong><small id="filter-summary">Standardansicht</small></span>
+          <span class="disclosure-icon" aria-hidden="true">⌄</span>
+        </summary>
+        <div class="collapsible-content">
+          <div class="filter-toolbar"><span id="filter-result" class="filter-result" aria-live="polite"></span><button id="reset-filters" class="text-button" type="button">Zurücksetzen</button></div>
+          <div class="filter-grid">
+            <label class="field field-full"><span>Suche</span><input id="search" type="search" placeholder="Titel, Reihe, Bandnummer oder Notiz"></label>
+            <label id="filter-series-field" class="field"><span>Reihe</span><select id="filter-series"></select></label>
+            <label class="field"><span>Zustand</span><select id="filter-condition"></select></label>
+            <label class="field"><span>Lesestatus</span><select id="filter-read"><option value="all">Alle</option><option value="read">Nur gelesen</option><option value="unread">Nur ungelesen</option></select></label>
+            <label class="field"><span>Sortierung</span><select id="sort-by"><option value="series">Reihe &amp; Bandnummer</option><option value="volume">Bandnummer</option><option value="title">Titel</option><option value="condition">Zustand</option></select></label>
+          </div>
+          <div class="filter-toggles">
+            <label class="check-row compact-check"><input id="filter-sealed" type="checkbox"><span>Nur foliert</span></label>
+            <label class="check-row compact-check"><input id="filter-duplicate" type="checkbox"><span>Nur doppelt</span></label>
+          </div>
+        </div>
+      </details>
+      <div id="empty-state" class="panel empty-state"><div class="empty-icon" aria-hidden="true">＋</div><h3>Noch keine Comics in diesem Bereich</h3><p>Lege über „Comic hinzufügen“ deinen ersten Band an.</p></div>
+      <div id="no-results" class="panel empty-state hidden"><div class="empty-icon" aria-hidden="true">⌕</div><h3>Keine passenden Einträge</h3><p>Ändere die Suche oder setze die Filter zurück.</p></div>
+      <div id="comic-list" class="comic-list" aria-live="polite"></div>
+    </div>
+  </section>
+
   <section id="progress-page" class="app-page hidden" aria-labelledby="progress-title" aria-hidden="true">
     <header class="app-page-header">
       <button id="close-progress" class="app-page-back" type="button" aria-label="Zurück zur Übersicht">
@@ -253,13 +277,18 @@
       <span id="progress-page-summary" class="count-badge">0 Reihen</span>
     </header>
     <div class="app-page-content">
-      <p class="section-intro">Lege pro Reihe eine höchste gewünschte Bandnummer fest. Ohne Ziel zeigt Sammlerhausen den Fortschritt nur bis zum höchsten vorhandenen Band.</p>
-      <form id="progress-target-form" class="panel progress-target-form" novalidate>
-        <label class="field"><span>Reihe</span><select id="progress-series"></select></label>
-        <label class="field"><span>Höchste gewünschte Bandnummer</span><input id="progress-target" type="number" inputmode="numeric" min="1" max="99999" placeholder="z. B. 600"></label>
-        <button id="progress-save" class="secondary-button" type="submit">Ziel speichern</button>
-        <p id="progress-message" class="form-message field-full" role="status" aria-live="polite"></p>
-      </form>
+      <details id="progress-target-panel" class="progress-target-details">
+        <summary>Zielbandnummer verwalten</summary>
+        <div class="progress-target-content">
+          <p class="section-intro compact-intro">Lege optional eine höchste gewünschte Bandnummer fest. Ohne Ziel wird bis zum höchsten vorhandenen Band gerechnet.</p>
+          <form id="progress-target-form" class="panel progress-target-form" novalidate>
+            <label class="field"><span>Reihe</span><select id="progress-series"></select></label>
+            <label class="field"><span>Höchste gewünschte Bandnummer</span><input id="progress-target" type="number" inputmode="numeric" min="1" max="99999" placeholder="z. B. 600"></label>
+            <button id="progress-save" class="secondary-button" type="submit">Ziel speichern</button>
+            <p id="progress-message" class="form-message field-full" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+      </details>
       <div id="progress-list" class="progress-list"></div>
     </div>
   </section>
@@ -319,7 +348,6 @@
         <button id="close-scanner" class="icon-button small-icon-button" type="button" aria-label="Scanner schließen">×</button>
       </div>
 
-      <p class="scanner-intro">Wähle die Reihe einmal aus und halte die gesamte weiße Barcodefläche in den Rahmen. Sammlerhausen nutzt ausschließlich den kleinen zwei- oder fünfstelligen Zusatzcode als Bandnummer.</p>
 
       <div class="scanner-settings-grid">
         <label class="field field-full"><span>Reihe <strong aria-hidden="true">*</strong></span><select id="scanner-series"></select></label>
@@ -393,7 +421,6 @@
         <p id="scanner-queue-message" class="form-message" role="status" aria-live="polite"></p>
       </section>
 
-      <p class="scanner-help">Der große EAN-Code enthält nicht zuverlässig die Bandnummer. Entscheidend ist der kleine Zusatzcode rechts daneben. Die Kamera-Erkennung funktioniert nach dem ersten vollständigen Laden auch offline. Nur das automatische Ergänzen von Titel und Jahr über Duckipedia benötigt Internet; gespeicherte Comics bleiben lokal.</p>
     </section>
   </div>
 

@@ -71,7 +71,9 @@ const state = {
   formHasLocalCover: false,
   cardCoverObjectUrls: new Set(),
   metadataLookupTimer: null,
-  enrichmentRunning: false
+  enrichmentRunning: false,
+  collectionScope: "main",
+  missingLookupSequence: 0
 };
 
 const elements = {
@@ -101,11 +103,19 @@ const elements = {
   saveNext: document.querySelector("#save-next"),
   cancelEdit: document.querySelector("#cancel-edit"),
   comicList: document.querySelector("#comic-list"),
+  collectionPage: document.querySelector("#collection-page"),
+  collectionPageTitle: document.querySelector("#collection-page-title"),
+  closeCollection: document.querySelector("#close-collection"),
+  openMainCollection: document.querySelector("#open-main-collection"),
+  openOtherCollection: document.querySelector("#open-other-collection"),
+  mainCollectionCount: document.querySelector("#main-collection-count"),
+  otherCollectionCount: document.querySelector("#other-collection-count"),
   emptyState: document.querySelector("#empty-state"),
   noResults: document.querySelector("#no-results"),
   collectionCount: document.querySelector("#collection-count"),
   search: document.querySelector("#search"),
   filterSeries: document.querySelector("#filter-series"),
+  filterSeriesField: document.querySelector("#filter-series-field"),
   filterCondition: document.querySelector("#filter-condition"),
   filterRead: document.querySelector("#filter-read"),
   filterSealed: document.querySelector("#filter-sealed"),
@@ -135,6 +145,7 @@ const elements = {
   backupReminder: document.querySelector("#backup-reminder"),
   backupReminderText: document.querySelector("#backup-reminder-text"),
   backupReminderAction: document.querySelector("#backup-reminder-action"),
+  progressTargetPanel: document.querySelector("#progress-target-panel"),
   progressTargetForm: document.querySelector("#progress-target-form"),
   progressSeries: document.querySelector("#progress-series"),
   progressTarget: document.querySelector("#progress-target"),
@@ -304,10 +315,7 @@ function populateConfiguration() {
   availableSeries.forEach((seriesName) => elements.series.append(createOption(seriesName, seriesName)));
   elements.series.value = availableSeries.includes(selectedSeries) ? selectedSeries : "";
 
-  elements.filterSeries.replaceChildren();
-  elements.filterSeries.append(createOption("all", "Alle Reihen"));
-  availableSeries.forEach((seriesName) => elements.filterSeries.append(createOption(seriesName, seriesName)));
-  elements.filterSeries.value = availableSeries.includes(selectedFilterSeries) ? selectedFilterSeries : "all";
+  syncCollectionSeriesFilter(availableSeries, selectedFilterSeries);
 
   elements.progressSeries.replaceChildren();
   elements.progressSeries.append(createOption("", "Reihe auswählen"));
@@ -388,6 +396,9 @@ function bindEvents() {
   elements.backupReminderAction.addEventListener("click", handleJsonExport);
   elements.progressTargetForm.addEventListener("submit", handleProgressTargetSubmit);
   elements.progressSeries.addEventListener("change", syncProgressTargetInput);
+  elements.openMainCollection.addEventListener("click", () => openCollectionPage("main"));
+  elements.openOtherCollection.addEventListener("click", () => openCollectionPage("other"));
+  elements.closeCollection.addEventListener("click", closeCollectionPage);
   elements.openProgress.addEventListener("click", openProgressPage);
   elements.closeProgress.addEventListener("click", closeProgressPage);
   elements.openScanner.addEventListener("click", openScannerModal);
@@ -473,6 +484,7 @@ function bindEvents() {
     if (!elements.seriesModal.classList.contains("hidden")) closeSeriesModal();
     if (!elements.missingDetailModal.classList.contains("hidden")) closeMissingDetailModal();
     if (!elements.scannerModal.classList.contains("hidden")) closeScannerModal();
+    if (!elements.collectionPage.classList.contains("hidden")) closeCollectionPage();
     if (!elements.progressPage.classList.contains("hidden")) closeProgressPage();
     if (!elements.mediaPage.classList.contains("hidden")) closeMediaPage();
   });
@@ -702,7 +714,7 @@ function resetCoverEditorState() {
   state.formMetadata = null;
   clearFormCoverPreview("");
   elements.coverFile.value = "";
-  elements.metadataStatus.textContent = "Titel, Jahr und Cover werden bei numerischen Bänden automatisch ergänzt.";
+  elements.metadataStatus.textContent = "";
   elements.metadataStatus.dataset.type = "info";
 }
 
@@ -768,9 +780,7 @@ function scheduleFormMetadataLookup() {
   const series = elements.series.value.trim();
 
   if (!state.settings.duckipediaAutoEnrich || !series || !bandNumber) {
-    elements.metadataStatus.textContent = bandNumber || !elements.volumeNumber.value.trim()
-      ? "Titel, Jahr und Cover werden bei numerischen Bänden automatisch ergänzt."
-      : "Für nicht rein numerische Bandnummern ist nur der Duckipedia-Link verfügbar.";
+    elements.metadataStatus.textContent = "";
     return;
   }
 
@@ -893,6 +903,7 @@ async function refreshCollection() {
       state.comics,
       state.settings.knownHighestBandBySeries
     );
+    renderCollectionHub();
     renderCollection();
     renderStats();
     renderMissingBands();
@@ -923,6 +934,63 @@ async function recordDataChange(changeAmount = 1) {
     await saveMeaningfulSettings({}, changeAmount);
   } catch (error) {
     console.warn("Der Backup-Änderungszähler konnte nicht aktualisiert werden:", error);
+  }
+}
+
+function syncCollectionSeriesFilter(availableSeries = getAvailableSeries(state.settings, state.comics), preferredValue = elements.filterSeries.value) {
+  const mainSeries = "Lustiges Taschenbuch";
+  const options = state.collectionScope === "main"
+    ? [mainSeries]
+    : availableSeries.filter((seriesName) => seriesName !== mainSeries);
+
+  elements.filterSeries.replaceChildren();
+
+  if (state.collectionScope === "main") {
+    elements.filterSeries.append(createOption(mainSeries, mainSeries));
+    elements.filterSeries.value = mainSeries;
+    elements.filterSeriesField.classList.add("hidden");
+    return;
+  }
+
+  elements.filterSeries.append(createOption("all", "Alle Sonderreihen"));
+  options.forEach((seriesName) => elements.filterSeries.append(createOption(seriesName, seriesName)));
+  elements.filterSeries.value = options.includes(preferredValue) ? preferredValue : "all";
+  elements.filterSeriesField.classList.remove("hidden");
+}
+
+function renderCollectionHub() {
+  const mainCount = state.comics.filter((comic) => comic.series === "Lustiges Taschenbuch").length;
+  const otherCount = state.comics.length - mainCount;
+  elements.mainCollectionCount.textContent = String(mainCount);
+  elements.otherCollectionCount.textContent = String(otherCount);
+  elements.mainCollectionCount.setAttribute("aria-label", formatEntryCount(mainCount));
+  elements.otherCollectionCount.setAttribute("aria-label", formatEntryCount(otherCount));
+}
+
+function openCollectionPage(scope) {
+  state.collectionScope = scope === "other" ? "other" : "main";
+  resetFilters({ keepPageOpen: true });
+  syncCollectionSeriesFilter(getAvailableSeries(state.settings, state.comics));
+  elements.collectionPageTitle.textContent = state.collectionScope === "main"
+    ? "Lustige Taschenbücher"
+    : "Sonderbände & weitere Reihen";
+  renderCollection();
+  elements.collectionPage.classList.remove("hidden");
+  elements.collectionPage.setAttribute("aria-hidden", "false");
+  document.body.classList.add("app-page-open");
+  elements.collectionPage.scrollTop = 0;
+  window.setTimeout(() => elements.closeCollection.focus({ preventScroll: true }), 0);
+}
+
+function closeCollectionPage({ returnFocus = true } = {}) {
+  elements.collectionPage.classList.add("hidden");
+  elements.collectionPage.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("app-page-open");
+  if (returnFocus) {
+    window.setTimeout(() => {
+      const target = state.collectionScope === "main" ? elements.openMainCollection : elements.openOtherCollection;
+      target.focus({ preventScroll: true });
+    }, 0);
   }
 }
 
@@ -1245,7 +1313,13 @@ function getSeriesProgressData() {
       percentage
     };
   }).filter((entry) => entry.target > 0)
-    .sort((first, second) => first.series.localeCompare(second.series, "de", { sensitivity: "base" }));
+    .sort((first, second) => {
+      const mainSeries = "Lustiges Taschenbuch";
+      if (first.series === mainSeries && second.series !== mainSeries) return -1;
+      if (second.series === mainSeries && first.series !== mainSeries) return 1;
+      const completenessDifference = second.percentage - first.percentage;
+      return completenessDifference || first.series.localeCompare(second.series, "de", { sensitivity: "base" });
+    });
 }
 
 function renderSeriesProgress() {
@@ -1332,9 +1406,10 @@ function renderSeriesProgress() {
     editButton.className = "text-button progress-edit-button";
     editButton.textContent = entry.configuredTarget ? "Ziel ändern" : "Festes Ziel setzen";
     editButton.addEventListener("click", () => {
+      elements.progressTargetPanel.open = true;
       elements.progressSeries.value = entry.series;
       syncProgressTargetInput();
-      elements.progressTargetForm.scrollIntoView({ behavior: "smooth", block: "center" });
+      elements.progressTargetPanel.scrollIntoView({ behavior: "smooth", block: "start" });
       window.setTimeout(() => elements.progressTarget.focus({ preventScroll: true }), 350);
     });
 
@@ -1348,13 +1423,14 @@ function renderCollection() {
   clearCardCoverObjectUrls();
   elements.comicList.replaceChildren();
 
-  const hasComics = state.comics.length > 0;
+  const scopedComics = getScopedComics();
+  const hasComics = scopedComics.length > 0;
   const hasResults = state.filteredComics.length > 0;
   elements.emptyState.classList.toggle("hidden", hasComics);
   elements.noResults.classList.toggle("hidden", !hasComics || hasResults);
 
   elements.collectionCount.textContent = hasComics
-    ? `${state.filteredComics.length} von ${state.comics.length}`
+    ? `${state.filteredComics.length} von ${scopedComics.length}`
     : "0 Einträge";
   elements.filterResult.textContent = hasComics
     ? `${formatEntryCount(state.filteredComics.length)} sichtbar.`
@@ -1368,6 +1444,13 @@ function renderCollection() {
   });
 }
 
+function getScopedComics() {
+  const mainSeries = "Lustiges Taschenbuch";
+  return state.collectionScope === "other"
+    ? state.comics.filter((comic) => comic.series !== mainSeries)
+    : state.comics.filter((comic) => comic.series === mainSeries);
+}
+
 function getFilteredAndSortedComics() {
   const searchTerm = normalizeSearchText(elements.search.value);
   const selectedSeries = elements.filterSeries.value;
@@ -1376,7 +1459,7 @@ function getFilteredAndSortedComics() {
   const onlySealed = elements.filterSealed.checked;
   const onlyDuplicate = elements.filterDuplicate.checked;
 
-  const filtered = state.comics.filter((comic) => {
+  const filtered = getScopedComics().filter((comic) => {
     if (selectedSeries !== "all" && comic.series !== selectedSeries) {
       return false;
     }
@@ -1719,7 +1802,7 @@ function renderStats() {
     row.className = "condition-stat-row";
     const label = document.createElement("span");
     label.className = "condition-stat-label";
-    label.textContent = `${condition.label} – ${condition.code}`;
+    label.textContent = condition.label;
     const bar = document.createElement("span");
     bar.className = "condition-stat-bar";
     bar.setAttribute("aria-hidden", "true");
@@ -1814,6 +1897,7 @@ async function handleCardAction(event) {
   }
 
   if (button.dataset.action === "edit") {
+    closeCollectionPage({ returnFocus: false });
     startEditing(comic);
     return;
   }
@@ -1984,9 +2068,9 @@ function resetForm() {
   showFormMessage("");
 }
 
-function resetFilters() {
+function resetFilters({ keepPageOpen = false } = {}) {
   elements.search.value = "";
-  elements.filterSeries.value = "all";
+  syncCollectionSeriesFilter(getAvailableSeries(state.settings, state.comics));
   elements.filterCondition.value = "all";
   elements.filterRead.value = "all";
   elements.filterSealed.checked = false;
@@ -1994,12 +2078,13 @@ function resetFilters() {
   elements.sortBy.value = "series";
   renderCollection();
   elements.filterPanel.open = false;
+  if (!keepPageOpen) elements.search.blur();
 }
 
 function getActiveFilterCount() {
   return [
     Boolean(elements.search.value.trim()),
-    elements.filterSeries.value !== "all",
+    state.collectionScope === "other" && elements.filterSeries.value !== "all",
     elements.filterCondition.value !== "all",
     elements.filterRead.value !== "all",
     elements.filterSealed.checked,
@@ -2904,9 +2989,10 @@ function handleMissingBandClick(event) {
   openMissingDetailModal(button.dataset.series, Number(button.dataset.bandNumber));
 }
 
-function openMissingDetailModal(series, bandNumber) {
+async function openMissingDetailModal(series, bandNumber) {
   const key = createMissingDetailKey(series, bandNumber);
   const detail = state.settings.missingBandDetails?.[key] || {};
+  const lookupSequence = ++state.missingLookupSequence;
   state.selectedMissingBand = { series, bandNumber, key };
   elements.missingDetailContext.textContent = `${series} · Band ${bandNumber}`;
   elements.missingDetailName.value = detail.title || "";
@@ -2915,14 +3001,62 @@ function openMissingDetailModal(series, bandNumber) {
   elements.missingDetailUrl.value = detail.duckipediaUrl || "";
   elements.missingDetailNotes.value = detail.notes || "";
   elements.missingDuckipediaLink.href = detail.duckipediaUrl || createDuckipediaUrl(series, bandNumber, detail.title || "");
+  elements.missingDuckipediaLink.textContent = "Duckipedia öffnen";
   elements.deleteMissingDetail.classList.toggle("hidden", !hasMissingDetailContent(detail));
-  elements.missingDetailMessage.textContent = "";
+  elements.missingDetailMessage.textContent = "Duckipedia-Daten werden geladen …";
+  elements.missingDetailMessage.dataset.type = "info";
   elements.missingDetailModal.classList.remove("hidden");
   document.body.classList.add("modal-open");
-  window.setTimeout(() => elements.missingDetailName.focus(), 0);
+
+  try {
+    const metadata = await getMetadataForBand(series, bandNumber, { force: false });
+    if (lookupSequence !== state.missingLookupSequence || state.selectedMissingBand?.key !== key) return;
+
+    const currentDetail = state.settings.missingBandDetails?.[key] || {};
+    const typedTitle = elements.missingDetailName.value.trim();
+    const typedYear = Number(elements.missingDetailYear.value) || null;
+    const typedUrl = normalizeHttpUrl(elements.missingDetailUrl.value);
+    const enrichedDetail = {
+      ...currentDetail,
+      title: currentDetail.title || typedTitle || metadata.title || "",
+      publicationYear: currentDetail.publicationYear || typedYear || metadata.publicationYear || null,
+      duckipediaUrl: currentDetail.duckipediaUrl || typedUrl || metadata.pageUrl || createDuckipediaUrl(series, bandNumber),
+      metadataFetchedAt: metadata.fetchedAt || new Date().toISOString()
+    };
+
+    elements.missingDetailName.value = enrichedDetail.title || "";
+    elements.missingDetailYear.value = enrichedDetail.publicationYear ?? "";
+    elements.missingDetailUrl.value = enrichedDetail.duckipediaUrl || "";
+    elements.missingDuckipediaLink.href = enrichedDetail.duckipediaUrl || createDuckipediaUrl(series, bandNumber);
+
+    const changed = enrichedDetail.title !== (currentDetail.title || "")
+      || enrichedDetail.publicationYear !== (currentDetail.publicationYear || null)
+      || enrichedDetail.duckipediaUrl !== (currentDetail.duckipediaUrl || "");
+
+    if (metadata.found && changed) {
+      const nextDetails = { ...(state.settings.missingBandDetails || {}), [key]: enrichedDetail };
+      await saveMeaningfulSettings({ missingBandDetails: nextDetails });
+      renderMissingBands();
+      elements.deleteMissingDetail.classList.remove("hidden");
+    }
+
+    elements.missingDetailMessage.textContent = metadata.found
+      ? "Titel und Erscheinungsjahr wurden automatisch aus Duckipedia ergänzt, soweit verfügbar."
+      : (metadata.reason || "Für diesen Band wurden keine Zusatzdaten gefunden.");
+    elements.missingDetailMessage.dataset.type = metadata.found ? "success" : "info";
+  } catch (error) {
+    if (lookupSequence !== state.missingLookupSequence) return;
+    elements.missingDetailMessage.textContent = `Duckipedia-Daten konnten nicht geladen werden: ${error.message}`;
+    elements.missingDetailMessage.dataset.type = "error";
+  } finally {
+    if (lookupSequence === state.missingLookupSequence) {
+      window.setTimeout(() => elements.missingDetailName.focus(), 0);
+    }
+  }
 }
 
 function closeMissingDetailModal() {
+  state.missingLookupSequence += 1;
   elements.missingDetailModal.classList.add("hidden");
   state.selectedMissingBand = null;
   elements.missingDetailForm.reset();
