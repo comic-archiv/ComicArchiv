@@ -3701,20 +3701,66 @@ function handleCustomSeriesAction(event) {
 async function handleRemoveCustomSeries(seriesName) {
   const isUsed = state.comics.some((comic) => comic.series === seriesName);
   const prompt = isUsed
-    ? `„${seriesName}“ wird von gespeicherten Comics verwendet. Nur aus der persönlichen Auswahlliste entfernen? Bestehende Comics bleiben erhalten.`
-    : `„${seriesName}“ aus der persönlichen Auswahlliste entfernen?`;
+    ? `„${seriesName}“ wird von gespeicherten Comics verwendet. Aus der persönlichen Auswahlliste entfernen und zugehörige Ziele, Fehlband-Details sowie Flohmarkt-Markierungen löschen? Bestehende Comics bleiben erhalten.`
+    : `„${seriesName}“ vollständig aus der persönlichen Reihenverwaltung entfernen? Zugehörige Ziele, Fehlband-Details und Flohmarkt-Markierungen werden ebenfalls gelöscht.`;
   if (!window.confirm(prompt)) return;
 
-  const nextConfigs = (state.settings.customSeriesConfigs || []).filter((entry) => entry.name !== seriesName);
-  await saveMeaningfulSettings({
-    customSeries: nextConfigs.map((entry) => entry.name),
-    customSeriesConfigs: nextConfigs
-  });
-  populateConfiguration();
-  renderCustomSeriesList();
-  if (state.editingCustomSeriesName === seriesName) resetCustomSeriesForm();
-  elements.seriesMessage.textContent = `„${seriesName}“ wurde aus der persönlichen Liste entfernt.`;
-  elements.seriesMessage.dataset.type = "success";
+  try {
+    const nextConfigs = (state.settings.customSeriesConfigs || []).filter((entry) => entry.name !== seriesName);
+
+    const nextHighest = { ...(state.settings.knownHighestBandBySeries || {}) };
+    delete nextHighest[seriesName];
+
+    const detailPrefix = `${encodeURIComponent(seriesName)}::`;
+    const nextDetails = Object.fromEntries(
+      Object.entries(state.settings.missingBandDetails || {})
+        .filter(([key]) => !key.startsWith(detailPrefix))
+    );
+
+    const nextFleaItems = Object.fromEntries(
+      Object.entries(state.settings.fleaMarketSession?.items || {})
+        .filter(([, item]) => item?.series !== seriesName)
+    );
+
+    const metadataRecords = await getAllMetadataCache();
+    const remainingMetadata = metadataRecords.filter((record) => record?.series !== seriesName);
+    if (remainingMetadata.length !== metadataRecords.length) {
+      await replaceMetadataCache(remainingMetadata);
+    }
+
+    await saveMeaningfulSettings({
+      customSeries: nextConfigs.map((entry) => entry.name),
+      customSeriesConfigs: nextConfigs,
+      knownHighestBandBySeries: nextHighest,
+      missingBandDetails: nextDetails,
+      fleaMarketSession: {
+        items: nextFleaItems,
+        updatedAt: state.settings.fleaMarketSession?.updatedAt || null
+      }
+    });
+
+    state.openMissingSeries.delete(seriesName);
+    state.missingGroups = calculateMissingBands(state.comics, nextHighest);
+
+    populateConfiguration();
+    renderCustomSeriesList();
+    renderMissingHub();
+    renderMissingBands();
+    renderStats();
+    renderSeriesProgress();
+    renderFleaMarketHubStatus();
+    if (!elements.fleaMarketPage.classList.contains("hidden")) renderFleaMarket();
+    await refreshMediaStatus();
+
+    if (state.editingCustomSeriesName === seriesName) resetCustomSeriesForm();
+    elements.seriesMessage.textContent = isUsed
+      ? `„${seriesName}“ wurde aus der persönlichen Reihenverwaltung entfernt. Bestehende Comics bleiben erhalten; Ziele und Fehlband-Daten wurden gelöscht.`
+      : `„${seriesName}“ wurde einschließlich der zugehörigen Ziele und Fehlband-Daten entfernt.`;
+    elements.seriesMessage.dataset.type = "success";
+  } catch (error) {
+    elements.seriesMessage.textContent = `Reihe konnte nicht vollständig entfernt werden: ${error.message}`;
+    elements.seriesMessage.dataset.type = "error";
+  }
 }
 
 function handleMissingBandClick(event) {

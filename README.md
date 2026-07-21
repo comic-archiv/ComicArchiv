@@ -1,8 +1,13 @@
-# Entenarchiv 3.4.1
+# Entenarchiv 3.4.2
 
 Mobile Progressive Web App für eine private Sammlung von Lustigen Taschenbüchern und Sonderbänden.
 
-## Neu in 3.4.1
+## Neu in 3.4.2
+
+- Fehlerbehebung beim Entfernen eigener Reihen: gespeicherte Zielbandnummern werden mitgelöscht
+- zugehörige Fehlband-Details und Flohmarkt-Markierungen werden bereinigt
+- Duckipedia-Metadaten der entfernten Reihe werden aus dem lokalen Cache gelöscht
+- Fortschritts- und Fehlbandansichten werden unmittelbar neu berechnet
 
 - Flohmarkt-Modus mit dauerhaft gespeicherten Markierungen
 - fehlende Bände unterwegs als gefunden markieren
