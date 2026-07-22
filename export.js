@@ -106,28 +106,39 @@ export function createMissingPdfBlob(missingGroups, settings = {}) {
     throw new Error("Aktuell wurden keine fehlenden Bände erkannt.");
   }
 
-  const doc = new JsPdf({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+  // Two dense list columns in landscape format minimize the page count while
+  // keeping the information needed at a flea market easy to scan.
+  const doc = new JsPdf({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 14;
+  const margin = 7;
   const contentWidth = pageWidth - margin * 2;
-  const columnGap = 6;
-  const cardWidth = (contentWidth - columnGap) / 2;
-  const footerY = pageHeight - 10;
+  const footerY = pageHeight - 4.5;
   const details = settings.missingBandDetails || {};
   const exportedAt = new Date();
   let pageNumber = 1;
   let cursorY = 0;
+  let currentGroup = null;
+  let rowStripe = 0;
+
+  const gutter = 4;
+  const listWidth = (contentWidth - gutter) / 2;
+  const columns = Object.freeze({
+    check: 6.5,
+    band: 15,
+    year: 13,
+    title: listWidth - 6.5 - 15 - 13
+  });
 
   const colors = {
-    navy: [17, 24, 39],
-    navySoft: [30, 41, 59],
-    accent: [250, 204, 21],
-    cyan: [14, 116, 144],
-    text: [31, 41, 55],
-    muted: [100, 116, 139],
-    border: [218, 224, 232],
-    card: [248, 250, 252],
+    navy: [11, 16, 32],
+    navySoft: [25, 43, 73],
+    primary: [0, 94, 168],
+    accent: [239, 180, 35],
+    text: [29, 39, 54],
+    muted: [91, 105, 123],
+    border: [207, 216, 226],
+    stripe: [247, 249, 252],
     white: [255, 255, 255]
   };
 
@@ -143,181 +154,205 @@ export function createMissingPdfBlob(missingGroups, settings = {}) {
 
   function drawPageHeader() {
     setFillColor(colors.navy);
-    doc.rect(0, 0, pageWidth, 43, "F");
+    doc.rect(0, 0, pageWidth, 14.5, "F");
+
     setFillColor(colors.accent);
-    doc.roundedRect(margin, 9, 37, 8, 2, 2, "F");
+    doc.roundedRect(margin, 3.6, 29, 5.8, 1.3, 1.3, "F");
     setTextColor(colors.navy);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.text("SAMMLERHAUSEN", margin + 18.5, 14.3, { align: "center" });
+    doc.setFontSize(6.3);
+    doc.text("ENTENARCHIV", margin + 14.5, 7.6, { align: "center" });
 
     setTextColor(colors.white);
-    doc.setFontSize(21);
-    doc.text("Flohmarkt-Suchliste", margin, 28);
+    doc.setFontSize(13.2);
+    doc.text("Flohmarkt-Suchliste", margin + 34, 7.9);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.text(`${totalMissing} fehlende Bände | ${groups.length} Reihen | Stand ${formatDate(exportedAt)}`, margin, 35.2);
+    doc.setFontSize(6.3);
+    doc.text(
+      `${totalMissing} fehlende Bände | ${groups.length} Reihen | Stand ${formatDate(exportedAt)}`,
+      pageWidth - margin,
+      7.6,
+      { align: "right" }
+    );
 
-    cursorY = 51;
+    cursorY = 18.2;
   }
 
   function drawPageFooter() {
     setDrawColor(colors.border);
-    doc.setLineWidth(0.25);
-    doc.line(margin, footerY - 3, pageWidth - margin, footerY - 3);
+    doc.setLineWidth(0.2);
+    doc.line(margin, footerY - 2.1, pageWidth - margin, footerY - 2.1);
     setTextColor(colors.muted);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.2);
-    doc.text("Entenarchiv - private Such- und Wunschliste", margin, footerY + 1);
-    doc.text(`Seite ${pageNumber}`, pageWidth - margin, footerY + 1, { align: "right" });
+    doc.setFontSize(6);
+    doc.text("Entenarchiv - kompakte private Suchliste", margin, footerY + 0.2);
+    doc.text(`Seite ${pageNumber}`, pageWidth - margin, footerY + 0.2, { align: "right" });
   }
 
-  function addPage() {
+  function drawSeriesHeading(group, continued = false) {
+    const label = continued ? `${group.series} (Fortsetzung)` : String(group.series);
+    setFillColor(colors.navySoft);
+    doc.rect(margin, cursorY, contentWidth, 5.6, "F");
+    setFillColor(colors.accent);
+    doc.rect(margin, cursorY, 2.2, 5.6, "F");
+    setTextColor(colors.white);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.text(label, margin + 4.5, cursorY + 3.9);
+    doc.setFontSize(6.2);
+    doc.text(`${group.missingBands.length} fehlen`, pageWidth - margin - 2.5, cursorY + 3.85, { align: "right" });
+    cursorY += 5.6;
+    drawListHeaders();
+  }
+
+  function drawSingleListHeader(startX) {
+    const height = 4.8;
+    setFillColor([231, 237, 244]);
+    doc.rect(startX, cursorY, listWidth, height, "F");
+    setTextColor(colors.text);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.1);
+
+    let x = startX;
+    doc.text("OK", x + columns.check / 2, cursorY + 3.3, { align: "center" });
+    x += columns.check;
+    doc.text("Band", x + 1.2, cursorY + 3.3);
+    x += columns.band;
+    doc.text("Titel / Name", x + 1.2, cursorY + 3.3);
+    x += columns.title;
+    doc.text("Jahr", x + columns.year / 2, cursorY + 3.3, { align: "center" });
+  }
+
+  function drawListHeaders() {
+    drawSingleListHeader(margin);
+    drawSingleListHeader(margin + listWidth + gutter);
+    setDrawColor(colors.border);
+    doc.setLineWidth(0.18);
+    doc.line(margin, cursorY + 4.8, pageWidth - margin, cursorY + 4.8);
+    cursorY += 4.8;
+  }
+
+  function addPage(group = currentGroup) {
     drawPageFooter();
     doc.addPage();
     pageNumber += 1;
     drawPageHeader();
+    rowStripe = 0;
+    if (group) drawSeriesHeading(group, true);
   }
 
-  function ensureSpace(requiredHeight) {
-    if (cursorY + requiredHeight > footerY - 6) addPage();
-  }
-
-  function drawSummaryCards() {
-    const gap = 5;
-    const width = (contentWidth - gap * 2) / 3;
-    const summaries = [
-      { value: String(totalMissing), label: "fehlende Bände" },
-      { value: String(groups.length), label: "betroffene Reihen" },
-      { value: "A4", label: "druckfertig & übersichtlich" }
-    ];
-
-    summaries.forEach((item, index) => {
-      const x = margin + index * (width + gap);
-      setFillColor(index === 0 ? [255, 248, 214] : colors.card);
-      setDrawColor(index === 0 ? [232, 190, 35] : colors.border);
-      doc.setLineWidth(0.3);
-      doc.roundedRect(x, cursorY, width, 19, 3, 3, "FD");
-      setTextColor(index === 0 ? [113, 63, 18] : colors.text);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(index === 2 ? 12 : 13);
-      doc.text(item.value, x + 5, cursorY + 8.1);
-      setTextColor(colors.muted);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7.3);
-      doc.text(item.label, x + 5, cursorY + 14.2);
-    });
-
-    cursorY += 27;
-  }
-
-  function drawSeriesHeading(group) {
-    ensureSpace(18);
-    setFillColor(colors.navySoft);
-    doc.roundedRect(margin, cursorY, contentWidth, 12, 2.5, 2.5, "F");
-    setFillColor(colors.accent);
-    doc.roundedRect(margin, cursorY, 3.2, 12, 1.6, 1.6, "F");
-    setTextColor(colors.white);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10.5);
-    doc.text(String(group.series), margin + 7, cursorY + 7.7);
-    doc.setFontSize(8);
-    doc.text(`${group.missingBands.length} fehlen`, pageWidth - margin - 5, cursorY + 7.7, { align: "right" });
-    cursorY += 16;
-  }
-
-  function getCardData(group, bandNumber) {
+  function getEntryData(group, bandNumber) {
+    if (bandNumber == null) return null;
     const detail = details[createMissingDetailKey(group.series, bandNumber)] || {};
-    const condition = APP_CONFIG.conditions.find((entry) => entry.code === detail.desiredCondition)?.label || "";
     const title = String(detail.title || "").trim();
-    const notes = String(detail.notes || "").trim();
-    const metaParts = [
-      detail.publicationYear ? String(detail.publicationYear) : "",
-      condition ? `Wunsch: ${condition}` : ""
-    ].filter(Boolean);
 
     return {
       bandNumber,
       title,
-      notes,
-      meta: metaParts.join(" | "),
+      year: detail.publicationYear ? String(detail.publicationYear) : "",
       url: detail.duckipediaUrl || createDuckipediaSearchUrl(group.series, bandNumber, title, settings)
     };
   }
 
-  function measureCard(data) {
-    const titleLines = data.title ? doc.splitTextToSize(data.title, cardWidth - 15).slice(0, 2) : [];
-    const metaLines = data.meta ? doc.splitTextToSize(data.meta, cardWidth - 10).slice(0, 2) : [];
-    const notesLines = data.notes ? doc.splitTextToSize(data.notes, cardWidth - 10).slice(0, 2) : [];
-    const contentLines = titleLines.length + metaLines.length + notesLines.length;
-    const height = Math.max(20, 15 + contentLines * 3.5);
-    return { ...data, titleLines, metaLines, notesLines, height };
+  function measureEntry(data) {
+    if (!data) return null;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.1);
+    const titleLines = data.title ? doc.splitTextToSize(data.title, columns.title - 2.6) : [];
+    return { ...data, titleLines };
   }
 
-  function drawBandCard(data, x, y, height) {
-    setFillColor(colors.card);
-    setDrawColor(colors.border);
-    doc.setLineWidth(0.28);
-    doc.roundedRect(x, y, cardWidth, height, 2.8, 2.8, "FD");
+  function measurePair(left, right) {
+    const leftLines = Math.max(1, left?.titleLines?.length || 0);
+    const rightLines = Math.max(1, right?.titleLines?.length || 0);
+    const lineCount = Math.max(leftLines, rightLines);
+    return Math.max(4.25, 1.25 + lineCount * 2.05);
+  }
 
-    setDrawColor(colors.cyan);
-    doc.setLineWidth(0.55);
-    doc.roundedRect(x + 4, y + 5, 4.3, 4.3, 0.7, 0.7, "S");
+  function drawVerticalSeparators(startX, y, height) {
+    setDrawColor([224, 230, 237]);
+    doc.setLineWidth(0.12);
+    let x = startX;
+    [columns.check, columns.band, columns.title].forEach((width) => {
+      x += width;
+      doc.line(x, y, x, y + height);
+    });
+  }
 
-    setTextColor(colors.text);
+  function drawEntry(data, startX, y, height) {
+    drawVerticalSeparators(startX, y, height);
+    if (!data) return;
+
+    const centerY = y + height / 2;
+    let x = startX;
+
+    setDrawColor(colors.primary);
+    doc.setLineWidth(0.32);
+    doc.rect(x + 2, centerY - 1.2, 2.4, 2.4, "S");
+    x += columns.check;
+
+    setTextColor(colors.primary);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10.5);
-    doc.text(`Band ${data.bandNumber}`, x + 11, y + 8.5);
-
-    let textY = y + 13.3;
-    if (data.titleLines.length) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.6);
-      doc.text(data.titleLines, x + 5, textY);
-      textY += data.titleLines.length * 3.3 + 0.8;
-    }
-
-    if (data.metaLines.length) {
-      setTextColor(colors.cyan);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
-      doc.text(data.metaLines, x + 5, textY);
-      textY += data.metaLines.length * 3.2 + 0.8;
-    }
-
-    if (data.notesLines.length) {
-      setTextColor(colors.muted);
-      doc.setFont("helvetica", "italic");
-      doc.setFontSize(6.8);
-      doc.text(data.notesLines, x + 5, textY);
-    }
-
+    doc.setFontSize(6.1);
     if (data.url) {
-      setTextColor(colors.cyan);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(6.5);
-      doc.textWithLink("Info", x + cardWidth - 5, y + 8.2, { url: data.url, align: "right" });
+      doc.textWithLink(String(data.bandNumber), x + 1.2, centerY + 1, { url: data.url });
+    } else {
+      doc.text(String(data.bandNumber), x + 1.2, centerY + 1);
     }
+    x += columns.band;
+
+    const titleLines = data.titleLines.length ? data.titleLines : ["-"];
+    setTextColor(data.title ? colors.text : colors.muted);
+    doc.setFont("helvetica", data.title ? "normal" : "italic");
+    doc.setFontSize(6.1);
+    doc.text(titleLines, x + 1.2, centerY - ((titleLines.length - 1) * 2.05) / 2 + 0.75);
+    x += columns.title;
+
+    setTextColor(data.year ? colors.text : colors.muted);
+    doc.setFont("helvetica", "normal");
+    doc.text(data.year || "-", x + columns.year / 2, centerY + 0.95, { align: "center" });
+  }
+
+  function drawPair(left, right) {
+    const height = measurePair(left, right);
+    if (cursorY + height > footerY - 3.1) addPage(currentGroup);
+
+    const y = cursorY;
+    if (rowStripe % 2 === 1) {
+      setFillColor(colors.stripe);
+      doc.rect(margin, y, contentWidth, height, "F");
+    }
+
+    setDrawColor(colors.border);
+    doc.setLineWidth(0.16);
+    doc.line(margin, y + height, pageWidth - margin, y + height);
+    doc.line(margin + listWidth + gutter / 2, y, margin + listWidth + gutter / 2, y + height);
+
+    drawEntry(left, margin, y, height);
+    drawEntry(right, margin + listWidth + gutter, y, height);
+
+    cursorY += height;
+    rowStripe += 1;
   }
 
   drawPageHeader();
-  drawSummaryCards();
 
   groups.forEach((group) => {
-    drawSeriesHeading(group);
-    const cards = group.missingBands.map((bandNumber) => measureCard(getCardData(group, bandNumber)));
+    currentGroup = group;
+    rowStripe = 0;
 
-    for (let index = 0; index < cards.length; index += 2) {
-      const first = cards[index];
-      const second = cards[index + 1] || null;
-      const rowHeight = Math.max(first.height, second?.height || 0);
-      ensureSpace(rowHeight + 5);
-      drawBandCard(first, margin, cursorY, rowHeight);
-      if (second) drawBandCard(second, margin + cardWidth + columnGap, cursorY, rowHeight);
-      cursorY += rowHeight + 5;
+    const entries = group.missingBands.map((bandNumber) => measureEntry(getEntryData(group, bandNumber)));
+    const firstPairHeight = measurePair(entries[0], entries[1] || null);
+
+    // Keep the heading, column labels and first pair together.
+    if (cursorY + 10.4 + firstPairHeight > footerY - 3.1) addPage(null);
+    drawSeriesHeading(group);
+
+    for (let index = 0; index < entries.length; index += 2) {
+      drawPair(entries[index], entries[index + 1] || null);
     }
 
-    cursorY += 2;
+    cursorY += 1.3;
   });
 
   drawPageFooter();
