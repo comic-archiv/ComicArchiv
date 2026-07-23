@@ -35,7 +35,7 @@
       <span id="connection-status" class="status-pill">Online</span>
       <span class="status-copy">Lokale Sammlung</span>
       <button id="update-app" class="update-pill" type="button">Updates prüfen</button>
-      <span id="app-version" class="version-pill">v3.4.4</span>
+      <span id="app-version" class="version-pill">v3.5.0</span>
     </section>
 
     <section id="backup-reminder" class="backup-reminder hidden" aria-live="polite">
@@ -74,6 +74,20 @@
         <div class="progress-overview-actions">
           <span id="progress-summary" class="count-badge">0 Reihen</span>
           <button id="open-progress" class="secondary-button compact-button" type="button">Details öffnen</button>
+        </div>
+      </section>
+
+      <section class="panel calendar-overview-card" aria-labelledby="calendar-overview-title">
+        <div class="calendar-overview-heading">
+          <div><p class="eyebrow">Termine</p><h3 id="calendar-overview-title">Entenarchiv-Kalender</h3></div>
+          <span id="calendar-overview-count" class="count-badge">0 Termine</span>
+        </div>
+        <div id="calendar-overview-events" class="calendar-overview-events">
+          <p class="muted-copy">Noch keine Erscheinungstermine importiert.</p>
+        </div>
+        <div class="calendar-overview-actions">
+          <span id="calendar-overview-copy" class="muted-copy">Neuerscheinungen und eigene Termine</span>
+          <button id="open-calendar" class="primary-button compact-button" type="button">Kalender öffnen</button>
         </div>
       </section>
     </section>
@@ -367,6 +381,66 @@
     </div>
   </section>
 
+  <section id="calendar-page" class="app-page hidden" aria-labelledby="calendar-title" aria-hidden="true">
+    <header class="app-page-header">
+      <button id="close-calendar" class="app-page-back" type="button" aria-label="Zurück zur Übersicht">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        <span>Zurück</span>
+      </button>
+      <div class="app-page-title"><p class="eyebrow">Neuerscheinungen &amp; eigene Termine</p><h2 id="calendar-title">Kalender</h2></div>
+      <span id="calendar-page-summary" class="count-badge">0 Termine</span>
+    </header>
+    <div class="app-page-content calendar-page-content">
+      <section class="panel calendar-toolbar" aria-label="Kalender steuern">
+        <div class="calendar-year-row">
+          <button id="calendar-prev-year" class="icon-button small-icon-button" type="button" aria-label="Vorheriges Jahr">‹</button>
+          <strong id="calendar-year-label">2026</strong>
+          <button id="calendar-next-year" class="icon-button small-icon-button" type="button" aria-label="Nächstes Jahr">›</button>
+        </div>
+        <div class="calendar-toolbar-actions">
+          <button id="calendar-add-event" class="primary-button compact-button" type="button">Termin hinzufügen</button>
+          <button id="calendar-export-reminders" class="secondary-button compact-button" type="button">In Apple Kalender</button>
+        </div>
+      </section>
+
+      <details class="panel calendar-import-panel">
+        <summary><span><strong>LTB-Jahresplan importieren</strong><small id="calendar-import-summary">Noch nicht importiert</small></span><span class="disclosure-icon" aria-hidden="true">⌄</span></summary>
+        <div class="collapsible-content">
+          <label class="field field-full"><span>iCal-Adresse des Verlags</span><input id="calendar-source-url" type="url" inputmode="url"></label>
+          <div class="calendar-import-actions">
+            <button id="calendar-fetch-source" class="primary-button" type="button">Jahresplan laden</button>
+            <a id="calendar-open-source" class="secondary-button link-button" href="#" target="_blank" rel="noopener noreferrer">iCal-Datei öffnen</a>
+            <label class="secondary-button file-button" for="calendar-file">iCal-Datei importieren</label>
+            <input id="calendar-file" class="visually-hidden" type="file" accept=".ics,text/calendar">
+          </div>
+          <p id="calendar-import-message" class="form-message" role="status" aria-live="polite"></p>
+        </div>
+      </details>
+
+      <section class="panel calendar-reminder-panel" aria-labelledby="calendar-reminder-title">
+        <div>
+          <h3 id="calendar-reminder-title">Erinnerungen auf dem iPhone</h3>
+          <p class="muted-copy">Exportiere die Termine in Apple Kalender. Die Erinnerungen werden dort am Erscheinungstag ausgelöst – auch wenn Entenarchiv geschlossen ist.</p>
+        </div>
+        <label class="field calendar-reminder-time"><span>Uhrzeit</span><input id="calendar-reminder-time" type="time" value="09:00"></label>
+      </section>
+
+      <div id="calendar-month-tabs" class="calendar-month-tabs" aria-label="Monat auswählen"></div>
+
+      <section class="panel month-calendar-panel">
+        <div class="subsection-heading"><h3 id="calendar-month-title">Januar</h3><span id="calendar-month-count" class="muted-copy">0 Termine</span></div>
+        <div class="calendar-weekdays" aria-hidden="true"><span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span></div>
+        <div id="calendar-grid" class="calendar-grid" role="grid"></div>
+      </section>
+
+      <section class="calendar-event-section" aria-labelledby="calendar-event-list-title">
+        <div class="section-heading compact-heading"><div><p class="eyebrow">Monatsübersicht</p><h3 id="calendar-event-list-title">Termine</h3></div></div>
+        <div id="calendar-event-list" class="calendar-event-list"></div>
+        <div id="calendar-empty" class="panel empty-state hidden"><div class="empty-icon" aria-hidden="true">□</div><h3>Keine Termine in diesem Monat</h3><p>Importiere den Jahresplan oder füge einen eigenen Termin hinzu.</p></div>
+      </section>
+    </div>
+  </section>
+
   <section id="media-page" class="app-page hidden" aria-labelledby="media-title" aria-hidden="true">
     <header class="app-page-header">
       <button id="close-media" class="app-page-back" type="button" aria-label="Zurück zum Backup">
@@ -558,6 +632,33 @@
           <button class="secondary-button" type="button" data-close-duplicate>Abbrechen</button>
         </div>
         <p id="duplicate-message" class="form-message" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+  </div>
+
+  <div id="calendar-event-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="calendar-event-modal-title">
+    <div class="modal-backdrop" data-close-calendar-event></div>
+    <section class="modal-card">
+      <div class="section-heading"><div><p class="eyebrow">Kalender</p><h2 id="calendar-event-modal-title">Termin hinzufügen</h2></div><button id="close-calendar-event" class="icon-button small-icon-button" type="button" aria-label="Terminfenster schließen">×</button></div>
+      <form id="calendar-event-form" novalidate>
+        <input id="calendar-event-id" type="hidden">
+        <div class="field-grid compact-field-grid">
+          <label class="field field-full"><span>Titel <strong aria-hidden="true">*</strong></span><input id="calendar-event-name" type="text" maxlength="200" required placeholder="z. B. Flohmarkt Köln"></label>
+          <label class="field"><span>Datum <strong aria-hidden="true">*</strong></span><input id="calendar-event-date" type="date" required></label>
+          <label class="field"><span>Kategorie</span><select id="calendar-event-category"><option value="flea-market">Flohmarkt</option><option value="comic-fair">Comicbörse / Messe</option><option value="other">Sonstiger Termin</option></select></label>
+          <label class="check-row field-full calendar-all-day-row"><input id="calendar-event-all-day" type="checkbox" checked><span>Ganztägiger Termin</span></label>
+          <label id="calendar-event-time-field" class="field hidden"><span>Uhrzeit</span><input id="calendar-event-time" type="time"></label>
+          <label class="field field-full"><span>Ort</span><input id="calendar-event-location" type="text" maxlength="300" placeholder="Optional"></label>
+          <label class="field field-full"><span>Link</span><input id="calendar-event-url" type="url" maxlength="1200" placeholder="Optional"></label>
+          <label class="field field-full"><span>Notizen</span><textarea id="calendar-event-notes" rows="3" maxlength="3000" placeholder="Optional"></textarea></label>
+          <label class="check-row field-full"><input id="calendar-event-reminder" type="checkbox" checked><span>Beim Apple-Kalender-Export mit Erinnerung übernehmen</span></label>
+        </div>
+        <div class="modal-actions">
+          <button class="primary-button" type="submit">Termin speichern</button>
+          <button id="calendar-event-delete" class="danger-button hidden" type="button">Termin löschen</button>
+          <button class="secondary-button" type="button" data-close-calendar-event>Abbrechen</button>
+        </div>
+        <p id="calendar-event-message" class="form-message" role="status" aria-live="polite"></p>
       </form>
     </section>
   </div>

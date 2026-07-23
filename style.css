@@ -3120,3 +3120,321 @@ input[type="radio"] {
   background: var(--page-bg);
   box-shadow: 0 6px 18px color-mix(in srgb, #000 32%, transparent);
 }
+
+/* Kalender */
+.calendar-overview-card {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.calendar-overview-heading,
+.calendar-overview-actions,
+.calendar-year-row,
+.calendar-toolbar-actions,
+.calendar-import-actions,
+.calendar-reminder-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.calendar-overview-heading h3,
+.calendar-reminder-panel h3 {
+  margin: 0;
+}
+
+.calendar-overview-events {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.calendar-overview-event {
+  display: grid;
+  grid-template-columns: minmax(4.8rem, auto) 1fr;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--surface-soft);
+}
+
+.calendar-overview-date {
+  font-variant-numeric: tabular-nums;
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.calendar-page-content {
+  display: grid;
+  gap: 1rem;
+}
+
+.calendar-toolbar {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.9rem;
+}
+
+.calendar-year-row {
+  justify-content: center;
+}
+
+.calendar-year-row strong {
+  min-width: 6rem;
+  text-align: center;
+  font-size: 1.35rem;
+}
+
+.calendar-toolbar-actions,
+.calendar-import-actions {
+  flex-wrap: wrap;
+}
+
+.calendar-toolbar-actions > *,
+.calendar-import-actions > * {
+  flex: 1 1 10rem;
+}
+
+.calendar-import-panel > summary {
+  cursor: pointer;
+}
+
+.calendar-reminder-panel {
+  align-items: end;
+}
+
+.calendar-reminder-panel > div {
+  min-width: 0;
+}
+
+.calendar-reminder-panel p {
+  margin: 0.35rem 0 0;
+}
+
+.calendar-reminder-time {
+  min-width: 7rem;
+  max-width: 9rem;
+}
+
+.calendar-month-tabs {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.1rem 0 0.4rem;
+  scrollbar-width: none;
+}
+
+.calendar-month-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.calendar-month-tab {
+  flex: 0 0 auto;
+  min-height: 2.65rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 750;
+}
+
+.calendar-month-tab.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-text);
+}
+
+.month-calendar-panel {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.calendar-weekdays,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.calendar-weekdays span {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.calendar-day {
+  min-width: 0;
+  min-height: 3.2rem;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 0.2rem;
+  padding: 0.25rem;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 750;
+}
+
+.calendar-day:not(.calendar-day-empty):active,
+.calendar-day:not(.calendar-day-empty):focus-visible {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.calendar-day-empty {
+  pointer-events: none;
+}
+
+.calendar-day-today {
+  box-shadow: inset 0 0 0 2px var(--secondary);
+}
+
+.calendar-day-has-events {
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+}
+
+.calendar-day-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.18rem;
+}
+
+.calendar-dot {
+  width: 0.34rem;
+  height: 0.34rem;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.calendar-dot-flea-market { background: var(--secondary); }
+.calendar-dot-comic-fair { background: var(--success); }
+.calendar-dot-other { background: var(--text-muted); }
+
+.calendar-event-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.calendar-event-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.calendar-event-card {
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-left: 0.3rem solid var(--primary);
+  border-radius: 0.9rem;
+  background: var(--surface);
+}
+
+.calendar-event-flea-market { border-left-color: var(--secondary); }
+.calendar-event-comic-fair { border-left-color: var(--success); }
+.calendar-event-other { border-left-color: var(--text-muted); }
+
+.calendar-event-date {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  min-height: 3.5rem;
+  border-radius: 0.75rem;
+  background: var(--surface-soft);
+}
+
+.calendar-event-date strong {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.calendar-event-date span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.calendar-event-copy {
+  min-width: 0;
+}
+
+.calendar-event-copy h4 {
+  margin: 0.25rem 0;
+  font-size: 1rem;
+}
+
+.calendar-event-copy p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.calendar-event-badge {
+  display: inline-flex;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+  font-size: 0.7rem;
+  font-weight: 850;
+}
+
+.calendar-event-actions {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.calendar-event-link {
+  color: var(--primary);
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.calendar-all-day-row {
+  align-self: end;
+}
+
+@media (min-width: 680px) {
+  .calendar-toolbar {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+  }
+
+  .calendar-toolbar-actions {
+    justify-content: flex-end;
+  }
+
+  .calendar-toolbar-actions > * {
+    flex: 0 1 auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .calendar-overview-actions,
+  .calendar-reminder-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .calendar-reminder-time {
+    max-width: none;
+    width: 100%;
+  }
+
+  .calendar-day {
+    min-height: 2.75rem;
+  }
+}

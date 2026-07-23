@@ -373,8 +373,66 @@ function normalizeSettings(settings) {
       ? Math.min(lastBackupComicCount, 999999)
       : 0,
     showCovers: source.showCovers !== false,
-    duckipediaAutoEnrich: source.duckipediaAutoEnrich !== false
+    duckipediaAutoEnrich: source.duckipediaAutoEnrich !== false,
+    calendarEvents: normalizeCalendarEvents(source.calendarEvents),
+    calendarSourceUrl: normalizeOptionalUrl(source.calendarSourceUrl) || DEFAULT_SETTINGS.calendarSourceUrl,
+    calendarSourceName: typeof source.calendarSourceName === "string" && source.calendarSourceName.trim()
+      ? source.calendarSourceName.trim().slice(0, 120)
+      : DEFAULT_SETTINGS.calendarSourceName,
+    calendarLastImportAt: isValidDateString(source.calendarLastImportAt) ? source.calendarLastImportAt : null,
+    calendarSelectedYear: Number.isSafeInteger(Number(source.calendarSelectedYear))
+      ? Math.min(2100, Math.max(1900, Number(source.calendarSelectedYear)))
+      : DEFAULT_SETTINGS.calendarSelectedYear,
+    calendarSelectedMonth: Number.isSafeInteger(Number(source.calendarSelectedMonth))
+      ? Math.min(11, Math.max(0, Number(source.calendarSelectedMonth)))
+      : DEFAULT_SETTINGS.calendarSelectedMonth,
+    calendarReminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(source.calendarReminderTime || ""))
+      ? String(source.calendarReminderTime)
+      : DEFAULT_SETTINGS.calendarReminderTime
   };
+}
+
+
+function normalizeCalendarEvents(value) {
+  const entries = Array.isArray(value) ? value : [];
+  const events = [];
+  entries.forEach((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
+    const title = typeof entry.title === "string" ? entry.title.trim().slice(0, 200) : "";
+    const startDate = typeof entry.startDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(entry.startDate)
+      ? entry.startDate
+      : "";
+    if (!title || !startDate || Number.isNaN(Date.parse(`${startDate}T12:00:00`))) return;
+    const endDate = typeof entry.endDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(entry.endDate)
+      ? entry.endDate
+      : startDate;
+    const sourceType = entry.source === "publisher" ? "publisher" : "custom";
+    const category = ["release", "flea-market", "comic-fair", "other"].includes(entry.category)
+      ? entry.category
+      : sourceType === "publisher" ? "release" : "other";
+    const normalizeTime = (time) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(time || "")) ? String(time) : "";
+    events.push({
+      id: typeof entry.id === "string" && entry.id ? entry.id.slice(0, 300) : `calendar-${Date.now()}-${Math.random()}`,
+      uid: typeof entry.uid === "string" ? entry.uid.trim().slice(0, 500) : "",
+      title,
+      startDate,
+      endDate,
+      allDay: entry.allDay !== false,
+      startTime: normalizeTime(entry.startTime),
+      endTime: normalizeTime(entry.endTime),
+      location: typeof entry.location === "string" ? entry.location.trim().slice(0, 300) : "",
+      notes: typeof entry.notes === "string" ? entry.notes.trim().slice(0, 3000) : "",
+      url: normalizeOptionalUrl(entry.url),
+      source: sourceType,
+      sourceUrl: normalizeOptionalUrl(entry.sourceUrl),
+      sourceName: typeof entry.sourceName === "string" ? entry.sourceName.trim().slice(0, 120) : "",
+      category,
+      reminderEnabled: entry.reminderEnabled !== false,
+      createdAt: isValidDateString(entry.createdAt) ? entry.createdAt : new Date().toISOString(),
+      updatedAt: isValidDateString(entry.updatedAt) ? entry.updatedAt : new Date().toISOString()
+    });
+  });
+  return events.slice(0, 5000);
 }
 
 

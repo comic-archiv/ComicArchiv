@@ -1,4 +1,4 @@
-const CACHE_NAME = "comicarchiv-shell-v3-4-4";
+const CACHE_NAME = "comicarchiv-shell-v3-5-0";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -10,6 +10,7 @@ const APP_SHELL = [
   "./scanner.js",
   "./duckipedia.js",
   "./media.js",
+  "./calendar.js",
   "./app.js",
   "./vendor/quagga.min.js",
   "./vendor/jspdf.umd.min.js",

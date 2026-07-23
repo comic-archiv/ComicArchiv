@@ -6,6 +6,7 @@ import {
   normalizeDuckipediaPattern
 } from "./config.js";
 import { blobToDataUrl } from "./media.js";
+import { normalizeCalendarEvent } from "./calendar.js";
 
 const CSV_SEPARATOR = ";";
 const UTF8_BOM = "\uFEFF";
@@ -436,7 +437,14 @@ function serializeSettings(settings = {}) {
     mediaChangesSinceBackup: Number.isSafeInteger(settings.mediaChangesSinceBackup) ? settings.mediaChangesSinceBackup : 0,
     lastBackupComicCount: Number.isSafeInteger(settings.lastBackupComicCount) ? settings.lastBackupComicCount : 0,
     showCovers: settings.showCovers !== false,
-    duckipediaAutoEnrich: settings.duckipediaAutoEnrich !== false
+    duckipediaAutoEnrich: settings.duckipediaAutoEnrich !== false,
+    calendarEvents: Array.isArray(settings.calendarEvents) ? settings.calendarEvents : [],
+    calendarSourceUrl: settings.calendarSourceUrl || "",
+    calendarSourceName: settings.calendarSourceName || "LTB Jahresplan",
+    calendarLastImportAt: settings.calendarLastImportAt || null,
+    calendarSelectedYear: Number(settings.calendarSelectedYear) || new Date().getFullYear(),
+    calendarSelectedMonth: Number.isInteger(Number(settings.calendarSelectedMonth)) ? Number(settings.calendarSelectedMonth) : new Date().getMonth(),
+    calendarReminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(settings.calendarReminderTime || "")) ? settings.calendarReminderTime : "09:00"
   };
 }
 
@@ -764,7 +772,16 @@ function normalizeImportedSettings(settings, seriesConfiguration) {
     mediaChangesSinceBackup: Number.isSafeInteger(mediaChangesSinceBackup) && mediaChangesSinceBackup >= 0 ? mediaChangesSinceBackup : 0,
     lastBackupComicCount: Number.isSafeInteger(lastBackupComicCount) && lastBackupComicCount >= 0 ? lastBackupComicCount : 0,
     showCovers: source.showCovers !== false,
-    duckipediaAutoEnrich: source.duckipediaAutoEnrich !== false
+    duckipediaAutoEnrich: source.duckipediaAutoEnrich !== false,
+    calendarEvents: Array.isArray(source.calendarEvents)
+      ? source.calendarEvents.map(normalizeCalendarEvent).filter(Boolean)
+      : [],
+    calendarSourceUrl: normalizeOptionalHttpUrl(source.calendarSourceUrl),
+    calendarSourceName: normalizeOptionalString(source.calendarSourceName, 120, "Kalenderquelle") || "LTB Jahresplan",
+    calendarLastImportAt: isValidDateString(source.calendarLastImportAt) ? source.calendarLastImportAt : null,
+    calendarSelectedYear: Number.isSafeInteger(Number(source.calendarSelectedYear)) ? Number(source.calendarSelectedYear) : new Date().getFullYear(),
+    calendarSelectedMonth: Number.isSafeInteger(Number(source.calendarSelectedMonth)) ? Math.min(11, Math.max(0, Number(source.calendarSelectedMonth))) : new Date().getMonth(),
+    calendarReminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(source.calendarReminderTime || "")) ? String(source.calendarReminderTime) : "09:00"
   };
 }
 

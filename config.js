@@ -1,6 +1,6 @@
 export const APP_CONFIG = Object.freeze({
-  appVersion: "3.4.4",
-  dataFormatVersion: 5,
+  appVersion: "3.5.0",
+  dataFormatVersion: 6,
   minimumSupportedBackupVersion: 1,
   storageName: "ComicArchiv",
   displayName: "Entenarchiv",
@@ -95,7 +95,14 @@ export const DEFAULT_SETTINGS = Object.freeze({
   mediaChangesSinceBackup: 0,
   lastBackupComicCount: 0,
   showCovers: true,
-  duckipediaAutoEnrich: true
+  duckipediaAutoEnrich: true,
+  calendarEvents: Object.freeze([]),
+  calendarSourceUrl: "https://www.lustiges-taschenbuch.de/sites/default/files/2025-11/ltb_evt_2026v2.ics",
+  calendarSourceName: "LTB Jahresplan",
+  calendarLastImportAt: null,
+  calendarSelectedYear: new Date().getFullYear(),
+  calendarSelectedMonth: new Date().getMonth(),
+  calendarReminderTime: "09:00"
 });
 
 export function getConditionLabel(code) {

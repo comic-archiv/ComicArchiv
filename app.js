@@ -50,6 +50,21 @@ import {
   shareOrDownloadText
 } from "./export.js";
 import { dataUrlToBlob, prepareCoverImage } from "./media.js";
+import {
+  DEFAULT_RELEASE_CALENDAR_URL,
+  buildCalendarIcs,
+  compareCalendarEvents,
+  createCalendarEventId,
+  formatCalendarDate,
+  getEventsForMonth,
+  getEventsForYear,
+  getMonthName,
+  getUpcomingEvents,
+  isToday,
+  mergePublisherCalendarEvents,
+  normalizeCalendarEvent,
+  parseIcsCalendar
+} from "./calendar.js";
 
 const THEME_STORAGE_KEY = "comicarchiv-theme";
 
@@ -88,7 +103,9 @@ const state = {
   missingLookupSequence: 0,
   fleaMarketScope: "all",
   selectedDuplicateComicId: null,
-  editingCustomSeriesName: ""
+  editingCustomSeriesName: "",
+  selectedCalendarEventId: null,
+  calendarImporting: false
 };
 
 const elements = {
@@ -176,6 +193,48 @@ const elements = {
   fleaMarketSave: document.querySelector("#flea-market-save"),
   fleaMarketClear: document.querySelector("#flea-market-clear"),
   fleaMarketMessage: document.querySelector("#flea-market-message"),
+  openCalendar: document.querySelector("#open-calendar"),
+  calendarPage: document.querySelector("#calendar-page"),
+  closeCalendar: document.querySelector("#close-calendar"),
+  calendarPageSummary: document.querySelector("#calendar-page-summary"),
+  calendarOverviewCount: document.querySelector("#calendar-overview-count"),
+  calendarOverviewEvents: document.querySelector("#calendar-overview-events"),
+  calendarOverviewCopy: document.querySelector("#calendar-overview-copy"),
+  calendarPrevYear: document.querySelector("#calendar-prev-year"),
+  calendarNextYear: document.querySelector("#calendar-next-year"),
+  calendarYearLabel: document.querySelector("#calendar-year-label"),
+  calendarMonthTabs: document.querySelector("#calendar-month-tabs"),
+  calendarMonthTitle: document.querySelector("#calendar-month-title"),
+  calendarMonthCount: document.querySelector("#calendar-month-count"),
+  calendarGrid: document.querySelector("#calendar-grid"),
+  calendarEventList: document.querySelector("#calendar-event-list"),
+  calendarEmpty: document.querySelector("#calendar-empty"),
+  calendarSourceUrl: document.querySelector("#calendar-source-url"),
+  calendarOpenSource: document.querySelector("#calendar-open-source"),
+  calendarFetchSource: document.querySelector("#calendar-fetch-source"),
+  calendarFile: document.querySelector("#calendar-file"),
+  calendarImportSummary: document.querySelector("#calendar-import-summary"),
+  calendarImportMessage: document.querySelector("#calendar-import-message"),
+  calendarAddEvent: document.querySelector("#calendar-add-event"),
+  calendarExportReminders: document.querySelector("#calendar-export-reminders"),
+  calendarReminderTime: document.querySelector("#calendar-reminder-time"),
+  calendarEventModal: document.querySelector("#calendar-event-modal"),
+  closeCalendarEvent: document.querySelector("#close-calendar-event"),
+  calendarEventForm: document.querySelector("#calendar-event-form"),
+  calendarEventModalTitle: document.querySelector("#calendar-event-modal-title"),
+  calendarEventId: document.querySelector("#calendar-event-id"),
+  calendarEventName: document.querySelector("#calendar-event-name"),
+  calendarEventDate: document.querySelector("#calendar-event-date"),
+  calendarEventCategory: document.querySelector("#calendar-event-category"),
+  calendarEventAllDay: document.querySelector("#calendar-event-all-day"),
+  calendarEventTimeField: document.querySelector("#calendar-event-time-field"),
+  calendarEventTime: document.querySelector("#calendar-event-time"),
+  calendarEventLocation: document.querySelector("#calendar-event-location"),
+  calendarEventUrl: document.querySelector("#calendar-event-url"),
+  calendarEventNotes: document.querySelector("#calendar-event-notes"),
+  calendarEventReminder: document.querySelector("#calendar-event-reminder"),
+  calendarEventDelete: document.querySelector("#calendar-event-delete"),
+  calendarEventMessage: document.querySelector("#calendar-event-message"),
   themeToggle: document.querySelector("#theme-toggle"),
   themeIcon: document.querySelector("#theme-icon"),
   connectionStatus: document.querySelector("#connection-status"),
@@ -349,6 +408,7 @@ async function initializeApp() {
   renderBackupStatus();
   await refreshStorageStatus();
   await refreshMediaStatus();
+  renderCalendarOverview();
   registerServiceWorker();
 }
 
@@ -481,6 +541,26 @@ function bindEvents() {
   elements.fleaMarketApplyCondition.addEventListener("click", applyFleaMarketDefaultCondition);
   elements.fleaMarketSave.addEventListener("click", saveFleaMarketFinds);
   elements.fleaMarketClear.addEventListener("click", clearFleaMarketFinds);
+  elements.openCalendar.addEventListener("click", openCalendarPage);
+  elements.closeCalendar.addEventListener("click", closeCalendarPage);
+  elements.calendarPrevYear.addEventListener("click", () => changeCalendarYear(-1));
+  elements.calendarNextYear.addEventListener("click", () => changeCalendarYear(1));
+  elements.calendarMonthTabs.addEventListener("click", handleCalendarMonthTabClick);
+  elements.calendarGrid.addEventListener("click", handleCalendarDayClick);
+  elements.calendarEventList.addEventListener("click", handleCalendarEventListClick);
+  elements.calendarFetchSource.addEventListener("click", () => loadCalendarFromSource({ silent: false }));
+  elements.calendarFile.addEventListener("change", handleCalendarFileImport);
+  elements.calendarSourceUrl.addEventListener("input", syncCalendarSourceLink);
+  elements.calendarAddEvent.addEventListener("click", () => openCalendarEventModal());
+  elements.calendarExportReminders.addEventListener("click", exportCalendarWithReminders);
+  elements.calendarReminderTime.addEventListener("change", handleCalendarReminderTimeChange);
+  elements.calendarEventForm.addEventListener("submit", handleCalendarEventSubmit);
+  elements.calendarEventAllDay.addEventListener("change", syncCalendarEventTimeVisibility);
+  elements.calendarEventDelete.addEventListener("click", deleteSelectedCalendarEvent);
+  elements.closeCalendarEvent.addEventListener("click", closeCalendarEventModal);
+  elements.calendarEventModal.addEventListener("click", (event) => {
+    if (event.target.closest("[data-close-calendar-event]")) closeCalendarEventModal();
+  });
   elements.openProgress.addEventListener("click", openProgressPage);
   elements.closeProgress.addEventListener("click", closeProgressPage);
   elements.openScanner.addEventListener("click", openScannerModal);
@@ -579,6 +659,8 @@ function bindEvents() {
     if (!elements.collectionPage.classList.contains("hidden")) return closeCollectionPage();
     if (!elements.missingPage.classList.contains("hidden")) return closeMissingPage();
     if (!elements.fleaMarketPage.classList.contains("hidden")) return closeFleaMarketPage();
+    if (!elements.calendarEventModal.classList.contains("hidden")) return closeCalendarEventModal();
+    if (!elements.calendarPage.classList.contains("hidden")) return closeCalendarPage();
     if (!elements.progressPage.classList.contains("hidden")) return closeProgressPage();
     if (!elements.mediaPage.classList.contains("hidden")) return closeMediaPage();
   });
@@ -1010,6 +1092,7 @@ async function refreshCollection() {
     if (!elements.fleaMarketPage.classList.contains("hidden")) renderFleaMarket();
     renderSeriesProgress();
     renderBackupStatus();
+    renderCalendarOverview();
   } catch (error) {
     console.error(error);
     showFormMessage(`Lokale Daten konnten nicht geladen werden: ${error.message}`, "error");
@@ -4699,5 +4782,427 @@ async function handleUpdateButtonClick() {
       elements.updateApp.disabled = false;
       elements.updateApp.textContent = "Updates prüfen";
     }
+  }
+}
+
+function getCalendarEvents() {
+  return Array.isArray(state.settings.calendarEvents)
+    ? state.settings.calendarEvents.map(normalizeCalendarEvent).filter(Boolean).sort(compareCalendarEvents)
+    : [];
+}
+
+function renderCalendarOverview() {
+  const events = getCalendarEvents();
+  const currentYear = new Date().getFullYear();
+  const yearEvents = getEventsForYear(events, currentYear);
+  const upcoming = getUpcomingEvents(events, new Date(), 3);
+  elements.calendarOverviewCount.textContent = yearEvents.length === 1 ? "1 Termin" : `${yearEvents.length} Termine`;
+  elements.calendarOverviewCopy.textContent = state.settings.calendarLastImportAt
+    ? `Jahresplan zuletzt aktualisiert: ${formatDateTime(state.settings.calendarLastImportAt)}`
+    : "Neuerscheinungen und eigene Termine";
+  elements.calendarOverviewEvents.replaceChildren();
+
+  if (upcoming.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted-copy";
+    empty.textContent = events.length ? "Keine weiteren Termine geplant." : "Noch keine Erscheinungstermine importiert.";
+    elements.calendarOverviewEvents.append(empty);
+    return;
+  }
+
+  upcoming.forEach((event) => {
+    const row = document.createElement("div");
+    row.className = `calendar-overview-event calendar-event-${event.category}`;
+    const date = document.createElement("span");
+    date.className = "calendar-overview-date";
+    date.textContent = formatCalendarDate(event.startDate, { includeWeekday: false, includeYear: event.startDate.slice(0, 4) !== String(currentYear) });
+    const title = document.createElement("strong");
+    title.textContent = event.title;
+    row.append(date, title);
+    elements.calendarOverviewEvents.append(row);
+  });
+}
+
+async function openCalendarPage() {
+  elements.calendarSourceUrl.value = state.settings.calendarSourceUrl || DEFAULT_RELEASE_CALENDAR_URL;
+  elements.calendarReminderTime.value = state.settings.calendarReminderTime || "09:00";
+  syncCalendarSourceLink();
+  elements.calendarPage.classList.remove("hidden");
+  elements.calendarPage.setAttribute("aria-hidden", "false");
+  document.body.classList.add("app-page-open");
+  elements.calendarPage.scrollTop = 0;
+  renderCalendarPage();
+  window.setTimeout(() => elements.closeCalendar.focus({ preventScroll: true }), 0);
+
+  const publisherEvents = getCalendarEvents().filter((event) => event.source === "publisher");
+  if (publisherEvents.length === 0 && navigator.onLine) {
+    await loadCalendarFromSource({ silent: true });
+  }
+}
+
+function closeCalendarPage() {
+  elements.calendarPage.classList.add("hidden");
+  elements.calendarPage.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("app-page-open");
+  window.setTimeout(() => elements.openCalendar.focus({ preventScroll: true }), 0);
+}
+
+function renderCalendarPage() {
+  const year = Number(state.settings.calendarSelectedYear || new Date().getFullYear());
+  const month = Number(state.settings.calendarSelectedMonth ?? new Date().getMonth());
+  const yearEvents = getEventsForYear(getCalendarEvents(), year);
+  elements.calendarYearLabel.textContent = String(year);
+  elements.calendarPageSummary.textContent = yearEvents.length === 1 ? "1 Termin" : `${yearEvents.length} Termine`;
+  elements.calendarMonthTitle.textContent = `${getMonthName(month)} ${year}`;
+  const monthEvents = getEventsForMonth(yearEvents, year, month);
+  elements.calendarMonthCount.textContent = monthEvents.length === 1 ? "1 Termin" : `${monthEvents.length} Termine`;
+  elements.calendarImportSummary.textContent = state.settings.calendarLastImportAt
+    ? `Zuletzt ${formatDateTime(state.settings.calendarLastImportAt)}`
+    : "Noch nicht importiert";
+  renderCalendarMonthTabs(year, month, yearEvents);
+  renderCalendarGrid(year, month, monthEvents);
+  renderCalendarEventList(monthEvents);
+}
+
+function renderCalendarMonthTabs(year, selectedMonth, yearEvents) {
+  elements.calendarMonthTabs.replaceChildren();
+  for (let month = 0; month < 12; month += 1) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.calendarMonth = String(month);
+    button.className = "calendar-month-tab";
+    if (month === selectedMonth) button.classList.add("active");
+    const count = getEventsForMonth(yearEvents, year, month).length;
+    button.textContent = `${getMonthName(month).slice(0, 3)}${count ? ` · ${count}` : ""}`;
+    elements.calendarMonthTabs.append(button);
+  }
+}
+
+function renderCalendarGrid(year, month, monthEvents) {
+  elements.calendarGrid.replaceChildren();
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const offset = (firstDay.getDay() + 6) % 7;
+  for (let index = 0; index < offset; index += 1) {
+    const spacer = document.createElement("span");
+    spacer.className = "calendar-day calendar-day-empty";
+    spacer.setAttribute("aria-hidden", "true");
+    elements.calendarGrid.append(spacer);
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const dayEvents = monthEvents.filter((event) => event.startDate === date);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "calendar-day";
+    button.dataset.calendarDate = date;
+    if (isToday(date)) button.classList.add("calendar-day-today");
+    if (dayEvents.length) button.classList.add("calendar-day-has-events");
+    button.setAttribute("aria-label", `${day}. ${getMonthName(month)}${dayEvents.length ? `, ${dayEvents.length} Termine` : ""}`);
+    const number = document.createElement("span");
+    number.textContent = String(day);
+    button.append(number);
+    if (dayEvents.length) {
+      const dots = document.createElement("span");
+      dots.className = "calendar-day-dots";
+      [...new Set(dayEvents.map((event) => event.category))].slice(0, 3).forEach((category) => {
+        const dot = document.createElement("i");
+        dot.className = `calendar-dot calendar-dot-${category}`;
+        dots.append(dot);
+      });
+      button.append(dots);
+    }
+    elements.calendarGrid.append(button);
+  }
+}
+
+function renderCalendarEventList(events) {
+  elements.calendarEventList.replaceChildren();
+  elements.calendarEmpty.classList.toggle("hidden", events.length > 0);
+  if (!events.length) return;
+
+  events.forEach((event) => {
+    const article = document.createElement("article");
+    article.className = `calendar-event-card calendar-event-${event.category}`;
+    article.dataset.calendarEventId = event.id;
+    const dateBlock = document.createElement("div");
+    dateBlock.className = "calendar-event-date";
+    const dateNumber = document.createElement("strong");
+    dateNumber.textContent = String(Number(event.startDate.slice(8, 10)));
+    const weekday = document.createElement("span");
+    weekday.textContent = new Intl.DateTimeFormat("de-DE", { weekday: "short" }).format(new Date(`${event.startDate}T12:00:00`));
+    dateBlock.append(dateNumber, weekday);
+
+    const copy = document.createElement("div");
+    copy.className = "calendar-event-copy";
+    const badge = document.createElement("span");
+    badge.className = "calendar-event-badge";
+    badge.textContent = event.source === "publisher" ? "Neuerscheinung" : event.category === "flea-market" ? "Flohmarkt" : event.category === "comic-fair" ? "Comicbörse" : "Eigener Termin";
+    const title = document.createElement("h4");
+    title.textContent = event.title;
+    const metadata = document.createElement("p");
+    metadata.textContent = [event.startTime, event.location].filter(Boolean).join(" · ") || (event.source === "publisher" ? event.sourceName : "Ganztägig");
+    copy.append(badge, title, metadata);
+
+    const actions = document.createElement("div");
+    actions.className = "calendar-event-actions";
+    const url = event.url || inferDuckipediaUrlFromCalendarTitle(event.title);
+    if (url) {
+      const link = document.createElement("a");
+      link.className = "calendar-event-link";
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "Details ↗";
+      actions.append(link);
+    }
+    if (event.source === "custom") {
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.className = "text-button";
+      edit.dataset.calendarEdit = event.id;
+      edit.textContent = "Bearbeiten";
+      actions.append(edit);
+    }
+    article.append(dateBlock, copy, actions);
+    elements.calendarEventList.append(article);
+  });
+}
+
+function inferDuckipediaUrlFromCalendarTitle(title) {
+  const match = String(title || "").trim().match(/^LTB(?:\s+(.+?))?\s+(\d+)$/i);
+  if (!match) return "";
+  const series = match[1] ? `LTB ${match[1]}` : "Lustiges Taschenbuch";
+  return createConfiguredDuckipediaUrl(series, Number(match[2]), title);
+}
+
+async function changeCalendarYear(delta) {
+  const nextYear = Math.min(2100, Math.max(1900, Number(state.settings.calendarSelectedYear || new Date().getFullYear()) + delta));
+  state.settings = await saveAppSettings({ ...state.settings, calendarSelectedYear: nextYear });
+  renderCalendarPage();
+}
+
+async function setCalendarMonth(month) {
+  const normalizedMonth = Math.min(11, Math.max(0, Number(month)));
+  state.settings = await saveAppSettings({ ...state.settings, calendarSelectedMonth: normalizedMonth });
+  renderCalendarPage();
+}
+
+function handleCalendarMonthTabClick(event) {
+  const button = event.target.closest("button[data-calendar-month]");
+  if (!button) return;
+  setCalendarMonth(Number(button.dataset.calendarMonth));
+}
+
+function handleCalendarDayClick(event) {
+  const button = event.target.closest("button[data-calendar-date]");
+  if (!button) return;
+  const card = [...elements.calendarEventList.querySelectorAll("[data-calendar-event-id]")].find((entry) => {
+    const calendarEvent = getCalendarEvents().find((item) => item.id === entry.dataset.calendarEventId);
+    return calendarEvent?.startDate === button.dataset.calendarDate;
+  });
+  if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function handleCalendarEventListClick(event) {
+  const edit = event.target.closest("button[data-calendar-edit]");
+  if (!edit) return;
+  const calendarEvent = getCalendarEvents().find((item) => item.id === edit.dataset.calendarEdit);
+  if (calendarEvent) openCalendarEventModal(calendarEvent);
+}
+
+function syncCalendarSourceLink() {
+  const value = elements.calendarSourceUrl.value.trim() || DEFAULT_RELEASE_CALENDAR_URL;
+  elements.calendarOpenSource.href = value;
+}
+
+async function loadCalendarFromSource({ silent = false } = {}) {
+  if (state.calendarImporting) return;
+  const sourceUrl = elements.calendarSourceUrl.value.trim() || state.settings.calendarSourceUrl || DEFAULT_RELEASE_CALENDAR_URL;
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(sourceUrl);
+    if (parsedUrl.protocol !== "https:") throw new Error();
+  } catch {
+    if (!silent) showCalendarImportMessage("Bitte gib eine gültige HTTPS-Adresse ein.", "error");
+    return;
+  }
+
+  state.calendarImporting = true;
+  elements.calendarFetchSource.disabled = true;
+  if (!silent) showCalendarImportMessage("Jahresplan wird geladen …", "info");
+  try {
+    const response = await fetch(parsedUrl.href, { cache: "no-store", mode: "cors" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const text = await response.text();
+    await importCalendarText(text, parsedUrl.href, "LTB Jahresplan");
+    if (!silent) showCalendarImportMessage("Der Jahresplan wurde erfolgreich aktualisiert.", "success");
+  } catch (error) {
+    console.warn("Kalenderquelle konnte nicht direkt geladen werden:", error);
+    if (!silent) {
+      showCalendarImportMessage("Direktes Laden wurde vom Server oder Browser blockiert. Öffne die iCal-Datei und importiere sie anschließend über „iCal-Datei importieren“.", "error");
+    } else {
+      elements.calendarImportSummary.textContent = "iCal-Datei manuell importieren";
+    }
+  } finally {
+    state.calendarImporting = false;
+    elements.calendarFetchSource.disabled = false;
+  }
+}
+
+async function handleCalendarFileImport(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    await importCalendarText(text, elements.calendarSourceUrl.value.trim(), file.name.replace(/\.ics$/i, "") || "LTB Jahresplan");
+    showCalendarImportMessage("iCal-Datei wurde erfolgreich importiert.", "success");
+  } catch (error) {
+    showCalendarImportMessage(`Import fehlgeschlagen: ${error.message}`, "error");
+  } finally {
+    event.target.value = "";
+  }
+}
+
+async function importCalendarText(text, sourceUrl, sourceName) {
+  const importedEvents = parseIcsCalendar(text, { sourceUrl, sourceName });
+  const mergedEvents = mergePublisherCalendarEvents(getCalendarEvents(), importedEvents, sourceUrl);
+  const importedYears = [...new Set(importedEvents.map((event) => Number(event.startDate.slice(0, 4))))].filter(Number.isFinite);
+  const preferredYear = importedYears.includes(new Date().getFullYear()) ? new Date().getFullYear() : importedYears[0] || state.settings.calendarSelectedYear;
+  state.settings = await saveMeaningfulSettings({
+    calendarEvents: mergedEvents,
+    calendarSourceUrl: sourceUrl || state.settings.calendarSourceUrl,
+    calendarSourceName: sourceName || "LTB Jahresplan",
+    calendarLastImportAt: new Date().toISOString(),
+    calendarSelectedYear: preferredYear
+  }, 1);
+  renderCalendarOverview();
+  renderCalendarPage();
+}
+
+function showCalendarImportMessage(message, type = "info") {
+  elements.calendarImportMessage.textContent = message;
+  elements.calendarImportMessage.dataset.type = type;
+}
+
+function openCalendarEventModal(calendarEvent = null) {
+  const event = calendarEvent ? normalizeCalendarEvent(calendarEvent) : null;
+  state.selectedCalendarEventId = event?.id || null;
+  elements.calendarEventModalTitle.textContent = event ? "Termin bearbeiten" : "Termin hinzufügen";
+  elements.calendarEventId.value = event?.id || "";
+  elements.calendarEventName.value = event?.title || "";
+  elements.calendarEventDate.value = event?.startDate || `${state.settings.calendarSelectedYear}-${String(Number(state.settings.calendarSelectedMonth ?? new Date().getMonth()) + 1).padStart(2, "0")}-01`;
+  elements.calendarEventCategory.value = event?.category && event.category !== "release" ? event.category : "flea-market";
+  elements.calendarEventAllDay.checked = event ? event.allDay !== false : true;
+  elements.calendarEventTime.value = event?.startTime || "10:00";
+  elements.calendarEventLocation.value = event?.location || "";
+  elements.calendarEventUrl.value = event?.url || "";
+  elements.calendarEventNotes.value = event?.notes || "";
+  elements.calendarEventReminder.checked = event ? event.reminderEnabled !== false : true;
+  elements.calendarEventDelete.classList.toggle("hidden", !event);
+  elements.calendarEventMessage.textContent = "";
+  syncCalendarEventTimeVisibility();
+  elements.calendarEventModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+  window.setTimeout(() => elements.calendarEventName.focus({ preventScroll: true }), 0);
+}
+
+function closeCalendarEventModal() {
+  elements.calendarEventModal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+  state.selectedCalendarEventId = null;
+}
+
+function syncCalendarEventTimeVisibility() {
+  elements.calendarEventTimeField.classList.toggle("hidden", elements.calendarEventAllDay.checked);
+}
+
+async function handleCalendarEventSubmit(event) {
+  event.preventDefault();
+  const title = elements.calendarEventName.value.trim();
+  const startDate = elements.calendarEventDate.value;
+  if (!title || !startDate) {
+    elements.calendarEventMessage.textContent = "Bitte gib Titel und Datum an.";
+    elements.calendarEventMessage.dataset.type = "error";
+    return;
+  }
+
+  const existing = getCalendarEvents().find((item) => item.id === state.selectedCalendarEventId);
+  const now = new Date().toISOString();
+  const calendarEvent = normalizeCalendarEvent({
+    id: existing?.id || createCalendarEventId("custom"),
+    uid: existing?.uid || "",
+    title,
+    startDate,
+    endDate: startDate,
+    allDay: elements.calendarEventAllDay.checked,
+    startTime: elements.calendarEventAllDay.checked ? "" : elements.calendarEventTime.value,
+    endTime: "",
+    location: elements.calendarEventLocation.value,
+    notes: elements.calendarEventNotes.value,
+    url: elements.calendarEventUrl.value,
+    source: "custom",
+    sourceName: "Eigener Termin",
+    category: elements.calendarEventCategory.value,
+    reminderEnabled: elements.calendarEventReminder.checked,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now
+  });
+  if (!calendarEvent) return;
+
+  const nextEvents = getCalendarEvents().filter((item) => item.id !== calendarEvent.id);
+  nextEvents.push(calendarEvent);
+  state.settings = await saveMeaningfulSettings({
+    calendarEvents: nextEvents,
+    calendarSelectedYear: Number(startDate.slice(0, 4)),
+    calendarSelectedMonth: Number(startDate.slice(5, 7)) - 1
+  }, 1);
+  closeCalendarEventModal();
+  renderCalendarOverview();
+  renderCalendarPage();
+  showToast(existing ? "Termin aktualisiert." : "Termin gespeichert.");
+}
+
+async function deleteSelectedCalendarEvent() {
+  const calendarEvent = getCalendarEvents().find((item) => item.id === state.selectedCalendarEventId);
+  if (!calendarEvent || calendarEvent.source !== "custom") return;
+  if (!window.confirm(`„${calendarEvent.title}“ wirklich löschen?`)) return;
+  state.settings = await saveMeaningfulSettings({
+    calendarEvents: getCalendarEvents().filter((item) => item.id !== calendarEvent.id)
+  }, 1);
+  closeCalendarEventModal();
+  renderCalendarOverview();
+  renderCalendarPage();
+  showToast("Termin gelöscht.");
+}
+
+async function handleCalendarReminderTimeChange() {
+  state.settings = await saveAppSettings({ ...state.settings, calendarReminderTime: elements.calendarReminderTime.value || "09:00" });
+}
+
+async function exportCalendarWithReminders() {
+  const year = Number(state.settings.calendarSelectedYear || new Date().getFullYear());
+  const events = getEventsForYear(getCalendarEvents(), year);
+  if (!events.length) {
+    showCalendarImportMessage("Für dieses Jahr sind noch keine Termine vorhanden.", "error");
+    return;
+  }
+  const reminderTime = elements.calendarReminderTime.value || state.settings.calendarReminderTime || "09:00";
+  await handleCalendarReminderTimeChange();
+  const content = buildCalendarIcs(events, {
+    calendarName: `Entenarchiv ${year}`,
+    reminderTime,
+    timedReleaseReminders: true
+  });
+  const result = await shareOrDownloadText({
+    content,
+    filename: `Entenarchiv-Kalender-${year}.ics`,
+    mimeType: "text/calendar;charset=utf-8",
+    title: `Entenarchiv-Kalender ${year}`,
+    text: `Neuerscheinungen und eigene Termine für ${year}`
+  });
+  if (result.method !== "cancelled") {
+    showToast("Kalenderdatei erstellt. Öffne sie mit Apple Kalender, um die Erinnerungen zu aktivieren.");
   }
 }

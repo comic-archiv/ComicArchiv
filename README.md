@@ -1,18 +1,22 @@
-# Entenarchiv 3.4.4
+# Entenarchiv 3.5.0
 
-## Neu in 3.4.4
+Private mobile PWA zur Verwaltung einer Sammlung von Lustigen Taschenbüchern und Sonderbänden.
 
-- Flohmarkt-PDF jetzt als zweispaltige, sehr kompakte Suchliste
-- Wunschzustand und Notizen wurden aus dem PDF entfernt
-- pro Zeile stehen bis zu zwei gesuchte Bände nebeneinander
-- enthalten bleiben: Abhakfeld, Bandnummer, Titel, Erscheinungsjahr und Duckipedia-Link
-- Hauptreihe wird weiterhin zuerst ausgegeben
-- Datenbank und Backupformat bleiben unverändert
+## Neu in 3.5.0
 
-## Enthaltene Hauptfunktionen
+- Kalenderansicht für Neuerscheinungen und eigene Termine
+- Import von iCalendar-Dateien (`.ics`)
+- Versuch des direkten Imports über die offizielle Jahresplan-URL
+- Datei-Fallback, falls der Verlag den direkten Browserzugriff blockiert
+- eigene Termine wie Flohmärkte oder Comicbörsen
+- Monatskalender und Jahresnavigation
+- Export in Apple Kalender mit Erinnerungen am Erscheinungstag
+- Kalenderdaten werden im JSON- und Medien-Backup gesichert
 
-- lokale Comicverwaltung in IndexedDB
-- Scanner-Warteschlange und Flohmarkt-Modus
-- fehlende Bände, Reihenfortschritt und PDF-Suchliste
-- Duckipedia-Metadaten und optionale eigene Cover
-- JSON-/Medien-Backup sowie CSV-Export
+## Datenschutz
+
+Sammlung, Kalendertermine und eigene Veranstaltungen werden lokal in IndexedDB gespeichert. Beim direkten Laden eines Jahresplans wird nur die eingetragene iCal-Adresse abgerufen.
+
+## Hinweis zu Erinnerungen
+
+Entenarchiv verwendet für zuverlässige Erinnerungen ohne eigenen Server den Export in Apple Kalender. Echter Web Push für eine geschlossene PWA benötigt einen Push-Server, der die Benachrichtigungen zum richtigen Zeitpunkt versendet.
