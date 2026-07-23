@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-07-23",
+  "calendars": [
+    {
+      "id": "ltb-2026-v2",
+      "year": 2026,
+      "label": "LTB Jahresplan 2026",
+      "file": "data/ltb-2026.ics",
+      "sourceUrl": "https://www.lustiges-taschenbuch.de/sites/default/files/2025-11/ltb_evt_2026v2.ics",
+      "publisher": "Egmont Ehapa Media",
+      "version": "v2",
+      "active": true,
+      "notes": "Offizieller Jahresplan 2026"
+    }
+  ]
+}

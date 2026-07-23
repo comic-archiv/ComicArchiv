@@ -3,9 +3,7 @@ const MONTH_NAMES = [
   "Juli", "August", "September", "Oktober", "November", "Dezember"
 ];
 
-export const DEFAULT_RELEASE_CALENDAR_URL = "https://www.lustiges-taschenbuch.de/sites/default/files/2025-11/ltb_evt_2026v2.ics";
-export const BUNDLED_RELEASE_CALENDAR_URL = "./data/ltb_evt_2026_bundled.ics";
-export const BUNDLED_RELEASE_CALENDAR_YEAR = 2026;
+export const CALENDAR_CATALOG_URL = "./data/kalender-index.json";
 
 export function getMonthName(monthIndex) {
   return MONTH_NAMES[monthIndex] || "";
@@ -14,6 +12,54 @@ export function getMonthName(monthIndex) {
 export function createCalendarEventId(prefix = "event") {
   if (globalThis.crypto?.randomUUID) return `${prefix}-${globalThis.crypto.randomUUID()}`;
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+export function normalizeCalendarCatalog(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Der Kalenderindex ist ungültig.");
+  }
+
+  const calendars = Array.isArray(value.calendars) ? value.calendars : [];
+  const normalized = calendars
+    .map(normalizeCalendarCatalogEntry)
+    .filter(Boolean)
+    .sort((a, b) => a.year - b.year || a.label.localeCompare(b.label, "de"));
+
+  if (!normalized.length) {
+    throw new Error("Im Kalenderindex sind keine gültigen Jahrespläne hinterlegt.");
+  }
+
+  return {
+    schemaVersion: Number.isSafeInteger(Number(value.schemaVersion)) ? Number(value.schemaVersion) : 1,
+    updatedAt: normalizeDate(value.updatedAt) || "",
+    calendars: normalized
+  };
+}
+
+export function normalizeCalendarCatalogEntry(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const year = Number(value.year);
+  const file = normalizeLocalCalendarPath(value.file);
+  if (!Number.isSafeInteger(year) || year < 1900 || year > 2100 || !file) return null;
+
+  const id = String(value.id || `ltb-${year}`).trim().slice(0, 120);
+  return {
+    id: id || `ltb-${year}`,
+    year,
+    label: String(value.label || `LTB Jahresplan ${year}`).trim().slice(0, 160),
+    file,
+    sourceUrl: normalizeOptionalUrl(value.sourceUrl),
+    publisher: String(value.publisher || "Egmont Ehapa Media").trim().slice(0, 160),
+    version: String(value.version || "1").trim().slice(0, 80),
+    active: value.active !== false,
+    notes: String(value.notes || "").trim().slice(0, 500)
+  };
+}
+
+export function createCalendarCatalogSignature(entry) {
+  const normalized = normalizeCalendarCatalogEntry(entry);
+  if (!normalized) return "";
+  return `${normalized.id}|${normalized.version}|${normalized.file}`;
 }
 
 export function normalizeCalendarEvent(value) {
@@ -41,6 +87,8 @@ export function normalizeCalendarEvent(value) {
     notes: String(value.notes || value.description || "").trim().slice(0, 3000),
     url: normalizeOptionalUrl(value.url),
     source,
+    sourceId: String(value.sourceId || "").trim().slice(0, 120),
+    sourceVersion: String(value.sourceVersion || "").trim().slice(0, 80),
     sourceUrl: normalizeOptionalUrl(value.sourceUrl),
     sourceName: String(value.sourceName || (source === "publisher" ? "LTB Jahresplan" : "Eigener Termin")).trim().slice(0, 120),
     category,
@@ -107,6 +155,8 @@ function createEventFromIcsProperties(properties, options) {
   const uid = decodeIcsText(firstValue(properties.UID));
   const sourceUrl = normalizeOptionalUrl(options.sourceUrl);
   const sourceName = String(options.sourceName || "LTB Jahresplan").trim().slice(0, 120);
+  const sourceId = String(options.sourceId || "").trim().slice(0, 120);
+  const sourceVersion = String(options.sourceVersion || "").trim().slice(0, 80);
   const now = new Date().toISOString();
 
   return normalizeCalendarEvent({
@@ -122,6 +172,8 @@ function createEventFromIcsProperties(properties, options) {
     notes: decodeIcsText(firstValue(properties.DESCRIPTION)),
     url: normalizeOptionalUrl(decodeIcsText(firstValue(properties.URL))),
     source: "publisher",
+    sourceId,
+    sourceVersion,
     sourceUrl,
     sourceName,
     category: "release",
@@ -131,21 +183,26 @@ function createEventFromIcsProperties(properties, options) {
   });
 }
 
-export function mergePublisherCalendarEvents(existingEvents, importedEvents, sourceUrl = "") {
+export function mergePublisherCalendarEvents(existingEvents, importedEvents) {
   const normalizedExisting = (Array.isArray(existingEvents) ? existingEvents : []).map(normalizeCalendarEvent).filter(Boolean);
   const normalizedImported = (Array.isArray(importedEvents) ? importedEvents : []).map(normalizeCalendarEvent).filter(Boolean);
-  const years = new Set(normalizedImported.map((event) => Number(event.startDate.slice(0, 4))));
-  const normalizedSourceUrl = normalizeOptionalUrl(sourceUrl);
+  const years = new Set(normalizedImported.map((event) => Number(event.startDate.slice(0, 4))).filter(Number.isFinite));
 
   const kept = normalizedExisting.filter((event) => {
     if (event.source !== "publisher") return true;
     const eventYear = Number(event.startDate.slice(0, 4));
-    if (!years.has(eventYear)) return true;
-    if (!normalizedSourceUrl) return false;
-    return event.sourceUrl && event.sourceUrl !== normalizedSourceUrl;
+    return !years.has(eventYear);
   });
 
   return deduplicateCalendarEvents([...kept, ...normalizedImported]);
+}
+
+export function removePublisherCalendarYear(events, year) {
+  const targetYear = Number(year);
+  return deduplicateCalendarEvents(events).filter((event) => {
+    if (event.source !== "publisher") return true;
+    return Number(event.startDate.slice(0, 4)) !== targetYear;
+  });
 }
 
 export function deduplicateCalendarEvents(events) {
@@ -175,6 +232,17 @@ export function getEventsForYear(events, year) {
 export function getEventsForMonth(events, year, monthIndex) {
   const prefix = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
   return deduplicateCalendarEvents(events).filter((event) => event.startDate.startsWith(prefix));
+}
+
+export function filterCalendarEvents(events, { category = "all", query = "" } = {}) {
+  const normalizedQuery = String(query || "").trim().toLocaleLowerCase("de");
+  return deduplicateCalendarEvents(events).filter((event) => {
+    if (category !== "all" && event.category !== category) return false;
+    if (!normalizedQuery) return true;
+    return [event.title, event.location, event.notes, event.sourceName]
+      .filter(Boolean)
+      .some((value) => String(value).toLocaleLowerCase("de").includes(normalizedQuery));
+  });
 }
 
 export function buildCalendarIcs(events, options = {}) {
@@ -213,7 +281,7 @@ export function buildCalendarIcs(events, options = {}) {
     if (event.location) lines.push(`LOCATION:${escapeIcsText(event.location)}`);
     if (event.notes) lines.push(`DESCRIPTION:${escapeIcsText(event.notes)}`);
     if (event.url) lines.push(`URL:${event.url}`);
-    lines.push(`CATEGORIES:${event.category === "release" ? "Neuerscheinung" : event.category === "flea-market" ? "Flohmarkt" : "Eigener Termin"}`);
+    lines.push(`CATEGORIES:${event.category === "release" ? "Neuerscheinung" : event.category === "flea-market" ? "Flohmarkt" : event.category === "comic-fair" ? "Comicbörse" : "Eigener Termin"}`);
 
     if (reminderEnabled) {
       lines.push("BEGIN:VALARM");
@@ -326,6 +394,14 @@ function normalizeOptionalUrl(value) {
   } catch {
     return "";
   }
+}
+
+function normalizeLocalCalendarPath(value) {
+  const path = String(value || "").trim().replace(/\\/g, "/");
+  if (!path || path.includes("..") || /^(?:[a-z]+:)?\/\//i.test(path)) return "";
+  const cleaned = path.replace(/^\.\//, "").replace(/^\/+/, "");
+  if (!cleaned.toLowerCase().endsWith(".ics")) return "";
+  return `./${cleaned.slice(0, 500)}`;
 }
 
 function parseLocalDate(value) {

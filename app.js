@@ -51,12 +51,12 @@ import {
 } from "./export.js";
 import { dataUrlToBlob, prepareCoverImage } from "./media.js";
 import {
-  BUNDLED_RELEASE_CALENDAR_URL,
-  BUNDLED_RELEASE_CALENDAR_YEAR,
-  DEFAULT_RELEASE_CALENDAR_URL,
+  CALENDAR_CATALOG_URL,
   buildCalendarIcs,
   compareCalendarEvents,
+  createCalendarCatalogSignature,
   createCalendarEventId,
+  filterCalendarEvents,
   formatCalendarDate,
   getEventsForMonth,
   getEventsForYear,
@@ -64,8 +64,10 @@ import {
   getUpcomingEvents,
   isToday,
   mergePublisherCalendarEvents,
+  normalizeCalendarCatalog,
   normalizeCalendarEvent,
-  parseIcsCalendar
+  parseIcsCalendar,
+  removePublisherCalendarYear
 } from "./calendar.js";
 
 const THEME_STORAGE_KEY = "comicarchiv-theme";
@@ -107,7 +109,12 @@ const state = {
   selectedDuplicateComicId: null,
   editingCustomSeriesName: "",
   selectedCalendarEventId: null,
-  calendarImporting: false
+  calendarImporting: false,
+  calendarCatalog: [],
+  calendarCatalogUpdatedAt: "",
+  calendarCatalogLoading: false,
+  calendarFilter: "all",
+  calendarSearch: ""
 };
 
 const elements = {
@@ -204,19 +211,23 @@ const elements = {
   calendarOverviewCopy: document.querySelector("#calendar-overview-copy"),
   calendarPrevYear: document.querySelector("#calendar-prev-year"),
   calendarNextYear: document.querySelector("#calendar-next-year"),
-  calendarYearLabel: document.querySelector("#calendar-year-label"),
+  calendarYearSelect: document.querySelector("#calendar-year-select"),
+  calendarToday: document.querySelector("#calendar-today"),
+  calendarSearch: document.querySelector("#calendar-search"),
+  calendarCategoryFilter: document.querySelector("#calendar-category-filter"),
   calendarMonthTabs: document.querySelector("#calendar-month-tabs"),
   calendarMonthTitle: document.querySelector("#calendar-month-title"),
   calendarMonthCount: document.querySelector("#calendar-month-count"),
   calendarGrid: document.querySelector("#calendar-grid"),
   calendarEventList: document.querySelector("#calendar-event-list"),
   calendarEmpty: document.querySelector("#calendar-empty"),
-  calendarSourceUrl: document.querySelector("#calendar-source-url"),
-  calendarOpenSource: document.querySelector("#calendar-open-source"),
-  calendarFetchSource: document.querySelector("#calendar-fetch-source"),
   calendarFile: document.querySelector("#calendar-file"),
   calendarImportSummary: document.querySelector("#calendar-import-summary"),
   calendarImportMessage: document.querySelector("#calendar-import-message"),
+  calendarCatalogStatus: document.querySelector("#calendar-catalog-status"),
+  calendarCatalogList: document.querySelector("#calendar-catalog-list"),
+  calendarRefreshCatalog: document.querySelector("#calendar-refresh-catalog"),
+  calendarAutoSync: document.querySelector("#calendar-auto-sync"),
   calendarAddEvent: document.querySelector("#calendar-add-event"),
   calendarExportReminders: document.querySelector("#calendar-export-reminders"),
   calendarReminderTime: document.querySelector("#calendar-reminder-time"),
@@ -547,12 +558,23 @@ function bindEvents() {
   elements.closeCalendar.addEventListener("click", closeCalendarPage);
   elements.calendarPrevYear.addEventListener("click", () => changeCalendarYear(-1));
   elements.calendarNextYear.addEventListener("click", () => changeCalendarYear(1));
+  elements.calendarYearSelect.addEventListener("change", () => setCalendarYear(Number(elements.calendarYearSelect.value)));
+  elements.calendarToday.addEventListener("click", jumpCalendarToToday);
+  elements.calendarSearch.addEventListener("input", () => {
+    state.calendarSearch = elements.calendarSearch.value;
+    renderCalendarPage();
+  });
+  elements.calendarCategoryFilter.addEventListener("change", () => {
+    state.calendarFilter = elements.calendarCategoryFilter.value;
+    renderCalendarPage();
+  });
   elements.calendarMonthTabs.addEventListener("click", handleCalendarMonthTabClick);
   elements.calendarGrid.addEventListener("click", handleCalendarDayClick);
   elements.calendarEventList.addEventListener("click", handleCalendarEventListClick);
-  elements.calendarFetchSource.addEventListener("click", () => loadCalendarFromSource({ silent: false }));
   elements.calendarFile.addEventListener("change", handleCalendarFileImport);
-  elements.calendarSourceUrl.addEventListener("input", syncCalendarSourceLink);
+  elements.calendarRefreshCatalog.addEventListener("click", () => refreshCalendarCatalog({ silent: false, autoImport: true }));
+  elements.calendarAutoSync.addEventListener("change", handleCalendarAutoSyncChange);
+  elements.calendarCatalogList.addEventListener("click", handleCalendarCatalogClick);
   elements.calendarAddEvent.addEventListener("click", () => openCalendarEventModal());
   elements.calendarExportReminders.addEventListener("click", exportCalendarWithReminders);
   elements.calendarReminderTime.addEventListener("change", handleCalendarReminderTimeChange);
@@ -4793,6 +4815,12 @@ function getCalendarEvents() {
     : [];
 }
 
+function getCalendarImportedSources() {
+  return state.settings.calendarImportedSources && typeof state.settings.calendarImportedSources === "object"
+    ? { ...state.settings.calendarImportedSources }
+    : {};
+}
+
 function renderCalendarOverview() {
   const events = getCalendarEvents();
   const currentYear = new Date().getFullYear();
@@ -4800,7 +4828,7 @@ function renderCalendarOverview() {
   const upcoming = getUpcomingEvents(events, new Date(), 3);
   elements.calendarOverviewCount.textContent = yearEvents.length === 1 ? "1 Termin" : `${yearEvents.length} Termine`;
   elements.calendarOverviewCopy.textContent = state.settings.calendarLastImportAt
-    ? `Jahresplan zuletzt aktualisiert: ${formatDateTime(state.settings.calendarLastImportAt)}`
+    ? `Jahrespläne zuletzt aktualisiert: ${formatDateTime(state.settings.calendarLastImportAt)}`
     : "Neuerscheinungen und eigene Termine";
   elements.calendarOverviewEvents.replaceChildren();
 
@@ -4826,20 +4854,17 @@ function renderCalendarOverview() {
 }
 
 async function openCalendarPage() {
-  elements.calendarSourceUrl.value = state.settings.calendarSourceUrl || DEFAULT_RELEASE_CALENDAR_URL;
   elements.calendarReminderTime.value = state.settings.calendarReminderTime || "09:00";
-  syncCalendarSourceLink();
+  elements.calendarAutoSync.checked = state.settings.calendarAutoSync !== false;
+  elements.calendarSearch.value = state.calendarSearch;
+  elements.calendarCategoryFilter.value = state.calendarFilter;
   elements.calendarPage.classList.remove("hidden");
   elements.calendarPage.setAttribute("aria-hidden", "false");
   document.body.classList.add("app-page-open");
   elements.calendarPage.scrollTop = 0;
   renderCalendarPage();
   window.setTimeout(() => elements.closeCalendar.focus({ preventScroll: true }), 0);
-
-  const publisherEvents = getCalendarEvents().filter((event) => event.source === "publisher");
-  if (publisherEvents.length === 0) {
-    await loadCalendarFromSource({ silent: true });
-  }
+  await refreshCalendarCatalog({ silent: true, autoImport: true });
 }
 
 function closeCalendarPage() {
@@ -4852,18 +4877,130 @@ function closeCalendarPage() {
 function renderCalendarPage() {
   const year = Number(state.settings.calendarSelectedYear || new Date().getFullYear());
   const month = Number(state.settings.calendarSelectedMonth ?? new Date().getMonth());
-  const yearEvents = getEventsForYear(getCalendarEvents(), year);
-  elements.calendarYearLabel.textContent = String(year);
-  elements.calendarPageSummary.textContent = yearEvents.length === 1 ? "1 Termin" : `${yearEvents.length} Termine`;
-  elements.calendarMonthTitle.textContent = `${getMonthName(month)} ${year}`;
+  const allYearEvents = getEventsForYear(getCalendarEvents(), year);
+  const yearEvents = filterCalendarEvents(allYearEvents, {
+    category: state.calendarFilter,
+    query: state.calendarSearch
+  });
   const monthEvents = getEventsForMonth(yearEvents, year, month);
+
+  renderCalendarYearOptions(year);
+  elements.calendarPageSummary.textContent = allYearEvents.length === 1 ? "1 Termin" : `${allYearEvents.length} Termine`;
+  elements.calendarMonthTitle.textContent = `${getMonthName(month)} ${year}`;
   elements.calendarMonthCount.textContent = monthEvents.length === 1 ? "1 Termin" : `${monthEvents.length} Termine`;
-  elements.calendarImportSummary.textContent = state.settings.calendarLastImportAt
-    ? `Zuletzt ${formatDateTime(state.settings.calendarLastImportAt)}`
-    : "Noch nicht importiert";
+
+  const importedCount = Object.keys(getCalendarImportedSources()).length;
+  const availableCount = state.calendarCatalog.filter((entry) => entry.active).length;
+  elements.calendarImportSummary.textContent = availableCount
+    ? `${availableCount} Jahr${availableCount === 1 ? "" : "e"} verfügbar · ${importedCount} importiert`
+    : state.settings.calendarCatalogLastCheckAt
+      ? "Keine Jahrespläne gefunden"
+      : "Kalenderindex wird geprüft";
+
+  renderCalendarCatalog();
   renderCalendarMonthTabs(year, month, yearEvents);
   renderCalendarGrid(year, month, monthEvents);
   renderCalendarEventList(monthEvents);
+}
+
+function renderCalendarYearOptions(selectedYear) {
+  const currentYear = new Date().getFullYear();
+  const years = new Set([currentYear - 1, currentYear, currentYear + 1, Number(selectedYear)]);
+  state.calendarCatalog.forEach((entry) => years.add(entry.year));
+  getCalendarEvents().forEach((event) => years.add(Number(event.startDate.slice(0, 4))));
+
+  elements.calendarYearSelect.replaceChildren();
+  [...years].filter((year) => Number.isSafeInteger(year) && year >= 1900 && year <= 2100).sort((a, b) => a - b).forEach((year) => {
+    const option = document.createElement("option");
+    option.value = String(year);
+    const available = state.calendarCatalog.some((entry) => entry.year === year && entry.active);
+    option.textContent = available ? `${year} · Jahresplan` : String(year);
+    elements.calendarYearSelect.append(option);
+  });
+  elements.calendarYearSelect.value = String(selectedYear);
+}
+
+function renderCalendarCatalog() {
+  const importedSources = getCalendarImportedSources();
+  const activeEntries = state.calendarCatalog.filter((entry) => entry.active);
+  const lastCheck = state.settings.calendarCatalogLastCheckAt;
+  elements.calendarCatalogStatus.textContent = state.calendarCatalogLoading
+    ? "Kalenderindex wird geprüft …"
+    : lastCheck
+      ? `${activeEntries.length} Jahr${activeEntries.length === 1 ? "" : "e"} verfügbar · geprüft ${formatDateTime(lastCheck)}`
+      : "Noch nicht geprüft";
+  elements.calendarRefreshCatalog.disabled = state.calendarCatalogLoading;
+  elements.calendarAutoSync.checked = state.settings.calendarAutoSync !== false;
+  elements.calendarCatalogList.replaceChildren();
+
+  if (!activeEntries.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted-copy calendar-catalog-empty";
+    empty.textContent = state.calendarCatalogLoading
+      ? "Verfügbare Jahre werden geladen."
+      : "Noch keine Jahrespläne im Kalenderindex gefunden.";
+    elements.calendarCatalogList.append(empty);
+    return;
+  }
+
+  activeEntries.forEach((entry) => {
+    const record = importedSources[String(entry.year)];
+    const publisherCount = getEventsForYear(getCalendarEvents(), entry.year).filter((event) => event.source === "publisher").length;
+    const signatureMatches = record && `${record.id}|${record.version}|${record.file}` === createCalendarCatalogSignature(entry);
+
+    const card = document.createElement("article");
+    card.className = "calendar-catalog-card";
+
+    const heading = document.createElement("div");
+    heading.className = "calendar-catalog-heading";
+    const copy = document.createElement("div");
+    const year = document.createElement("strong");
+    year.textContent = String(entry.year);
+    const label = document.createElement("span");
+    label.textContent = entry.label;
+    copy.append(year, label);
+    const badge = document.createElement("span");
+    badge.className = `calendar-catalog-badge ${publisherCount ? "is-imported" : ""}`;
+    badge.textContent = publisherCount ? `${publisherCount} Termine` : "Nicht geladen";
+    heading.append(copy, badge);
+
+    const metadata = document.createElement("p");
+    metadata.className = "muted-copy";
+    metadata.textContent = record?.importedAt
+      ? `${signatureMatches ? "Aktuell" : "Update verfügbar"} · importiert ${formatDateTime(record.importedAt)}`
+      : entry.notes || `Version ${entry.version}`;
+
+    const actions = document.createElement("div");
+    actions.className = "calendar-catalog-actions";
+    const load = document.createElement("button");
+    load.type = "button";
+    load.className = publisherCount && signatureMatches ? "secondary-button compact-button" : "primary-button compact-button";
+    load.dataset.calendarCatalogImport = String(entry.year);
+    load.textContent = publisherCount ? (signatureMatches ? "Neu laden" : "Aktualisieren") : "Laden";
+    actions.append(load);
+
+    if (entry.sourceUrl) {
+      const source = document.createElement("a");
+      source.className = "text-button calendar-source-link";
+      source.href = entry.sourceUrl;
+      source.target = "_blank";
+      source.rel = "noopener noreferrer";
+      source.textContent = "Verlagsquelle ↗";
+      actions.append(source);
+    }
+
+    if (publisherCount || record) {
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "text-button danger-text-button";
+      remove.dataset.calendarCatalogRemove = String(entry.year);
+      remove.textContent = "Jahr entfernen";
+      actions.append(remove);
+    }
+
+    card.append(heading, metadata, actions);
+    elements.calendarCatalogList.append(card);
+  });
 }
 
 function renderCalendarMonthTabs(year, selectedMonth, yearEvents) {
@@ -4981,7 +5118,26 @@ function inferDuckipediaUrlFromCalendarTitle(title) {
 
 async function changeCalendarYear(delta) {
   const nextYear = Math.min(2100, Math.max(1900, Number(state.settings.calendarSelectedYear || new Date().getFullYear()) + delta));
-  state.settings = await saveAppSettings({ ...state.settings, calendarSelectedYear: nextYear });
+  await setCalendarYear(nextYear);
+}
+
+async function setCalendarYear(year) {
+  const normalizedYear = Math.min(2100, Math.max(1900, Number(year) || new Date().getFullYear()));
+  state.settings = await saveAppSettings({ ...state.settings, calendarSelectedYear: normalizedYear });
+  renderCalendarPage();
+}
+
+async function jumpCalendarToToday() {
+  const today = new Date();
+  state.settings = await saveAppSettings({
+    ...state.settings,
+    calendarSelectedYear: today.getFullYear(),
+    calendarSelectedMonth: today.getMonth()
+  });
+  state.calendarSearch = "";
+  state.calendarFilter = "all";
+  elements.calendarSearch.value = "";
+  elements.calendarCategoryFilter.value = "all";
   renderCalendarPage();
 }
 
@@ -5014,39 +5170,141 @@ function handleCalendarEventListClick(event) {
   if (calendarEvent) openCalendarEventModal(calendarEvent);
 }
 
-function syncCalendarSourceLink() {
-  const value = elements.calendarSourceUrl.value.trim() || DEFAULT_RELEASE_CALENDAR_URL;
+async function refreshCalendarCatalog({ silent = false, autoImport = false } = {}) {
+  if (state.calendarCatalogLoading) return;
+  state.calendarCatalogLoading = true;
+  renderCalendarCatalog();
+  if (!silent) showCalendarImportMessage("Verfügbare Jahrespläne werden geprüft …", "info");
+
   try {
-    const parsedUrl = new URL(value);
-    elements.calendarOpenSource.href = parsedUrl.protocol === "https:"
-      ? `webcal://${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}`
-      : value;
-  } catch {
-    elements.calendarOpenSource.href = "#";
+    const response = await fetch(CALENDAR_CATALOG_URL, { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const catalog = normalizeCalendarCatalog(await response.json());
+    state.calendarCatalog = catalog.calendars;
+    state.calendarCatalogUpdatedAt = catalog.updatedAt;
+    state.settings = await saveAppSettings({
+      ...state.settings,
+      calendarCatalogLastCheckAt: new Date().toISOString()
+    });
+
+    let imported = 0;
+    if (autoImport && state.settings.calendarAutoSync !== false) {
+      const currentYear = new Date().getFullYear();
+      const automaticEntries = state.calendarCatalog.filter((entry) => entry.active && [currentYear, currentYear + 1].includes(entry.year));
+      for (const entry of automaticEntries) {
+        if (calendarCatalogEntryNeedsImport(entry)) {
+          await importCalendarCatalogEntry(entry, { silent: true, selectYear: false });
+          imported += 1;
+        }
+      }
+    }
+
+    if (!silent) {
+      const suffix = imported ? ` ${imported} Jahresplan${imported === 1 ? " wurde" : "e wurden"} aktualisiert.` : " Alles ist aktuell.";
+      showCalendarImportMessage(`${state.calendarCatalog.length} verfügbare Jahr${state.calendarCatalog.length === 1 ? "" : "e"} gefunden.${suffix}`, "success");
+    }
+  } catch (error) {
+    console.error("Kalenderindex konnte nicht geladen werden:", error);
+    if (!silent) showCalendarImportMessage("Der Kalenderindex konnte gerade nicht geladen werden. Bereits importierte Termine bleiben verfügbar.", "error");
+  } finally {
+    state.calendarCatalogLoading = false;
+    renderCalendarPage();
   }
 }
 
-async function loadCalendarFromSource({ silent = false } = {}) {
-  if (state.calendarImporting) return;
-  const officialSourceUrl = elements.calendarSourceUrl.value.trim() || state.settings.calendarSourceUrl || DEFAULT_RELEASE_CALENDAR_URL;
+function calendarCatalogEntryNeedsImport(entry) {
+  const record = getCalendarImportedSources()[String(entry.year)];
+  const publisherEvents = getEventsForYear(getCalendarEvents(), entry.year).filter((event) => event.source === "publisher");
+  if (!record || publisherEvents.length === 0) return true;
+  return `${record.id}|${record.version}|${record.file}` !== createCalendarCatalogSignature(entry);
+}
 
+async function importCalendarCatalogEntry(entry, { silent = false, selectYear = true } = {}) {
+  if (!entry || state.calendarImporting) return 0;
   state.calendarImporting = true;
-  elements.calendarFetchSource.disabled = true;
-  if (!silent) showCalendarImportMessage(`LTB-Termine ${BUNDLED_RELEASE_CALENDAR_YEAR} werden aus der lokal mitgelieferten Kalenderdatei geladen …`, "info");
+  renderCalendarCatalog();
+  if (!silent) showCalendarImportMessage(`${entry.label} wird geladen …`, "info");
+
   try {
-    const response = await fetch(BUNDLED_RELEASE_CALENDAR_URL, { cache: "no-store" });
+    const response = await fetch(entry.file, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
-    await importCalendarText(text, officialSourceUrl, `LTB Jahresplan ${BUNDLED_RELEASE_CALENDAR_YEAR}`);
-    if (!silent) showCalendarImportMessage(`100 LTB-Termine für ${BUNDLED_RELEASE_CALENDAR_YEAR} wurden geladen. Dafür war kein Download über Safari nötig.`, "success");
+    const importedEvents = parseIcsCalendar(text, {
+      sourceUrl: entry.sourceUrl,
+      sourceName: entry.label,
+      sourceId: entry.id,
+      sourceVersion: entry.version
+    }).filter((event) => Number(event.startDate.slice(0, 4)) === entry.year);
+    if (!importedEvents.length) throw new Error(`Die Datei enthält keine Termine für ${entry.year}.`);
+
+    const mergedEvents = mergePublisherCalendarEvents(getCalendarEvents(), importedEvents);
+    const importedSources = getCalendarImportedSources();
+    importedSources[String(entry.year)] = {
+      id: entry.id,
+      label: entry.label,
+      version: entry.version,
+      file: entry.file,
+      sourceUrl: entry.sourceUrl,
+      importedAt: new Date().toISOString(),
+      eventCount: importedEvents.length
+    };
+
+    const patch = {
+      calendarEvents: mergedEvents,
+      calendarImportedSources: importedSources,
+      calendarSourceUrl: entry.sourceUrl || state.settings.calendarSourceUrl,
+      calendarSourceName: entry.label,
+      calendarLastImportAt: new Date().toISOString()
+    };
+    if (selectYear) patch.calendarSelectedYear = entry.year;
+    state.settings = await saveMeaningfulSettings(patch, 1);
+    renderCalendarOverview();
+    renderCalendarPage();
+    if (!silent) showCalendarImportMessage(`${importedEvents.length} Termine aus ${entry.label} wurden geladen.`, "success");
+    return importedEvents.length;
   } catch (error) {
-    console.error("Mitgelieferter LTB-Kalender konnte nicht geladen werden:", error);
-    const message = `Die lokale Kalenderdatei fehlt oder ist noch nicht im Offline-Cache. Bitte prüfe, ob Entenarchiv v${APP_CONFIG.appVersion} vollständig veröffentlicht wurde, und öffne die App anschließend erneut.`;
-    if (!silent) showCalendarImportMessage(message, "error");
-    else elements.calendarImportSummary.textContent = "Lokale Kalenderdatei nicht verfügbar";
+    console.error(`${entry.label} konnte nicht geladen werden:`, error);
+    if (!silent) showCalendarImportMessage(`Jahresplan konnte nicht geladen werden: ${error.message}`, "error");
+    return 0;
   } finally {
     state.calendarImporting = false;
-    elements.calendarFetchSource.disabled = false;
+    renderCalendarCatalog();
+  }
+}
+
+async function handleCalendarCatalogClick(event) {
+  const importButton = event.target.closest("button[data-calendar-catalog-import]");
+  if (importButton) {
+    const year = Number(importButton.dataset.calendarCatalogImport);
+    const entry = state.calendarCatalog.find((item) => item.year === year);
+    if (entry) await importCalendarCatalogEntry(entry, { silent: false, selectYear: true });
+    return;
+  }
+
+  const removeButton = event.target.closest("button[data-calendar-catalog-remove]");
+  if (!removeButton) return;
+  const year = Number(removeButton.dataset.calendarCatalogRemove);
+  if (!window.confirm(`Alle importierten Verlagstermine für ${year} entfernen? Eigene Termine bleiben erhalten.`)) return;
+  const importedSources = getCalendarImportedSources();
+  delete importedSources[String(year)];
+  state.settings = await saveMeaningfulSettings({
+    calendarEvents: removePublisherCalendarYear(getCalendarEvents(), year),
+    calendarImportedSources: importedSources
+  }, 1);
+  renderCalendarOverview();
+  renderCalendarPage();
+  showCalendarImportMessage(`Verlagstermine für ${year} wurden entfernt.`, "success");
+}
+
+async function handleCalendarAutoSyncChange() {
+  state.settings = await saveAppSettings({
+    ...state.settings,
+    calendarAutoSync: elements.calendarAutoSync.checked
+  });
+  if (elements.calendarAutoSync.checked) {
+    await refreshCalendarCatalog({ silent: false, autoImport: true });
+  } else {
+    showCalendarImportMessage("Automatische Aktualisierung ist deaktiviert. Jahrespläne können weiterhin manuell geladen werden.", "info");
   }
 }
 
@@ -5055,7 +5313,12 @@ async function handleCalendarFileImport(event) {
   if (!file) return;
   try {
     const text = await file.text();
-    await importCalendarText(text, elements.calendarSourceUrl.value.trim(), file.name.replace(/\.ics$/i, "") || "LTB Jahresplan");
+    await importCalendarText(text, {
+      sourceUrl: "",
+      sourceName: file.name.replace(/\.ics$/i, "") || "Importierter Jahresplan",
+      sourceId: `manual-${file.name.toLocaleLowerCase("de").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
+      sourceVersion: `datei-${file.lastModified || Date.now()}`
+    });
     showCalendarImportMessage("iCal-Datei wurde erfolgreich importiert.", "success");
   } catch (error) {
     showCalendarImportMessage(`Import fehlgeschlagen: ${error.message}`, "error");
@@ -5064,16 +5327,31 @@ async function handleCalendarFileImport(event) {
   }
 }
 
-async function importCalendarText(text, sourceUrl, sourceName) {
-  const importedEvents = parseIcsCalendar(text, { sourceUrl, sourceName });
-  const mergedEvents = mergePublisherCalendarEvents(getCalendarEvents(), importedEvents, sourceUrl);
+async function importCalendarText(text, source = {}) {
+  const importedEvents = parseIcsCalendar(text, source);
+  const mergedEvents = mergePublisherCalendarEvents(getCalendarEvents(), importedEvents);
   const importedYears = [...new Set(importedEvents.map((event) => Number(event.startDate.slice(0, 4))))].filter(Number.isFinite);
+  const importedSources = getCalendarImportedSources();
+  const now = new Date().toISOString();
+  importedYears.forEach((year) => {
+    const yearEvents = importedEvents.filter((event) => Number(event.startDate.slice(0, 4)) === year);
+    importedSources[String(year)] = {
+      id: source.sourceId || `manual-${year}`,
+      label: source.sourceName || `Importierter Jahresplan ${year}`,
+      version: source.sourceVersion || "manuell",
+      file: "",
+      sourceUrl: source.sourceUrl || "",
+      importedAt: now,
+      eventCount: yearEvents.length
+    };
+  });
   const preferredYear = importedYears.includes(new Date().getFullYear()) ? new Date().getFullYear() : importedYears[0] || state.settings.calendarSelectedYear;
   state.settings = await saveMeaningfulSettings({
     calendarEvents: mergedEvents,
-    calendarSourceUrl: sourceUrl || state.settings.calendarSourceUrl,
-    calendarSourceName: sourceName || "LTB Jahresplan",
-    calendarLastImportAt: new Date().toISOString(),
+    calendarImportedSources: importedSources,
+    calendarSourceUrl: source.sourceUrl || state.settings.calendarSourceUrl,
+    calendarSourceName: source.sourceName || "Importierter Jahresplan",
+    calendarLastImportAt: now,
     calendarSelectedYear: preferredYear
   }, 1);
   renderCalendarOverview();

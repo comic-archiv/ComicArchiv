@@ -442,6 +442,9 @@ function serializeSettings(settings = {}) {
     calendarSourceUrl: settings.calendarSourceUrl || "",
     calendarSourceName: settings.calendarSourceName || "LTB Jahresplan",
     calendarLastImportAt: settings.calendarLastImportAt || null,
+    calendarImportedSources: settings.calendarImportedSources && typeof settings.calendarImportedSources === "object" ? settings.calendarImportedSources : {},
+    calendarCatalogLastCheckAt: settings.calendarCatalogLastCheckAt || null,
+    calendarAutoSync: settings.calendarAutoSync !== false,
     calendarSelectedYear: Number(settings.calendarSelectedYear) || new Date().getFullYear(),
     calendarSelectedMonth: Number.isInteger(Number(settings.calendarSelectedMonth)) ? Number(settings.calendarSelectedMonth) : new Date().getMonth(),
     calendarReminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(settings.calendarReminderTime || "")) ? settings.calendarReminderTime : "09:00"
@@ -779,10 +782,33 @@ function normalizeImportedSettings(settings, seriesConfiguration) {
     calendarSourceUrl: normalizeOptionalHttpUrl(source.calendarSourceUrl),
     calendarSourceName: normalizeOptionalString(source.calendarSourceName, 120, "Kalenderquelle") || "LTB Jahresplan",
     calendarLastImportAt: isValidDateString(source.calendarLastImportAt) ? source.calendarLastImportAt : null,
+    calendarImportedSources: normalizeImportedCalendarSources(source.calendarImportedSources),
+    calendarCatalogLastCheckAt: isValidDateString(source.calendarCatalogLastCheckAt) ? source.calendarCatalogLastCheckAt : null,
+    calendarAutoSync: source.calendarAutoSync !== false,
     calendarSelectedYear: Number.isSafeInteger(Number(source.calendarSelectedYear)) ? Number(source.calendarSelectedYear) : new Date().getFullYear(),
     calendarSelectedMonth: Number.isSafeInteger(Number(source.calendarSelectedMonth)) ? Math.min(11, Math.max(0, Number(source.calendarSelectedMonth))) : new Date().getMonth(),
     calendarReminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(source.calendarReminderTime || "")) ? String(source.calendarReminderTime) : "09:00"
   };
+}
+
+function normalizeImportedCalendarSources(value) {
+  if (!isPlainObject(value)) return {};
+  const result = {};
+  Object.entries(value).forEach(([yearKey, entry]) => {
+    const year = Number(yearKey);
+    if (!Number.isSafeInteger(year) || year < 1900 || year > 2100 || !isPlainObject(entry)) return;
+    const eventCount = Number(entry.eventCount);
+    result[String(year)] = {
+      id: normalizeOptionalString(entry.id, 120, "Kalenderquellen-ID") || `ltb-${year}`,
+      label: normalizeOptionalString(entry.label, 160, "Kalenderquellenname") || `LTB Jahresplan ${year}`,
+      version: normalizeOptionalString(entry.version, 80, "Kalenderversion"),
+      file: normalizeOptionalString(entry.file, 500, "Kalenderdatei"),
+      sourceUrl: normalizeOptionalHttpUrl(entry.sourceUrl),
+      importedAt: isValidDateString(entry.importedAt) ? entry.importedAt : null,
+      eventCount: Number.isSafeInteger(eventCount) && eventCount >= 0 ? Math.min(eventCount, 10000) : 0
+    };
+  });
+  return result;
 }
 
 function normalizeImportedCustomSeriesConfigs(value, legacySeries = []) {

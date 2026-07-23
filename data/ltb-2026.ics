@@ -1,0 +1,907 @@
+BEGIN:VCALENDAR
+PRODID:-//Entenarchiv//LTB Jahresplan 2026//DE
+VERSION:2.0
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:LTB Jahresplan 2026
+BEGIN:VEVENT
+UID:entenarchiv-0cff05a32c2cf631bfd23f0d@local
+SUMMARY:Donald Duck 464
+DTSTART;VALUE=DATE:20260106
+DTEND;VALUE=DATE:20260107
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-a93cbb6b367522fc2306e56a@local
+SUMMARY:LTB Winter 8
+DTSTART;VALUE=DATE:20260106
+DTEND;VALUE=DATE:20260107
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-a988b4fa61f4205863c31514@local
+SUMMARY:LTB Spezial 128
+DTSTART;VALUE=DATE:20260106
+DTEND;VALUE=DATE:20260107
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-cf1014b96691bfa428be7052@local
+SUMMARY:LTB Europareise 1
+DTSTART;VALUE=DATE:20260106
+DTEND;VALUE=DATE:20260107
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-cc0037cfd03ec22bf5680a38@local
+SUMMARY:Micky Maus Comics 100
+DTSTART;VALUE=DATE:20260106
+DTEND;VALUE=DATE:20260107
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-f6128efd1abe73d75b1e3a41@local
+SUMMARY:LTB 606
+DTSTART;VALUE=DATE:20260113
+DTEND;VALUE=DATE:20260114
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-4623b03989fe33e3789739ea@local
+SUMMARY:LTB Phantomias Collection 3
+DTSTART;VALUE=DATE:20260120
+DTEND;VALUE=DATE:20260121
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-758b23d823bace89512fa2d8@local
+SUMMARY:LTB Mystery 1
+DTSTART;VALUE=DATE:20260127
+DTEND;VALUE=DATE:20260128
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-2ffd62ddb0fb40ee6430a558@local
+SUMMARY:Donald Duck 465
+DTSTART;VALUE=DATE:20260203
+DTEND;VALUE=DATE:20260204
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-0b8701c30eff315bc27fc926@local
+SUMMARY:Donald Duck & Co. 100
+DTSTART;VALUE=DATE:20260203
+DTEND;VALUE=DATE:20260204
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-9df923558252a6eb42204f62@local
+SUMMARY:LTB Enten-Edition 95
+DTSTART;VALUE=DATE:20260203
+DTEND;VALUE=DATE:20260204
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-a1fa3f7b6d51aec4c64c813f@local
+SUMMARY:LTB Dagobert 96
+DTSTART;VALUE=DATE:20260210
+DTEND;VALUE=DATE:20260211
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-414a5c0c87c178b56d6b10b0@local
+SUMMARY:LTB 607
+DTSTART;VALUE=DATE:20260210
+DTEND;VALUE=DATE:20260211
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-34e3a811f9bbeed6aa80d4cb@local
+SUMMARY:LTB Entenhausen Stars 17
+DTSTART;VALUE=DATE:20260210
+DTEND;VALUE=DATE:20260211
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-e507ed309c4ea0c701784b6d@local
+SUMMARY:LTB Abenteuer 19
+DTSTART;VALUE=DATE:20260217
+DTEND;VALUE=DATE:20260218
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-de7d937a0fe3b46b6fda3658@local
+SUMMARY:Micky Maus Comics 101
+DTSTART;VALUE=DATE:20260224
+DTEND;VALUE=DATE:20260225
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-181c7f31bced4fefc5dcc95c@local
+SUMMARY:LTB Europareise 2
+DTSTART;VALUE=DATE:20260224
+DTEND;VALUE=DATE:20260225
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-ff20fb447c83c2a5fef67dab@local
+SUMMARY:LTB Frohe Ostern 18
+DTSTART;VALUE=DATE:20260303
+DTEND;VALUE=DATE:20260304
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-4fa11d98e7fbf18b77d1ef50@local
+SUMMARY:LTB Spezial 129
+DTSTART;VALUE=DATE:20260303
+DTEND;VALUE=DATE:20260304
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-d817d4cf6a4af6c82b9ccc3d@local
+SUMMARY:Donald Duck 466
+DTSTART;VALUE=DATE:20260310
+DTEND;VALUE=DATE:20260311
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-7f7c28e80068fcf728bcdc4e@local
+SUMMARY:LTB 608
+DTSTART;VALUE=DATE:20260310
+DTEND;VALUE=DATE:20260311
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-b40f7ccf64bdc3b4ab42af37@local
+SUMMARY:LTB Premium 49
+DTSTART;VALUE=DATE:20260317
+DTEND;VALUE=DATE:20260318
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-3cd68d3b14d37cfb35f2d890@local
+SUMMARY:LTB Young Comics 21
+DTSTART;VALUE=DATE:20260324
+DTEND;VALUE=DATE:20260325
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-5840b57cf2901e81fa678852@local
+SUMMARY:LTB Mystery 2
+DTSTART;VALUE=DATE:20260330
+DTEND;VALUE=DATE:20260331
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-198a1e962166ddc9b1979c9a@local
+SUMMARY:Donald Duck 467
+DTSTART;VALUE=DATE:20260407
+DTEND;VALUE=DATE:20260408
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-6642d6b6b7e8934572abd744@local
+SUMMARY:Donald Duck & Co. 101
+DTSTART;VALUE=DATE:20260407
+DTEND;VALUE=DATE:20260408
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-fb0e52302664325e6647d3b6@local
+SUMMARY:LTB Enten-Edition 96
+DTSTART;VALUE=DATE:20260407
+DTEND;VALUE=DATE:20260408
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-5d45bf27beda1e79ecf67296@local
+SUMMARY:LTB 609
+DTSTART;VALUE=DATE:20260407
+DTEND;VALUE=DATE:20260408
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-3dc14d99082df60236d682c2@local
+SUMMARY:LTB Dagobert 97
+DTSTART;VALUE=DATE:20260414
+DTEND;VALUE=DATE:20260415
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-8e52c22f6973b1242346b3b1@local
+SUMMARY:LTB Europareise 3
+DTSTART;VALUE=DATE:20260414
+DTEND;VALUE=DATE:20260415
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-ba929066ccde6c597a6bc18d@local
+SUMMARY:Micky Maus Comics 102
+DTSTART;VALUE=DATE:20260414
+DTEND;VALUE=DATE:20260415
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-10c74d985796fefd97cdc8d8@local
+SUMMARY:LTB Abenteuer 20
+DTSTART;VALUE=DATE:20260421
+DTEND;VALUE=DATE:20260422
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-0e8b2f2b3b221a88d31e7fa2@local
+SUMMARY:LTB Phantomias Collection 4
+DTSTART;VALUE=DATE:20260427
+DTEND;VALUE=DATE:20260428
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-358c3d09a836c4f11fee7459@local
+SUMMARY:LTB 610
+DTSTART;VALUE=DATE:20260505
+DTEND;VALUE=DATE:20260506
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-ef639efb682aa741418c71f9@local
+SUMMARY:Comic Gigant Fußball 1
+DTSTART;VALUE=DATE:20260505
+DTEND;VALUE=DATE:20260506
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-dcf535ec1c2cc939145fe277@local
+SUMMARY:Donald Duck 468
+DTSTART;VALUE=DATE:20260511
+DTEND;VALUE=DATE:20260512
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-959135aedd744b3f8068cf08@local
+SUMMARY:LTB Entenhausen Stars 18
+DTSTART;VALUE=DATE:20260511
+DTEND;VALUE=DATE:20260512
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-cae7cea0c2451269b290e2d5@local
+SUMMARY:LTB Spezial 130
+DTSTART;VALUE=DATE:20260511
+DTEND;VALUE=DATE:20260512
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-a51d2b0cba66a06e7c379efc@local
+SUMMARY:LTB Schwimmen 1
+DTSTART;VALUE=DATE:20260519
+DTEND;VALUE=DATE:20260520
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-461555abcad5697fb7f1b680@local
+SUMMARY:Micky Maus Comics 103
+DTSTART;VALUE=DATE:20260526
+DTEND;VALUE=DATE:20260527
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-7592e8d76f534e74d5da327d@local
+SUMMARY:LTB Mystery 3
+DTSTART;VALUE=DATE:20260526
+DTEND;VALUE=DATE:20260527
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-310ad7bef979e196fc20818a@local
+SUMMARY:LTB 611
+DTSTART;VALUE=DATE:20260602
+DTEND;VALUE=DATE:20260603
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-b68a4302288fe3cbcc913a2e@local
+SUMMARY:LTB Europareise 4
+DTSTART;VALUE=DATE:20260602
+DTEND;VALUE=DATE:20260603
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-33033ae48404701e3dd09b4d@local
+SUMMARY:LTB Extra 9
+DTSTART;VALUE=DATE:20260602
+DTEND;VALUE=DATE:20260603
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-a477a030a7c12bec71036bcc@local
+SUMMARY:Donald Duck & Co. 102
+DTSTART;VALUE=DATE:20260609
+DTEND;VALUE=DATE:20260610
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-8cfe20f0bf7875124883b4e2@local
+SUMMARY:Donald Duck 469
+DTSTART;VALUE=DATE:20260609
+DTEND;VALUE=DATE:20260610
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-ad1f67713895012a9b8caa1b@local
+SUMMARY:LTB Dagobert 98
+DTSTART;VALUE=DATE:20260616
+DTEND;VALUE=DATE:20260617
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-4240345ee1082b8f310da601@local
+SUMMARY:LTB Enten-Edition 97
+DTSTART;VALUE=DATE:20260616
+DTEND;VALUE=DATE:20260617
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-a235c0371d3fd084334deabd@local
+SUMMARY:LTB Premium 50
+DTSTART;VALUE=DATE:20260616
+DTEND;VALUE=DATE:20260617
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-0d699bcffc5019f2fd9d1971@local
+SUMMARY:LTB Abenteuer 21
+DTSTART;VALUE=DATE:20260623
+DTEND;VALUE=DATE:20260624
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-a67409d325802f08ade48e3c@local
+SUMMARY:LTB Sommer 16
+DTSTART;VALUE=DATE:20260630
+DTEND;VALUE=DATE:20260701
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-78c703e415dd08347a3c8b5c@local
+SUMMARY:LTB 612
+DTSTART;VALUE=DATE:20260630
+DTEND;VALUE=DATE:20260701
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-798482fca506a18808adde90@local
+SUMMARY:Donald Duck 470
+DTSTART;VALUE=DATE:20260707
+DTEND;VALUE=DATE:20260708
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-2e7d3b2776213b42b85ec7fa@local
+SUMMARY:LTB Spezial 131
+DTSTART;VALUE=DATE:20260707
+DTEND;VALUE=DATE:20260708
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-fe4176791dae9565f1ca895f@local
+SUMMARY:LTB Young Comics 22
+DTSTART;VALUE=DATE:20260707
+DTEND;VALUE=DATE:20260708
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-c8cd8feadda33e0eb562fdc7@local
+SUMMARY:LTB Camping 2
+DTSTART;VALUE=DATE:20260714
+DTEND;VALUE=DATE:20260715
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-b3422314c1b5a9b8e0b966ae@local
+SUMMARY:Micky Maus Comics 104
+DTSTART;VALUE=DATE:20260714
+DTEND;VALUE=DATE:20260715
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-9984319e9a238be10b65b00a@local
+SUMMARY:LTB Mystery 4
+DTSTART;VALUE=DATE:20260714
+DTEND;VALUE=DATE:20260715
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-f485af3dcdf4d9de34da9196@local
+SUMMARY:LTB Europareise 5
+DTSTART;VALUE=DATE:20260721
+DTEND;VALUE=DATE:20260722
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-7e02e17832d64ee4bb6201c8@local
+SUMMARY:LTB 613
+DTSTART;VALUE=DATE:20260728
+DTEND;VALUE=DATE:20260729
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-57f187599a7bd2e867238115@local
+SUMMARY:Donald Duck 471
+DTSTART;VALUE=DATE:20260804
+DTEND;VALUE=DATE:20260805
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-639261aaeccfe291877767b9@local
+SUMMARY:Comic Gigant 3
+DTSTART;VALUE=DATE:20260804
+DTEND;VALUE=DATE:20260805
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-401c94e83ccdd41587713f93@local
+SUMMARY:LTB Phantomias Collection 5
+DTSTART;VALUE=DATE:20260804
+DTEND;VALUE=DATE:20260805
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-6db3dfcd1395a36757854449@local
+SUMMARY:Donald Duck & Co. 103
+DTSTART;VALUE=DATE:20260811
+DTEND;VALUE=DATE:20260812
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-91874aaa9127014c00853df5@local
+SUMMARY:LTB Abenteuer 22
+DTSTART;VALUE=DATE:20260811
+DTEND;VALUE=DATE:20260812
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-1495888d909352e6e2e3333c@local
+SUMMARY:LTB Dagobert 99
+DTSTART;VALUE=DATE:20260818
+DTEND;VALUE=DATE:20260819
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-e7a0a6b6a1f8a5c3d64d2d57@local
+SUMMARY:LTB Enten-Edition 98
+DTSTART;VALUE=DATE:20260818
+DTEND;VALUE=DATE:20260819
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-604418ce28ecab70e8537700@local
+SUMMARY:LTB 614
+DTSTART;VALUE=DATE:20260825
+DTEND;VALUE=DATE:20260826
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-8f59b5567337d06cba701d60@local
+SUMMARY:Donald Duck 472
+DTSTART;VALUE=DATE:20260901
+DTEND;VALUE=DATE:20260902
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-30eef765b8744b00f598bce5@local
+SUMMARY:LTB Spezial 132
+DTSTART;VALUE=DATE:20260901
+DTEND;VALUE=DATE:20260902
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-3711c0c99338c89446e6f290@local
+SUMMARY:Micky Maus Comics 105
+DTSTART;VALUE=DATE:20260901
+DTEND;VALUE=DATE:20260902
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-4b3d4709763ace480ddccdc7@local
+SUMMARY:LTB Europareise 6
+DTSTART;VALUE=DATE:20260908
+DTEND;VALUE=DATE:20260909
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-d228c5bae17c9dba0f8b4015@local
+SUMMARY:LTB Premium 51
+DTSTART;VALUE=DATE:20260915
+DTEND;VALUE=DATE:20260916
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-049c75e563d471c0549b7e8a@local
+SUMMARY:LTB Mystery 5
+DTSTART;VALUE=DATE:20260922
+DTEND;VALUE=DATE:20260923
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-7a206dccd5c675d90de97ceb@local
+SUMMARY:LTB 615
+DTSTART;VALUE=DATE:20260922
+DTEND;VALUE=DATE:20260923
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-e38c46aa74044d0fffa3f492@local
+SUMMARY:LTB Halloween 12
+DTSTART;VALUE=DATE:20260928
+DTEND;VALUE=DATE:20260929
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-4477f19089ff41a8ac23ae25@local
+SUMMARY:Donald Duck 473
+DTSTART;VALUE=DATE:20261006
+DTEND;VALUE=DATE:20261007
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-d76ad427a88f9072a6543a44@local
+SUMMARY:LTB Enten-Edition 99
+DTSTART;VALUE=DATE:20261006
+DTEND;VALUE=DATE:20261007
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-e232dd2b8fb67e813aa1c529@local
+SUMMARY:Donald Duck & Co. 104
+DTSTART;VALUE=DATE:20261013
+DTEND;VALUE=DATE:20261014
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-c71951e64c8b88ba1814e014@local
+SUMMARY:LTB Abenteuer 23
+DTSTART;VALUE=DATE:20261013
+DTEND;VALUE=DATE:20261014
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-29d511a8110d36797084a5cd@local
+SUMMARY:Micky Maus Comics 106
+DTSTART;VALUE=DATE:20261020
+DTEND;VALUE=DATE:20261021
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-d337bd4023efcdd86a6713a6@local
+SUMMARY:LTB Dagobert 100
+DTSTART;VALUE=DATE:20261020
+DTEND;VALUE=DATE:20261021
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-05b8599960fdd9b216a25b7c@local
+SUMMARY:LTB 616
+DTSTART;VALUE=DATE:20261020
+DTEND;VALUE=DATE:20261021
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-d342de82b34f58f29a2299f0@local
+SUMMARY:LTB Europareise 7
+DTSTART;VALUE=DATE:20261027
+DTEND;VALUE=DATE:20261028
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-f4e4b73aab42e0d3bed41470@local
+SUMMARY:LTB Phantomias Collection 6
+DTSTART;VALUE=DATE:20261027
+DTEND;VALUE=DATE:20261028
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-dbe07b1deaa3f301ea713163@local
+SUMMARY:Donald Duck 474
+DTSTART;VALUE=DATE:20261103
+DTEND;VALUE=DATE:20261104
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-fce377969e511b1320e2e637@local
+SUMMARY:LTB Spezial 133
+DTSTART;VALUE=DATE:20261103
+DTEND;VALUE=DATE:20261104
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-3dbf4eaccb5ae645b7c9b36d@local
+SUMMARY:LTB Weihnachten 32
+DTSTART;VALUE=DATE:20261103
+DTEND;VALUE=DATE:20261104
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-c0fe95abc52f5b487131f769@local
+SUMMARY:LTB Nikolaus 5
+DTSTART;VALUE=DATE:20261110
+DTEND;VALUE=DATE:20261111
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-d528780da9ab54c530f46c8e@local
+SUMMARY:LTB 617
+DTSTART;VALUE=DATE:20261117
+DTEND;VALUE=DATE:20261118
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-8d01cd92a60815027281d7f4@local
+SUMMARY:LTB Mystery 6
+DTSTART;VALUE=DATE:20261124
+DTEND;VALUE=DATE:20261125
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-ca41b6240c665e85b2594033@local
+SUMMARY:Donald Duck 475
+DTSTART;VALUE=DATE:20261201
+DTEND;VALUE=DATE:20261202
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-026bf40aab9b907a99bfcd83@local
+SUMMARY:LTB Enten-Edition 100
+DTSTART;VALUE=DATE:20261201
+DTEND;VALUE=DATE:20261202
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-ce4d05ab535c264b0f184c91@local
+SUMMARY:LTB Weihnachten 24
+DTSTART;VALUE=DATE:20261208
+DTEND;VALUE=DATE:20261209
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-bcbfe597ce5c8eeca0eafe8b@local
+SUMMARY:Donald Duck & Co. 105
+DTSTART;VALUE=DATE:20261208
+DTEND;VALUE=DATE:20261209
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-7781ff98d88504d02b84e5f2@local
+SUMMARY:Micky Maus Comics 107
+DTSTART;VALUE=DATE:20261208
+DTEND;VALUE=DATE:20261209
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-824240d501e4c5e9f1aaf59b@local
+SUMMARY:LTB Dagobert 101
+DTSTART;VALUE=DATE:20261215
+DTEND;VALUE=DATE:20261216
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-018c501c45a6dc9a1eea3510@local
+SUMMARY:LTB 618
+DTSTART;VALUE=DATE:20261215
+DTEND;VALUE=DATE:20261216
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-4c549078a922c0ca095541c3@local
+SUMMARY:LTB Europareise 8
+DTSTART;VALUE=DATE:20261215
+DTEND;VALUE=DATE:20261216
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:entenarchiv-e249fdd06cba0e488bcf7604@local
+SUMMARY:LTB Premium 52
+DTSTART;VALUE=DATE:20261221
+DTEND;VALUE=DATE:20261222
+DESCRIPTION:Termin aus dem offiziellen LTB-Jahresplan 2026. Lokale Kopie für Entenarchiv.
+URL:https://www.lustiges-taschenbuch.de/downloads
+DTSTAMP:20260723T000000Z
+END:VEVENT
+END:VCALENDAR

@@ -1,27 +1,34 @@
-# Entenarchiv 3.5.1
+# Entenarchiv 3.6.0
 
-Private mobile PWA zur Verwaltung einer Sammlung von Lustigen Taschenbüchern und Sonderbänden.
+Private, mobile Progressive Web App zur Verwaltung einer LTB- und Sonderband-Sammlung.
 
-## Neu in 3.5.1
+## Neu in 3.6.0
 
-- Kalenderansicht für Neuerscheinungen und eigene Termine
-- Import von iCalendar-Dateien (`.ics`)
-- Versuch des direkten Imports über die offizielle Jahresplan-URL
-- Datei-Fallback, falls der Verlag den direkten Browserzugriff blockiert
-- eigene Termine wie Flohmärkte oder Comicbörsen
-- Monatskalender und Jahresnavigation
-- Export in Apple Kalender mit Erinnerungen am Erscheinungstag
-- Kalenderdaten werden im JSON- und Medien-Backup gesichert
+- jahresunabhängiger Kalender über `data/kalender-index.json`
+- automatische Erkennung verfügbarer Jahrespläne
+- automatische Aktualisierung des aktuellen und folgenden Jahres
+- Versionsprüfung pro Jahresplan ohne doppelte Verlagstermine
+- Mehrjahresauswahl im Kalender
+- Heute-Button
+- Suche nach Titel, Ort und Notiz
+- Filter nach Neuerscheinung, Flohmarkt, Comicbörse und sonstigen Terminen
+- Jahresplan einzeln laden, aktualisieren oder entfernen
+- eigene Termine bleiben bei allen Aktualisierungen erhalten
+- Import beliebiger zusätzlicher iCal-Dateien bleibt möglich
+- Apple-Kalender-Export mit Erinnerungen bleibt erhalten
 
-## Datenschutz
+## Neues Jahr ergänzen
 
-Sammlung, Kalendertermine und eigene Veranstaltungen werden lokal in IndexedDB gespeichert. Beim direkten Laden eines Jahresplans wird nur die eingetragene iCal-Adresse abgerufen.
+Die App-Adresse bleibt unverändert. Für ein neues Jahr werden lediglich zwei Dateien im Repository angepasst:
 
-## Hinweis zu Erinnerungen
+1. offizielle iCal-Datei als `data/ltb-JAHR.ics` hochladen
+2. einen Eintrag in `data/kalender-index.json` ergänzen
+3. `updatedAt` im Index aktualisieren
+4. committen und GitHub Pages abwarten
+5. in Entenarchiv `Kalender > Jahrespläne verwalten > Jahre prüfen` wählen
 
-Entenarchiv verwendet für zuverlässige Erinnerungen ohne eigenen Server den Export in Apple Kalender. Echter Web Push für eine geschlossene PWA benötigt einen Push-Server, der die Benachrichtigungen zum richtigen Zeitpunkt versendet.
+Eine vollständige Vorlage befindet sich in `data/README.txt`.
 
+## Datenspeicherung
 
-## Kalender-Hotfix 3.5.1
-
-Der offizielle LTB-Jahresplan 2026 ist als lokale iCal-Kopie im Projekt enthalten. Dadurch funktioniert der Import auf iPhone und iPad ohne CORS-Zugriff und ohne vorheriges Speichern der Verlagsdatei in der Dateien-App.
+Sammlung, eigene Termine und Einstellungen bleiben lokal in IndexedDB auf dem Gerät gespeichert. Der Kalenderindex und die mitgelieferten Verlagstermine sind statische Dateien im GitHub-Pages-Projekt.

@@ -1,6 +1,6 @@
 export const APP_CONFIG = Object.freeze({
-  appVersion: "3.5.1",
-  dataFormatVersion: 6,
+  appVersion: "3.6.0",
+  dataFormatVersion: 7,
   minimumSupportedBackupVersion: 1,
   storageName: "ComicArchiv",
   displayName: "Entenarchiv",
@@ -100,6 +100,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   calendarSourceUrl: "https://www.lustiges-taschenbuch.de/sites/default/files/2025-11/ltb_evt_2026v2.ics",
   calendarSourceName: "LTB Jahresplan",
   calendarLastImportAt: null,
+  calendarImportedSources: Object.freeze({}),
+  calendarCatalogLastCheckAt: null,
+  calendarAutoSync: true,
   calendarSelectedYear: new Date().getFullYear(),
   calendarSelectedMonth: new Date().getMonth(),
   calendarReminderTime: "09:00"

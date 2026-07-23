@@ -380,6 +380,9 @@ function normalizeSettings(settings) {
       ? source.calendarSourceName.trim().slice(0, 120)
       : DEFAULT_SETTINGS.calendarSourceName,
     calendarLastImportAt: isValidDateString(source.calendarLastImportAt) ? source.calendarLastImportAt : null,
+    calendarImportedSources: normalizeCalendarImportedSources(source.calendarImportedSources),
+    calendarCatalogLastCheckAt: isValidDateString(source.calendarCatalogLastCheckAt) ? source.calendarCatalogLastCheckAt : null,
+    calendarAutoSync: source.calendarAutoSync !== false,
     calendarSelectedYear: Number.isSafeInteger(Number(source.calendarSelectedYear))
       ? Math.min(2100, Math.max(1900, Number(source.calendarSelectedYear)))
       : DEFAULT_SETTINGS.calendarSelectedYear,
@@ -390,6 +393,28 @@ function normalizeSettings(settings) {
       ? String(source.calendarReminderTime)
       : DEFAULT_SETTINGS.calendarReminderTime
   };
+}
+
+
+function normalizeCalendarImportedSources(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result = {};
+  Object.entries(value).forEach(([yearKey, entry]) => {
+    const year = Number(yearKey);
+    if (!Number.isSafeInteger(year) || year < 1900 || year > 2100 || !entry || typeof entry !== "object" || Array.isArray(entry)) return;
+    const importedAt = isValidDateString(entry.importedAt) ? entry.importedAt : null;
+    const eventCount = Number(entry.eventCount);
+    result[String(year)] = {
+      id: typeof entry.id === "string" ? entry.id.trim().slice(0, 120) : `ltb-${year}`,
+      label: typeof entry.label === "string" ? entry.label.trim().slice(0, 160) : `LTB Jahresplan ${year}`,
+      version: typeof entry.version === "string" ? entry.version.trim().slice(0, 80) : "",
+      file: typeof entry.file === "string" ? entry.file.trim().slice(0, 500) : "",
+      sourceUrl: normalizeOptionalUrl(entry.sourceUrl),
+      importedAt,
+      eventCount: Number.isSafeInteger(eventCount) && eventCount >= 0 ? Math.min(eventCount, 10000) : 0
+    };
+  });
+  return result;
 }
 
 
@@ -424,6 +449,8 @@ function normalizeCalendarEvents(value) {
       notes: typeof entry.notes === "string" ? entry.notes.trim().slice(0, 3000) : "",
       url: normalizeOptionalUrl(entry.url),
       source: sourceType,
+      sourceId: typeof entry.sourceId === "string" ? entry.sourceId.trim().slice(0, 120) : "",
+      sourceVersion: typeof entry.sourceVersion === "string" ? entry.sourceVersion.trim().slice(0, 80) : "",
       sourceUrl: normalizeOptionalUrl(entry.sourceUrl),
       sourceName: typeof entry.sourceName === "string" ? entry.sourceName.trim().slice(0, 120) : "",
       category,
