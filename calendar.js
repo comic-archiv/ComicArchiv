@@ -299,12 +299,16 @@ export function buildCalendarIcs(events, options = {}) {
 export function formatCalendarDate(dateString, options = {}) {
   const date = parseLocalDate(dateString);
   if (!date) return "";
-  return new Intl.DateTimeFormat("de-DE", {
-    weekday: options.includeWeekday === false ? undefined : "short",
-    day: "2-digit",
-    month: options.includeMonth === false ? undefined : "2-digit",
-    year: options.includeYear ? "numeric" : undefined
-  }).format(date);
+  try {
+    return new Intl.DateTimeFormat("de-DE", {
+      weekday: options.includeWeekday === false ? undefined : "short",
+      day: "2-digit",
+      month: options.includeMonth === false ? undefined : "2-digit",
+      year: options.includeYear ? "numeric" : undefined
+    }).format(date);
+  } catch {
+    return "";
+  }
 }
 
 export function isToday(dateString) {
@@ -383,7 +387,12 @@ function normalizeTime(value) {
 }
 
 function normalizeDateTime(value) {
-  return typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : "";
+  if (typeof value !== "string" || !value.trim() || /^0000(?:-|$)/.test(value.trim())) return "";
+  try {
+    return Number.isFinite(Date.parse(value)) ? value : "";
+  } catch {
+    return "";
+  }
 }
 
 function normalizeOptionalUrl(value) {
@@ -407,8 +416,16 @@ function normalizeLocalCalendarPath(value) {
 function parseLocalDate(value) {
   const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  return Number.isNaN(date.getTime()) ? null : date;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!Number.isSafeInteger(year) || year < 1900 || year > 2100) return null;
+  if (!Number.isSafeInteger(month) || month < 1 || month > 12) return null;
+  if (!Number.isSafeInteger(day) || day < 1 || day > 31) return null;
+  const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+  if (Number.isNaN(date.getTime())) return null;
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return date;
 }
 
 function addDays(dateString, amount) {

@@ -405,6 +405,8 @@ async function initializeApp() {
 
   try {
     state.settings = await getAppSettings();
+    // Persist the normalized settings once so invalid legacy calendar values are repaired permanently.
+    state.settings = await saveAppSettings(state.settings);
     applyTheme(state.settings.theme);
     elements.showCovers.checked = state.settings.showCovers !== false;
     elements.autoEnrich.checked = state.settings.duckipediaAutoEnrich !== false;
@@ -4809,6 +4811,20 @@ async function handleUpdateButtonClick() {
   }
 }
 
+function getSafeCalendarYear(value = state.settings.calendarSelectedYear) {
+  const year = Number(value);
+  return Number.isSafeInteger(year) && year >= 1900 && year <= 2100
+    ? year
+    : new Date().getFullYear();
+}
+
+function getSafeCalendarMonth(value = state.settings.calendarSelectedMonth) {
+  const month = Number(value);
+  return Number.isSafeInteger(month) && month >= 0 && month <= 11
+    ? month
+    : new Date().getMonth();
+}
+
 function getCalendarEvents() {
   return Array.isArray(state.settings.calendarEvents)
     ? state.settings.calendarEvents.map(normalizeCalendarEvent).filter(Boolean).sort(compareCalendarEvents)
@@ -4875,8 +4891,8 @@ function closeCalendarPage() {
 }
 
 function renderCalendarPage() {
-  const year = Number(state.settings.calendarSelectedYear || new Date().getFullYear());
-  const month = Number(state.settings.calendarSelectedMonth ?? new Date().getMonth());
+  const year = getSafeCalendarYear();
+  const month = getSafeCalendarMonth();
   const allYearEvents = getEventsForYear(getCalendarEvents(), year);
   const yearEvents = filterCalendarEvents(allYearEvents, {
     category: state.calendarFilter,
@@ -5117,12 +5133,12 @@ function inferDuckipediaUrlFromCalendarTitle(title) {
 }
 
 async function changeCalendarYear(delta) {
-  const nextYear = Math.min(2100, Math.max(1900, Number(state.settings.calendarSelectedYear || new Date().getFullYear()) + delta));
+  const nextYear = Math.min(2100, Math.max(1900, getSafeCalendarYear() + delta));
   await setCalendarYear(nextYear);
 }
 
 async function setCalendarYear(year) {
-  const normalizedYear = Math.min(2100, Math.max(1900, Number(year) || new Date().getFullYear()));
+  const normalizedYear = getSafeCalendarYear(year);
   state.settings = await saveAppSettings({ ...state.settings, calendarSelectedYear: normalizedYear });
   renderCalendarPage();
 }
@@ -5142,7 +5158,7 @@ async function jumpCalendarToToday() {
 }
 
 async function setCalendarMonth(month) {
-  const normalizedMonth = Math.min(11, Math.max(0, Number(month)));
+  const normalizedMonth = getSafeCalendarMonth(month);
   state.settings = await saveAppSettings({ ...state.settings, calendarSelectedMonth: normalizedMonth });
   renderCalendarPage();
 }
@@ -5345,7 +5361,9 @@ async function importCalendarText(text, source = {}) {
       eventCount: yearEvents.length
     };
   });
-  const preferredYear = importedYears.includes(new Date().getFullYear()) ? new Date().getFullYear() : importedYears[0] || state.settings.calendarSelectedYear;
+  const preferredYear = importedYears.includes(new Date().getFullYear())
+    ? new Date().getFullYear()
+    : importedYears[0] || getSafeCalendarYear();
   state.settings = await saveMeaningfulSettings({
     calendarEvents: mergedEvents,
     calendarImportedSources: importedSources,
@@ -5369,7 +5387,7 @@ function openCalendarEventModal(calendarEvent = null) {
   elements.calendarEventModalTitle.textContent = event ? "Termin bearbeiten" : "Termin hinzufügen";
   elements.calendarEventId.value = event?.id || "";
   elements.calendarEventName.value = event?.title || "";
-  elements.calendarEventDate.value = event?.startDate || `${state.settings.calendarSelectedYear}-${String(Number(state.settings.calendarSelectedMonth ?? new Date().getMonth()) + 1).padStart(2, "0")}-01`;
+  elements.calendarEventDate.value = event?.startDate || `${getSafeCalendarYear()}-${String(getSafeCalendarMonth() + 1).padStart(2, "0")}-01`;
   elements.calendarEventCategory.value = event?.category && event.category !== "release" ? event.category : "flea-market";
   elements.calendarEventAllDay.checked = event ? event.allDay !== false : true;
   elements.calendarEventTime.value = event?.startTime || "10:00";
@@ -5459,7 +5477,7 @@ async function handleCalendarReminderTimeChange() {
 }
 
 async function exportCalendarWithReminders() {
-  const year = Number(state.settings.calendarSelectedYear || new Date().getFullYear());
+  const year = getSafeCalendarYear();
   const events = getEventsForYear(getCalendarEvents(), year);
   if (!events.length) {
     showCalendarImportMessage("Für dieses Jahr sind noch keine Termine vorhanden.", "error");

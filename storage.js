@@ -383,12 +383,8 @@ function normalizeSettings(settings) {
     calendarImportedSources: normalizeCalendarImportedSources(source.calendarImportedSources),
     calendarCatalogLastCheckAt: isValidDateString(source.calendarCatalogLastCheckAt) ? source.calendarCatalogLastCheckAt : null,
     calendarAutoSync: source.calendarAutoSync !== false,
-    calendarSelectedYear: Number.isSafeInteger(Number(source.calendarSelectedYear))
-      ? Math.min(2100, Math.max(1900, Number(source.calendarSelectedYear)))
-      : DEFAULT_SETTINGS.calendarSelectedYear,
-    calendarSelectedMonth: Number.isSafeInteger(Number(source.calendarSelectedMonth))
-      ? Math.min(11, Math.max(0, Number(source.calendarSelectedMonth)))
-      : DEFAULT_SETTINGS.calendarSelectedMonth,
+    calendarSelectedYear: normalizeCalendarYear(source.calendarSelectedYear),
+    calendarSelectedMonth: normalizeCalendarMonth(source.calendarSelectedMonth),
     calendarReminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(source.calendarReminderTime || ""))
       ? String(source.calendarReminderTime)
       : DEFAULT_SETTINGS.calendarReminderTime
@@ -424,13 +420,9 @@ function normalizeCalendarEvents(value) {
   entries.forEach((entry) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
     const title = typeof entry.title === "string" ? entry.title.trim().slice(0, 200) : "";
-    const startDate = typeof entry.startDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(entry.startDate)
-      ? entry.startDate
-      : "";
-    if (!title || !startDate || Number.isNaN(Date.parse(`${startDate}T12:00:00`))) return;
-    const endDate = typeof entry.endDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(entry.endDate)
-      ? entry.endDate
-      : startDate;
+    const startDate = normalizeCalendarDate(entry.startDate);
+    if (!title || !startDate) return;
+    const endDate = normalizeCalendarDate(entry.endDate) || startDate;
     const sourceType = entry.source === "publisher" ? "publisher" : "custom";
     const category = ["release", "flea-market", "comic-fair", "other"].includes(entry.category)
       ? entry.category
@@ -527,6 +519,41 @@ function normalizeOptionalUrl(value) {
   }
 }
 
+function normalizeCalendarYear(value) {
+  const currentYear = new Date().getFullYear();
+  if (value === null || value === undefined || value === "") return currentYear;
+  const year = Number(value);
+  return Number.isSafeInteger(year) && year >= 1900 && year <= 2100 ? year : currentYear;
+}
+
+function normalizeCalendarMonth(value) {
+  const currentMonth = new Date().getMonth();
+  if (value === null || value === undefined || value === "") return currentMonth;
+  const month = Number(value);
+  return Number.isSafeInteger(month) && month >= 0 && month <= 11 ? month : currentMonth;
+}
+
+function normalizeCalendarDate(value) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return "";
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!Number.isSafeInteger(year) || year < 1900 || year > 2100) return "";
+  if (!Number.isSafeInteger(month) || month < 1 || month > 12) return "";
+  if (!Number.isSafeInteger(day) || day < 1 || day > 31) return "";
+  const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+  if (Number.isNaN(date.getTime())) return "";
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return "";
+  return raw;
+}
+
 function isValidDateString(value) {
-  return typeof value === "string" && !Number.isNaN(Date.parse(value));
+  if (typeof value !== "string" || !value.trim() || /^0000(?:-|$)/.test(value.trim())) return false;
+  try {
+    return Number.isFinite(Date.parse(value));
+  } catch {
+    return false;
+  }
 }

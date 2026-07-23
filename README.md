@@ -1,8 +1,15 @@
-# Entenarchiv 3.6.0
+# Entenarchiv 3.6.1
 
 Private, mobile Progressive Web App zur Verwaltung einer LTB- und Sonderband-Sammlung.
 
-## Neu in 3.6.0
+## Hotfix 3.6.1
+
+- behebt den iOS-Startfehler „Jahr darf nicht 0 betragen“
+- ungültige ältere Kalenderjahre werden automatisch auf das aktuelle Jahr gesetzt
+- ungültige Kalenderdaten und Zeitstempel werden ohne Absturz verworfen
+- bereinigte Einstellungen werden beim ersten erfolgreichen Start dauerhaft gespeichert
+
+## Enthalten seit 3.6.0
 
 - jahresunabhängiger Kalender über `data/kalender-index.json`
 - automatische Erkennung verfügbarer Jahrespläne
