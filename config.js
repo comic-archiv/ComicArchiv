@@ -1,5 +1,5 @@
 export const APP_CONFIG = Object.freeze({
-  appVersion: "3.6.1",
+  appVersion: "3.7.0",
   dataFormatVersion: 7,
   minimumSupportedBackupVersion: 1,
   storageName: "ComicArchiv",

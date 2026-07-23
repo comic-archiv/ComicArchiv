@@ -1,698 +1,652 @@
-<!doctype html>
-<html lang="de" data-theme="dark">
+<!DOCTYPE html>
+
+<html data-theme="dark" lang="de">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0B1020">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Entenarchiv">
-  <meta name="description" content="Privates Archiv für Lustige Taschenbücher und Sonderbände.">
-  <title>Entenarchiv</title>
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
-  <link rel="icon" href="./icons/icon-192.png" sizes="192x192" type="image/png">
-  <link rel="stylesheet" href="./style.css">
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport"/>
+<meta content="#0B1020" name="theme-color"/>
+<meta content="yes" name="apple-mobile-web-app-capable"/>
+<meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
+<meta content="Entenarchiv" name="apple-mobile-web-app-title"/>
+<meta content="Privates Archiv für Lustige Taschenbücher und Sonderbände." name="description"/>
+<title>Entenarchiv</title>
+<link href="./manifest.webmanifest" rel="manifest"/>
+<link href="./icons/apple-touch-icon.png" rel="apple-touch-icon"/>
+<link href="./icons/icon-192.png" rel="icon" sizes="192x192" type="image/png"/>
+<link href="./style.css" rel="stylesheet"/>
 </head>
 <body>
-  <a class="skip-link" href="#main-content">Zum Inhalt springen</a>
+<a class="skip-link" href="#main-content">Zum Inhalt springen</a>
+<header class="app-header">
+<div class="brand">
+<img alt="" aria-hidden="true" class="brand-mark brand-logo" src="./icons/icon-192.png"/>
+<div>
+<p class="eyebrow">Mein privates Comic-Archiv</p>
+<h1>Entenarchiv</h1>
+</div>
+</div>
+<button aria-label="Darstellung wechseln" class="icon-button" id="theme-toggle" type="button">
+<span aria-hidden="true" id="theme-icon">☀︎</span>
+</button>
+</header>
+<main class="app-shell" id="main-content">
 
-  <header class="app-header">
-    <div class="brand">
-      <img class="brand-mark brand-logo" src="./icons/icon-192.png" alt="" aria-hidden="true">
-      <div>
-        <p class="eyebrow">Mein privates Comic-Archiv</p>
-        <h1>Entenarchiv</h1>
-      </div>
-    </div>
-    <button id="theme-toggle" class="icon-button" type="button" aria-label="Darstellung wechseln">
-      <span id="theme-icon" aria-hidden="true">☀︎</span>
-    </button>
-  </header>
-
-  <main id="main-content" class="app-shell">
-    <section class="status-panel" aria-label="App-Status">
-      <span id="connection-status" class="status-pill">Online</span>
-      <span class="status-copy">Lokale Sammlung</span>
-      <button id="update-app" class="update-pill" type="button">Updates prüfen</button>
-      <span id="app-version" class="version-pill">v3.6.1</span>
-    </section>
-
-    <section id="backup-reminder" class="backup-reminder hidden" aria-live="polite">
-      <div>
-        <strong>Backup empfohlen</strong>
-        <p id="backup-reminder-text">Deine Sammlung wurde seit dem letzten Backup geändert.</p>
-      </div>
-      <button id="backup-reminder-action" class="primary-button compact-button" type="button">Jetzt sichern</button>
-    </section>
-
-    <section id="dashboard" class="section-anchor" aria-labelledby="dashboard-title">
-      <div class="section-heading compact-heading">
-        <div><p class="eyebrow">Übersicht</p><h2 id="dashboard-title">Dashboard</h2></div>
-      </div>
-      <div class="stats-grid" aria-label="Sammlungsübersicht">
-        <article class="stat-card"><span class="stat-label">Gesamt</span><strong id="stat-total" class="stat-value">0</strong></article>
-        <article class="stat-card"><span class="stat-label">Reihen</span><strong id="stat-series" class="stat-value">0</strong></article>
-        <article class="stat-card"><span class="stat-label">Gelesen</span><strong id="stat-read" class="stat-value">0</strong></article>
-        <article class="stat-card"><span class="stat-label">Ungelesen</span><strong id="stat-unread" class="stat-value">0</strong></article>
-        <article class="stat-card"><span class="stat-label">Foliert</span><strong id="stat-sealed" class="stat-value">0</strong></article>
-        <article class="stat-card"><span class="stat-label">Doppelt</span><strong id="stat-duplicate" class="stat-value">0</strong></article>
-        <article class="stat-card stat-card-highlight"><span class="stat-label">Fehlende Bände</span><strong id="stat-missing" class="stat-value">0</strong></article>
-      </div>
-      <section class="panel condition-panel" aria-labelledby="condition-stats-title">
-        <div class="subsection-heading"><h3 id="condition-stats-title">Verteilung nach Zustand</h3><span id="condition-stats-total" class="muted-copy">0 Exemplare</span></div>
-        <div id="condition-stats" class="condition-stats"></div>
-      </section>
-
-      <section class="panel progress-overview-card" aria-labelledby="progress-overview-title">
-        <div class="progress-overview-heading">
-          <div><p class="eyebrow">Vollständigkeit</p><h3 id="progress-overview-title">Reihenfortschritt</h3></div>
-          <strong id="progress-overview-percent" class="progress-overview-percent">0 %</strong>
-        </div>
-        <p id="progress-overview-copy" class="muted-copy progress-overview-copy">Noch kein Fortschritt berechenbar.</p>
-        <div class="progress-bar progress-overview-bar" role="progressbar" aria-label="Gesamtfortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="progress-overview-fill"></span></div>
-        <div class="progress-overview-actions">
-          <span id="progress-summary" class="count-badge">0 Reihen</span>
-          <button id="open-progress" class="secondary-button compact-button" type="button">Details öffnen</button>
-        </div>
-      </section>
-
-      <section class="panel calendar-overview-card" aria-labelledby="calendar-overview-title">
-        <div class="calendar-overview-heading">
-          <div><p class="eyebrow">Termine</p><h3 id="calendar-overview-title">Entenarchiv-Kalender</h3></div>
-          <span id="calendar-overview-count" class="count-badge">0 Termine</span>
-        </div>
-        <div id="calendar-overview-events" class="calendar-overview-events">
-          <p class="muted-copy">Noch keine Erscheinungstermine importiert.</p>
-        </div>
-        <div class="calendar-overview-actions">
-          <span id="calendar-overview-copy" class="muted-copy">Neuerscheinungen und eigene Termine</span>
-          <button id="open-calendar" class="primary-button compact-button" type="button">Kalender öffnen</button>
-        </div>
-      </section>
-    </section>
-
-    <section id="add" class="panel form-panel section-anchor compact-form-panel" aria-labelledby="form-title">
-      <div class="section-heading compact-form-heading">
-        <div><p class="eyebrow">Sammlung verwalten</p><h2 id="form-title">Comic hinzufügen</h2></div>
-        <button id="cancel-edit" class="text-button hidden" type="button">Abbrechen</button>
-      </div>
-      <p class="required-note"><strong>*</strong> Pflichtfeld</p>
-      <button id="open-scanner" class="scanner-launch-button" type="button">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M7 9v6M10 8v8M13 9v6M16 8v8"/></svg>
-        <span><strong>Serien-Scanner</strong><small>Zusatzbarcode lesen und Bandnummer automatisch übernehmen</small></span>
-      </button>
-
-      <form id="comic-form" novalidate>
-        <div class="field-grid compact-field-grid">
-          <div class="field field-full">
-            <div class="field-label-row"><label for="series">Reihe <strong aria-hidden="true">*</strong></label><button id="open-series-manager" class="inline-action" type="button">Reihen verwalten</button></div>
-            <select id="series" name="series" required autocomplete="off"></select>
-            <small class="field-error" id="series-error"></small>
-          </div>
-
-          <label class="field paired-field">
-            <span>Bandnummer <strong aria-hidden="true">*</strong></span>
-            <input id="volume-number" name="volumeNumber" type="text" inputmode="numeric" maxlength="30" required autocomplete="off" placeholder="z. B. 42">
-            <small class="field-error" id="volume-number-error"></small>
-          </label>
-
-          <label class="field paired-field">
-            <span>Erscheinungsjahr</span>
-            <input id="publication-year" name="publicationYear" type="number" inputmode="numeric" min="1800" max="2035" autocomplete="off" placeholder="z. B. 2024">
-            <small class="field-error" id="publication-year-error"></small>
-          </label>
-
-          <label class="field field-full">
-            <span>Titel</span>
-            <input id="title" name="title" type="text" maxlength="200" autocomplete="off" placeholder="Optional">
-            <small class="field-error" id="title-error"></small>
-          </label>
-
-          <section class="cover-editor field-full" aria-labelledby="cover-editor-title">
-            <div class="cover-editor-preview">
-              <img id="form-cover-preview" class="hidden" alt="Covervorschau">
-              <div id="form-cover-placeholder" class="cover-placeholder" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5zM7 16l3-3 2.5 2.5L15 13l2 3M8.5 9.5h.01"/></svg>
-                <span>Kein Cover</span>
-              </div>
-            </div>
-            <div class="cover-editor-copy">
-              <div><span id="cover-editor-title" class="field-title">Eigenes Coverfoto</span><small>Optional, lokal komprimiert gespeichert</small></div>
-              <div class="cover-editor-actions">
-                <label class="secondary-button compact-button file-button" for="cover-file">Cover aufnehmen/auswählen</label>
-                <input id="cover-file" class="visually-hidden" type="file" accept="image/*">
-                <button id="remove-cover" class="text-button danger-text hidden" type="button">Entfernen</button>
-              </div>
-              <p id="cover-status" class="field-help" aria-live="polite"></p>
-            </div>
-          </section>
-
-          <div class="metadata-controls field-full">
-            <button id="lookup-metadata" class="secondary-button compact-button" type="button">Duckipedia-Daten laden</button>
-            <p id="metadata-status" class="field-help" aria-live="polite"></p>
-          </div>
-
-          <label class="field" id="primary-condition-field">
-            <span id="primary-condition-label">Zustand <strong aria-hidden="true">*</strong></span>
-            <select id="condition" name="condition" required></select>
-            <small class="field-error" id="condition-error"></small>
-          </label>
-
-          <label class="field hidden" id="duplicate-condition-field">
-            <span>Zustand Exemplar 2 <strong aria-hidden="true">*</strong></span>
-            <select id="duplicate-condition" name="duplicateCondition"></select>
-            <small class="field-error" id="duplicate-condition-error"></small>
-          </label>
-        </div>
-
-        <fieldset class="switch-group compact-switch-group">
-          <legend>Eigenschaften</legend>
-          <label class="check-row"><input id="is-read" name="isRead" type="checkbox"><span>Gelesen</span></label>
-          <label class="check-row"><input id="is-duplicate" name="isDuplicate" type="checkbox"><span>Doppelt</span></label>
-          <label class="check-row"><input id="is-sealed" name="isSealed" type="checkbox"><span>Foliert</span></label>
-        </fieldset>
-
-        <label class="field field-full compact-notes-field">
-          <span>Notizen</span>
-          <textarea id="notes" name="notes" rows="3" maxlength="2000" placeholder="Optional, z. B. kleine Gebrauchsspuren"></textarea>
-          <small class="field-error" id="notes-error"></small>
-        </label>
-
-        <div class="form-actions compact-form-actions">
-          <button class="primary-button" type="submit" data-action="save">Comic speichern</button>
-          <button id="save-next" class="secondary-button" type="submit" data-action="save-next">Speichern &amp; nächsten Band</button>
-        </div>
-        <p id="form-message" class="form-message" role="status" aria-live="polite"></p>
-      </form>
-    </section>
-
-    <section id="collection" class="collection-section section-anchor" aria-labelledby="collection-title">
-      <div class="section-heading collection-heading">
-        <div><p class="eyebrow">Gespeicherte Einträge</p><h2 id="collection-title">Meine Sammlung</h2></div>
-      </div>
-      <div class="collection-hub-grid">
-        <button id="open-main-collection" class="collection-hub-card" type="button">
-          <span class="collection-hub-icon" aria-hidden="true">LTB</span>
-          <span class="collection-hub-copy"><strong>Lustige Taschenbücher</strong><small>Nur die Hauptreihe</small></span>
-          <span id="main-collection-count" class="collection-hub-count">0</span>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-        </button>
-        <button id="open-other-collection" class="collection-hub-card" type="button">
-          <span class="collection-hub-icon collection-hub-icon-alt" aria-hidden="true">＋</span>
-          <span class="collection-hub-copy"><strong>Sonderbände &amp; weitere Reihen</strong><small>Alle Reihen außer der Hauptreihe</small></span>
-          <span id="other-collection-count" class="collection-hub-count">0</span>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-        </button>
-      </div>
-    </section>
-
-    <section id="missing" class="section-anchor" aria-labelledby="missing-title">
-      <div class="section-heading collection-heading">
-        <div><p class="eyebrow">Automatische Prüfung</p><h2 id="missing-title">Fehlende Bände</h2></div>
-        <span id="missing-count" class="count-badge">0 fehlen</span>
-      </div>
-      <div class="collection-hub-grid">
-        <button id="open-main-missing" class="collection-hub-card" type="button">
-          <span class="collection-hub-icon" aria-hidden="true">LTB</span>
-          <span class="collection-hub-copy"><strong>Lustige Taschenbücher</strong><small>Fehlende Bände der Hauptreihe</small></span>
-          <span id="main-missing-count" class="collection-hub-count">0</span>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-        </button>
-        <button id="open-other-missing" class="collection-hub-card" type="button">
-          <span class="collection-hub-icon collection-hub-icon-alt" aria-hidden="true">＋</span>
-          <span class="collection-hub-copy"><strong>Sonderbände &amp; weitere Reihen</strong><small>Fehlende Bände aller Nebenreihen</small></span>
-          <span id="other-missing-count" class="collection-hub-count">0</span>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-        </button>
-      </div>
-      <div class="missing-tools-row">
-        <button id="open-flea-market" class="primary-button flea-market-launch" type="button">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16l-1 11H5L4 8Zm3 0V6a5 5 0 0 1 10 0v2M9 12v3m6-3v3"/></svg>
-          <span>Flohmarkt-Modus öffnen</span>
-          <span id="flea-market-found-count" class="action-count">0 gefunden</span>
-        </button>
-      </div>
-    </section>
-
-    <section id="backup" class="panel backup-panel section-anchor" aria-labelledby="backup-title">
-      <div class="section-heading"><div><p class="eyebrow">Daten sichern</p><h2 id="backup-title">Export &amp; Backup</h2></div></div>
-      <div class="backup-status-grid">
-        <div class="backup-status-card"><span class="stat-label">Backup-Status</span><strong id="backup-health">Wird geprüft …</strong><small id="backup-change-count" class="muted-copy">0 Änderungen seit Backup</small></div>
-        <div class="backup-status-card"><span class="stat-label">Letztes JSON-Backup</span><strong id="last-backup">Noch keines</strong></div>
-        <div class="backup-status-card"><span class="stat-label">Speichermodus</span><strong id="storage-persistence">Wird geprüft …</strong><small id="storage-usage" class="muted-copy"></small></div>
-      </div>
-      <div class="backup-actions">
-        <button id="export-json" class="primary-button" type="button">JSON-Backup erstellen</button>
-        <button id="export-csv" class="secondary-button" type="button">Sammlung als CSV</button>
-        <button id="export-missing-csv" class="secondary-button" type="button">Fehlende Bände als CSV</button>
-        <button id="export-missing-pdf" class="secondary-button pdf-export-button" type="button">Flohmarkt-Liste als PDF</button>
-        <button id="open-import" class="secondary-button" type="button">Backup importieren</button>
-        <button id="open-media" class="secondary-button" type="button">Medien &amp; Metadaten</button>
-        <button id="request-persistence" class="text-button storage-button" type="button">Speicherschutz anfragen</button>
-      </div>
-      <p id="export-message" class="form-message" role="status" aria-live="polite"></p>
-      <p class="backup-help">Das normale JSON-Backup enthält Sammlung, Einstellungen und Duckipedia-Cache, aber keine eigenen Coverfotos. Für Cover nutze „Medien &amp; Metadaten“. Das iPhone-Teilen-Menü wird genutzt, wenn Dateifreigabe unterstützt wird; sonst startet ein Download.</p>
-    </section>
-  </main>
-
-  <nav class="bottom-nav" aria-label="Hauptnavigation">
-    <a href="#dashboard"><span aria-hidden="true">▦</span>Übersicht</a>
-    <a href="#add"><span aria-hidden="true">＋</span>Hinzufügen</a>
-    <a href="#collection"><span aria-hidden="true">▤</span>Sammlung</a>
-    <a href="#backup"><span aria-hidden="true">⇩</span>Backup</a>
-  </nav>
+<section aria-live="polite" class="backup-reminder hidden" id="backup-reminder">
+<div>
+<strong>Backup empfohlen</strong>
+<p id="backup-reminder-text">Deine Sammlung wurde seit dem letzten Backup geändert.</p>
+</div>
+<button class="primary-button compact-button" id="backup-reminder-action" type="button">Jetzt sichern</button>
+</section>
+<section aria-labelledby="dashboard-title" class="section-anchor" id="dashboard">
+<div class="section-heading compact-heading">
+<div><p class="eyebrow">Übersicht</p><h2 id="dashboard-title">Dashboard</h2></div>
+</div>
+<div aria-label="Sammlungsübersicht" class="stats-grid">
+<button aria-label="Gesamt 0 öffnen" class="stat-card" data-dashboard-action="total" type="button"><span class="stat-label">Gesamt</span><strong class="stat-value" id="stat-total">0</strong></button>
+<button aria-label="Reihen 0 öffnen" class="stat-card" data-dashboard-action="series" type="button"><span class="stat-label">Reihen</span><strong class="stat-value" id="stat-series">0</strong></button>
+<button aria-label="Gelesen 0 öffnen" class="stat-card" data-dashboard-action="read" type="button"><span class="stat-label">Gelesen</span><strong class="stat-value" id="stat-read">0</strong></button>
+<button aria-label="Ungelesen 0 öffnen" class="stat-card" data-dashboard-action="unread" type="button"><span class="stat-label">Ungelesen</span><strong class="stat-value" id="stat-unread">0</strong></button>
+<button aria-label="Foliert 0 öffnen" class="stat-card" data-dashboard-action="sealed" type="button"><span class="stat-label">Foliert</span><strong class="stat-value" id="stat-sealed">0</strong></button>
+<button aria-label="Doppelt 0 öffnen" class="stat-card" data-dashboard-action="duplicate" type="button"><span class="stat-label">Doppelt</span><strong class="stat-value" id="stat-duplicate">0</strong></button>
+<button aria-label="Fehlende Bände 0 öffnen" class="stat-card stat-card-highlight" data-dashboard-action="missing" type="button"><span class="stat-label">Fehlende Bände</span><strong class="stat-value" id="stat-missing">0</strong></button>
+</div>
 
 
-  <section id="collection-page" class="app-page hidden" aria-labelledby="collection-page-title" aria-hidden="true">
-    <header class="app-page-header">
-      <button id="close-collection" class="app-page-back" type="button" aria-label="Zurück zur Sammlungsauswahl">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-        <span>Zurück</span>
-      </button>
-      <div class="app-page-title"><p class="eyebrow">Meine Sammlung</p><h2 id="collection-page-title">Lustige Taschenbücher</h2></div>
-      <span id="collection-count" class="count-badge">0 Einträge</span>
-    </header>
-    <div class="app-page-content collection-page-content">
-      <details id="filter-panel" class="panel filter-panel collapsible-panel">
-        <summary>
-          <span><strong>Suchen &amp; filtern</strong><small id="filter-summary">Standardansicht</small></span>
-          <span class="disclosure-icon" aria-hidden="true">⌄</span>
-        </summary>
-        <div class="collapsible-content">
-          <div class="filter-toolbar"><span id="filter-result" class="filter-result" aria-live="polite"></span><button id="reset-filters" class="text-button" type="button">Zurücksetzen</button></div>
-          <div class="filter-grid">
-            <label class="field field-full"><span>Suche</span><input id="search" type="search" placeholder="Titel, Reihe, Bandnummer oder Notiz"></label>
-            <label id="filter-series-field" class="field"><span>Reihe</span><select id="filter-series"></select></label>
-            <label class="field"><span>Zustand</span><select id="filter-condition"></select></label>
-            <label class="field"><span>Lesestatus</span><select id="filter-read"><option value="all">Alle</option><option value="read">Nur gelesen</option><option value="unread">Nur ungelesen</option></select></label>
-            <label class="field"><span>Sortierung</span><select id="sort-by"><option value="series">Reihe &amp; Bandnummer</option><option value="volume">Bandnummer</option><option value="title">Titel</option><option value="condition">Zustand</option></select></label>
-          </div>
-          <div class="filter-toggles">
-            <label class="check-row compact-check"><input id="filter-sealed" type="checkbox"><span>Nur foliert</span></label>
-            <label class="check-row compact-check"><input id="filter-duplicate" type="checkbox"><span>Nur doppelt</span></label>
-          </div>
-        </div>
-      </details>
-      <div id="empty-state" class="panel empty-state"><div class="empty-icon" aria-hidden="true">＋</div><h3>Noch keine Comics in diesem Bereich</h3><p>Lege über „Comic hinzufügen“ deinen ersten Band an.</p></div>
-      <div id="no-results" class="panel empty-state hidden"><div class="empty-icon" aria-hidden="true">⌕</div><h3>Keine passenden Einträge</h3><p>Ändere die Suche oder setze die Filter zurück.</p></div>
-      <div id="comic-list" class="comic-list" aria-live="polite"></div>
-    </div>
-  </section>
 
-  <section id="missing-page" class="app-page hidden" aria-labelledby="missing-page-title" aria-hidden="true">
-    <header class="app-page-header">
-      <button id="close-missing-page" class="app-page-back" type="button" aria-label="Zurück zur Fehlband-Auswahl">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-        <span>Zurück</span>
-      </button>
-      <div class="app-page-title"><p class="eyebrow">Such- &amp; Wunschliste</p><h2 id="missing-page-title">Lustige Taschenbücher</h2></div>
-      <span id="missing-page-count" class="count-badge">0 fehlen</span>
-    </header>
-    <div class="app-page-content missing-page-content">
-      <div id="missing-empty" class="panel empty-state"><div class="empty-icon" aria-hidden="true">✓</div><h3>Keine Lücken erkannt</h3><p>In diesem Bereich wurden aktuell keine fehlenden numerischen Bände erkannt.</p></div>
-      <div id="missing-list" class="missing-list"></div>
-    </div>
-  </section>
+</section>
 
-  <section id="flea-market-page" class="app-page hidden" aria-labelledby="flea-market-title" aria-hidden="true">
-    <header class="app-page-header">
-      <button id="close-flea-market" class="app-page-back" type="button" aria-label="Zurück zu den fehlenden Bänden">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-        <span>Zurück</span>
-      </button>
-      <div class="app-page-title"><p class="eyebrow">Unterwegs suchen</p><h2 id="flea-market-title">Flohmarkt-Modus</h2></div>
-      <span id="flea-market-page-count" class="count-badge">0 gefunden</span>
-    </header>
-    <div class="app-page-content flea-market-content">
-      <section class="panel flea-market-summary" aria-label="Flohmarkt-Status">
-        <div><span class="stat-label">Noch auf der Liste</span><strong id="flea-market-missing-count">0</strong></div>
-        <div><span class="stat-label">Als gefunden markiert</span><strong id="flea-market-selected-count">0</strong></div>
-      </section>
+<section aria-labelledby="collection-title" class="collection-section section-anchor" id="collection">
+<div class="section-heading collection-heading">
+<div><p class="eyebrow">Gespeicherte Einträge</p><h2 id="collection-title">Meine Sammlung</h2></div>
+</div>
+<div class="collection-hub-grid">
+<button class="collection-hub-card" id="open-main-collection" type="button">
+<span aria-hidden="true" class="collection-hub-icon">LTB</span>
+<span class="collection-hub-copy"><strong>Lustige Taschenbücher</strong><small>Nur die Hauptreihe</small></span>
+<span class="collection-hub-count" id="main-collection-count">0</span>
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
+<button class="collection-hub-card" id="open-other-collection" type="button">
+<span aria-hidden="true" class="collection-hub-icon collection-hub-icon-alt">＋</span>
+<span class="collection-hub-copy"><strong>Sonderbände &amp; weitere Reihen</strong><small>Alle Reihen außer der Hauptreihe</small></span>
+<span class="collection-hub-count" id="other-collection-count">0</span>
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
+</div>
+</section>
+<section aria-labelledby="missing-title" class="section-anchor" id="missing">
+<div class="section-heading collection-heading">
+<div><p class="eyebrow">Automatische Prüfung</p><h2 id="missing-title">Fehlende Bände</h2></div>
+<span class="count-badge" id="missing-count">0 fehlen</span>
+</div>
+<div class="collection-hub-grid">
+<button class="collection-hub-card" id="open-main-missing" type="button">
+<span aria-hidden="true" class="collection-hub-icon">LTB</span>
+<span class="collection-hub-copy"><strong>Lustige Taschenbücher</strong><small>Fehlende Bände der Hauptreihe</small></span>
+<span class="collection-hub-count" id="main-missing-count">0</span>
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
+<button class="collection-hub-card" id="open-other-missing" type="button">
+<span aria-hidden="true" class="collection-hub-icon collection-hub-icon-alt">＋</span>
+<span class="collection-hub-copy"><strong>Sonderbände &amp; weitere Reihen</strong><small>Fehlende Bände aller Nebenreihen</small></span>
+<span class="collection-hub-count" id="other-missing-count">0</span>
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
+</div>
+<div class="missing-tools-row">
+<button class="primary-button flea-market-launch" id="open-flea-market" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M4 8h16l-1 11H5L4 8Zm3 0V6a5 5 0 0 1 10 0v2M9 12v3m6-3v3"></path></svg>
+<span>Flohmarkt-Modus öffnen</span>
+<span class="action-count" id="flea-market-found-count">0 gefunden</span>
+</button>
+</div>
+</section>
+<section aria-labelledby="backup-title" class="panel backup-panel section-anchor" id="backup">
+<div class="section-heading"><div><p class="eyebrow">Daten sichern</p><h2 id="backup-title">Export &amp; Backup</h2></div></div>
+<div class="backup-status-grid">
+<div class="backup-status-card"><span class="stat-label">Backup-Status</span><strong id="backup-health">Wird geprüft …</strong><small class="muted-copy" id="backup-change-count">0 Änderungen seit Backup</small></div>
+<div class="backup-status-card"><span class="stat-label">Letztes JSON-Backup</span><strong id="last-backup">Noch keines</strong></div>
 
-      <section class="panel flea-market-controls" aria-label="Flohmarkt-Liste filtern">
-        <div class="field-grid compact-field-grid">
-          <label class="field field-full"><span>Suche</span><input id="flea-market-search" type="search" placeholder="Reihe, Bandnummer oder Titel"></label>
-          <label class="field"><span>Bereich</span><select id="flea-market-scope"><option value="all">Alle Reihen</option><option value="main">Nur Hauptreihe</option><option value="other">Nur Sonderreihen</option></select></label>
-          <label class="field"><span>Standardzustand</span><select id="flea-market-default-condition"></select></label>
-        </div>
-        <button id="flea-market-apply-condition" class="secondary-button compact-button" type="button">Zustand auf gefundene Bände anwenden</button>
-      </section>
+</div><details class="backup-technical-details"><summary>Technische Speicherdetails</summary><div class="backup-technical-content"><div class="backup-status-card"><span class="stat-label">Speichermodus</span><strong id="storage-persistence">Wird geprüft …</strong><small class="muted-copy" id="storage-usage"></small></div><button class="text-button storage-button" id="request-persistence" type="button">Speicherschutz anfragen</button></div></details>
+<div class="backup-actions">
+<button class="primary-button" id="export-json" type="button">JSON-Backup erstellen</button>
+<button class="secondary-button" id="export-csv" type="button">Sammlung als CSV</button>
+<button class="secondary-button" id="export-missing-csv" type="button">Fehlende Bände als CSV</button>
+<button class="secondary-button pdf-export-button" id="export-missing-pdf" type="button">Flohmarkt-Liste als PDF</button>
+<button class="secondary-button" id="open-import" type="button">Backup importieren</button>
+<button class="secondary-button" id="open-media" type="button">Medien &amp; Metadaten</button>
 
-      <div id="flea-market-empty" class="panel empty-state hidden">
-        <div class="empty-icon" aria-hidden="true">✓</div><h3>Keine passenden fehlenden Bände</h3><p>Ändere den Filter oder ergänze zunächst Zielbandnummern.</p>
-      </div>
-      <div id="flea-market-list" class="flea-market-list" aria-live="polite"></div>
-
-      <div class="flea-market-sticky-actions">
-        <button id="flea-market-save" class="success-button" type="button">Gefundene Bände speichern</button>
-        <button id="flea-market-clear" class="secondary-button" type="button">Markierungen zurücksetzen</button>
-        <p id="flea-market-message" class="form-message" role="status" aria-live="polite"></p>
-      </div>
-    </div>
-  </section>
-
-  <section id="progress-page" class="app-page hidden" aria-labelledby="progress-title" aria-hidden="true">
-    <header class="app-page-header">
-      <button id="close-progress" class="app-page-back" type="button" aria-label="Zurück zur Übersicht">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-        <span>Zurück</span>
-      </button>
-      <div class="app-page-title"><p class="eyebrow">Vollständigkeit</p><h2 id="progress-title">Fortschritt je Reihe</h2></div>
-      <span id="progress-page-summary" class="count-badge">0 Reihen</span>
-    </header>
-    <div class="app-page-content">
-      <details id="progress-target-panel" class="progress-target-details">
-        <summary>Zielbandnummer verwalten</summary>
-        <div class="progress-target-content">
-          <p class="section-intro compact-intro">Lege optional eine höchste gewünschte Bandnummer fest. Ohne Ziel wird bis zum höchsten vorhandenen Band gerechnet.</p>
-          <form id="progress-target-form" class="panel progress-target-form" novalidate>
-            <label class="field"><span>Reihe</span><select id="progress-series"></select></label>
-            <label class="field"><span>Höchste gewünschte Bandnummer</span><input id="progress-target" type="number" inputmode="numeric" min="1" max="99999" placeholder="z. B. 600"></label>
-            <div class="progress-target-actions">
-              <button id="progress-save" class="secondary-button" type="submit">Ziel speichern</button>
-              <button id="progress-remove" class="text-button danger-text hidden" type="button">Ziel entfernen</button>
-            </div>
-            <p id="progress-message" class="form-message field-full" role="status" aria-live="polite"></p>
-          </form>
-        </div>
-      </details>
-      <div id="progress-list" class="progress-list"></div>
-    </div>
-  </section>
-
-  <section id="calendar-page" class="app-page hidden" aria-labelledby="calendar-title" aria-hidden="true">
-    <header class="app-page-header">
-      <button id="close-calendar" class="app-page-back" type="button" aria-label="Zurück zur Übersicht">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-        <span>Zurück</span>
-      </button>
-      <div class="app-page-title"><p class="eyebrow">Neuerscheinungen &amp; eigene Termine</p><h2 id="calendar-title">Kalender</h2></div>
-      <span id="calendar-page-summary" class="count-badge">0 Termine</span>
-    </header>
-    <div class="app-page-content calendar-page-content">
-      <section class="panel calendar-toolbar" aria-label="Kalender steuern">
-        <div class="calendar-year-row">
-          <button id="calendar-prev-year" class="icon-button small-icon-button" type="button" aria-label="Vorheriges Jahr">‹</button>
-          <label class="visually-hidden" for="calendar-year-select">Kalenderjahr</label>
-          <select id="calendar-year-select" class="calendar-year-select" aria-label="Kalenderjahr"></select>
-          <button id="calendar-next-year" class="icon-button small-icon-button" type="button" aria-label="Nächstes Jahr">›</button>
-        </div>
-        <div class="calendar-toolbar-actions">
-          <button id="calendar-today" class="secondary-button compact-button" type="button">Heute</button>
-          <button id="calendar-add-event" class="primary-button compact-button" type="button">Termin hinzufügen</button>
-          <button id="calendar-export-reminders" class="secondary-button compact-button" type="button">In Apple Kalender</button>
-        </div>
-      </section>
-
-      <section class="panel calendar-filter-panel" aria-label="Kalender filtern">
-        <label class="field field-full"><span>Termine durchsuchen</span><input id="calendar-search" type="search" maxlength="120" placeholder="Titel, Ort oder Notiz"></label>
-        <label class="field"><span>Anzeige</span><select id="calendar-category-filter"><option value="all">Alle Termine</option><option value="release">Neuerscheinungen</option><option value="flea-market">Flohmärkte</option><option value="comic-fair">Comicbörsen / Messen</option><option value="other">Sonstige Termine</option></select></label>
-      </section>
-
-      <details class="panel calendar-import-panel">
-        <summary><span><strong>Jahrespläne verwalten</strong><small id="calendar-import-summary">Kalenderindex wird geprüft</small></span><span class="disclosure-icon" aria-hidden="true">⌄</span></summary>
-        <div class="collapsible-content">
-          <div class="calendar-catalog-toolbar">
-            <div>
-              <strong>Verfügbare LTB-Jahre</strong>
-              <p id="calendar-catalog-status" class="muted-copy">Noch nicht geprüft</p>
-            </div>
-            <button id="calendar-refresh-catalog" class="secondary-button compact-button" type="button">Jahre prüfen</button>
-          </div>
-          <label class="check-row calendar-auto-sync-row"><input id="calendar-auto-sync" type="checkbox" checked><span>Aktuelles und folgendes Jahr automatisch laden und aktualisieren</span></label>
-          <div id="calendar-catalog-list" class="calendar-catalog-list"></div>
-          <div class="calendar-import-actions">
-            <label class="secondary-button file-button" for="calendar-file">Andere iCal-Datei importieren</label>
-            <input id="calendar-file" class="visually-hidden" type="file" accept=".ics,text/calendar">
-          </div>
-          <p class="muted-copy compact-help">Neue Jahrgänge werden künftig nur als weitere iCal-Datei und als Eintrag in <code>data/kalender-index.json</code> ergänzt. Die App-Adresse bleibt unverändert.</p>
-          <p id="calendar-import-message" class="form-message" role="status" aria-live="polite"></p>
-        </div>
-      </details>
-
-      <section class="panel calendar-reminder-panel" aria-labelledby="calendar-reminder-title">
-        <div>
-          <h3 id="calendar-reminder-title">Erinnerungen auf dem iPhone</h3>
-          <p class="muted-copy">Exportiere die Termine in Apple Kalender. Die Erinnerungen werden dort am Erscheinungstag ausgelöst – auch wenn Entenarchiv geschlossen ist.</p>
-        </div>
-        <label class="field calendar-reminder-time"><span>Uhrzeit</span><input id="calendar-reminder-time" type="time" value="09:00"></label>
-      </section>
-
-      <div id="calendar-month-tabs" class="calendar-month-tabs" aria-label="Monat auswählen"></div>
-
-      <section class="panel month-calendar-panel">
-        <div class="subsection-heading"><h3 id="calendar-month-title">Januar</h3><span id="calendar-month-count" class="muted-copy">0 Termine</span></div>
-        <div class="calendar-weekdays" aria-hidden="true"><span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span></div>
-        <div id="calendar-grid" class="calendar-grid" role="grid"></div>
-      </section>
-
-      <section class="calendar-event-section" aria-labelledby="calendar-event-list-title">
-        <div class="section-heading compact-heading"><div><p class="eyebrow">Monatsübersicht</p><h3 id="calendar-event-list-title">Termine</h3></div></div>
-        <div id="calendar-event-list" class="calendar-event-list"></div>
-        <div id="calendar-empty" class="panel empty-state hidden"><div class="empty-icon" aria-hidden="true">□</div><h3>Keine passenden Termine</h3><p>Ändere den Filter, lade einen Jahresplan oder füge einen eigenen Termin hinzu.</p></div>
-      </section>
-    </div>
-  </section>
-
-  <section id="media-page" class="app-page hidden" aria-labelledby="media-title" aria-hidden="true">
-    <header class="app-page-header">
-      <button id="close-media" class="app-page-back" type="button" aria-label="Zurück zum Backup">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-        <span>Zurück</span>
-      </button>
-      <div class="app-page-title"><p class="eyebrow">Lokale Medien</p><h2 id="media-title">Medien &amp; Metadaten</h2></div>
-      <span id="media-page-summary" class="count-badge">0 Cover</span>
-    </header>
-    <div class="app-page-content media-page-content">
-      <section class="media-stats-grid" aria-label="Speicherübersicht">
-        <article class="backup-status-card"><span class="stat-label">Eigene Cover</span><strong id="media-cover-count">0</strong><small id="media-cover-size" class="muted-copy">0 KB</small></article>
-        <article class="backup-status-card"><span class="stat-label">Duckipedia-Cache</span><strong id="media-cache-count">0 Einträge</strong><small class="muted-copy">Titel, Jahr und externe Coverlinks</small></article>
-        <article class="backup-status-card"><span class="stat-label">Gesamter App-Speicher</span><strong id="media-origin-usage">Wird geprüft …</strong><small id="media-origin-quota" class="muted-copy"></small></article>
-        <article class="backup-status-card"><span class="stat-label">Letztes Medien-Backup</span><strong id="last-media-backup">Noch keines</strong><small id="media-backup-changes" class="muted-copy">0 Medienänderungen</small></article>
-      </section>
-
-      <section class="panel media-settings-panel" aria-labelledby="media-display-title">
-        <div class="subsection-heading"><h3 id="media-display-title">Darstellung</h3></div>
-        <label class="check-row"><input id="show-covers" type="checkbox" checked><span><strong>Cover in der Sammlung anzeigen</strong><small>Eigene Fotos haben Vorrang vor Duckipedia-Vorschauen.</small></span></label>
-        <label class="check-row"><input id="auto-enrich" type="checkbox" checked><span><strong>Neue Bände automatisch anreichern</strong><small>Füllt leere Titel und Jahre und merkt sich Duckipedia-Daten lokal.</small></span></label>
-      </section>
-
-      <section class="panel media-action-panel" aria-labelledby="metadata-tools-title">
-        <div class="subsection-heading"><h3 id="metadata-tools-title">Duckipedia-Anreicherung</h3><span id="enrichment-count" class="muted-copy"></span></div>
-        <p class="section-intro compact-intro">Ergänzt bei numerischen Bänden fehlende Titel, Erscheinungsjahre und Coverlinks. Manuell eingetragene Angaben werden nicht überschrieben.</p>
-        <div class="media-action-grid">
-          <button id="enrich-all" class="primary-button" type="button">Fehlende Daten ergänzen</button>
-          <button id="clear-metadata-cache" class="secondary-button" type="button">Cache leeren</button>
-        </div>
-        <progress id="enrichment-progress" class="media-progress hidden" max="1" value="0"></progress>
-        <p id="enrichment-status" class="form-message" role="status" aria-live="polite"></p>
-      </section>
-
-      <section class="panel media-action-panel" aria-labelledby="media-backup-title">
-        <div class="subsection-heading"><h3 id="media-backup-title">Vollständiges Medien-Backup</h3></div>
-        <p class="section-intro compact-intro">Enthält alle Sammlungsdaten, den Duckipedia-Cache und deine eigenen komprimierten Coverfotos. Die Datei kann deutlich größer als das normale JSON-Backup sein.</p>
-        <div class="media-action-grid">
-          <button id="export-media-backup" class="primary-button" type="button">Medien-Backup erstellen</button>
-          <button id="open-media-import" class="secondary-button" type="button">Backup importieren</button>
-          <button id="delete-all-covers" class="text-button danger-text" type="button">Alle eigenen Cover löschen</button>
-        </div>
-        <p id="media-message" class="form-message" role="status" aria-live="polite"></p>
-      </section>
-    </div>
-  </section>
-
-  <div id="scanner-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="scanner-modal-title">
-    <div class="modal-backdrop" data-close-scanner></div>
-    <section class="modal-card scanner-modal-card">
-      <div class="section-heading">
-        <div><p class="eyebrow">Schnellerfassung</p><h2 id="scanner-modal-title">Serien-Scanner</h2></div>
-        <button id="close-scanner" class="icon-button small-icon-button" type="button" aria-label="Scanner schließen">×</button>
-      </div>
-
-
-      <div class="scanner-settings-grid">
-        <label class="field field-full"><span>Reihe <strong aria-hidden="true">*</strong></span><select id="scanner-series"></select></label>
-        <label class="field"><span>Standardzustand</span><select id="scanner-condition"></select></label>
-        <label id="scanner-duplicate-condition-field" class="field hidden"><span>Zustand Exemplar 2</span><select id="scanner-duplicate-condition"></select></label>
-      </div>
-
-      <fieldset class="switch-group compact-switch-group scanner-switches">
-        <legend>Eigenschaften für gescannte Bände</legend>
-        <label class="check-row"><input id="scanner-is-read" type="checkbox"><span>Gelesen</span></label>
-        <label class="check-row"><input id="scanner-is-duplicate" type="checkbox"><span>Doppelt</span></label>
-        <label class="check-row"><input id="scanner-is-sealed" type="checkbox"><span>Foliert</span></label>
-      </fieldset>
-
-      <div class="scanner-viewport">
-        <div id="scanner-camera-target" class="scanner-camera-target" aria-label="Kamerabild für die Barcode-Erkennung"></div>
-        <div class="scanner-frame" aria-hidden="true"><span></span></div>
-        <div id="scanner-camera-placeholder" class="scanner-camera-placeholder">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M7 9v6M10 8v8M13 9v6M16 8v8"/></svg>
-          <span>Kamera noch nicht aktiv</span>
-        </div>
-      </div>
-
-      <p id="scanner-status" class="scanner-status" role="status" aria-live="polite">Bereit zum Scannen.</p>
-
-      <div class="scanner-source-actions">
-        <button id="scanner-start" class="primary-button" type="button">Kamera starten</button>
-        <button id="scanner-stop" class="secondary-button hidden" type="button">Kamera stoppen</button>
-        <label class="secondary-button file-button" for="scanner-photo">Foto auswerten</label>
-        <input id="scanner-photo" class="visually-hidden" type="file" accept="image/*" capture="environment">
-      </div>
-
-      <details class="scanner-manual-fallback">
-        <summary>Zusatzcode manuell eingeben</summary>
-        <div class="inline-form scanner-manual-row">
-          <label class="field field-full"><span>Zwei oder fünf Ziffern</span><input id="scanner-manual-code" type="text" inputmode="numeric" maxlength="5" placeholder="z. B. 03 oder 00239"></label>
-          <button id="scanner-manual-apply" class="secondary-button" type="button">Übernehmen</button>
-        </div>
-      </details>
-
-      <section id="scanner-result" class="scanner-result hidden" aria-labelledby="scanner-result-title">
-        <div class="scanner-result-heading">
-          <div><span class="stat-label">Erkannt</span><h3 id="scanner-result-title">Band <span id="scanner-band-number"></span></h3></div>
-          <span id="scanner-extension" class="scanner-code-pill"></span>
-        </div>
-        <p id="scanner-existing-warning" class="scanner-warning hidden"></p>
-        <div class="field-grid compact-field-grid scanner-result-fields">
-          <label class="field field-full"><span>Titel</span><input id="scanner-result-name" type="text" maxlength="200" placeholder="Wird nach Möglichkeit aus Duckipedia ergänzt"></label>
-          <label class="field"><span>Erscheinungsjahr</span><input id="scanner-result-year" type="number" inputmode="numeric" min="1800" max="2035" placeholder="Optional"></label>
-          <div class="field scanner-link-field"><span>Bandseite</span><a id="scanner-duckipedia-link" class="secondary-button link-button" href="#" target="_blank" rel="noopener noreferrer">Duckipedia öffnen</a></div>
-        </div>
-        <p id="scanner-lookup-status" class="field-help" aria-live="polite"></p>
-        <div class="modal-actions scanner-result-actions">
-          <button id="scanner-save" class="primary-button" type="button">Zur Warteschlange &amp; weiter</button>
-          <button id="scanner-apply-form" class="secondary-button" type="button">Nur ins Formular übernehmen</button>
-          <button id="scanner-rescan" class="text-button" type="button">Neu scannen</button>
-        </div>
-      </section>
-
-      <section id="scanner-queue" class="scanner-queue" aria-labelledby="scanner-queue-title">
-        <div class="subsection-heading scanner-queue-heading">
-          <div><h3 id="scanner-queue-title">Warteschlange</h3><span id="scanner-queue-count" class="muted-copy">0 Bände</span></div>
-          <button id="scanner-clear-queue" class="text-button danger-text" type="button">Liste leeren</button>
-        </div>
-        <p class="field-help">Scanne mehrere Bände nacheinander. Vor dem Sammelspeichern kannst du Titel, Jahr, Zustand und Eigenschaften je Band korrigieren.</p>
-        <div class="scanner-queue-toolbar">
-          <button id="scanner-apply-defaults" class="secondary-button" type="button">Aktuelle Einstellungen auf alle anwenden</button>
-          <button id="scanner-save-queue" class="primary-button" type="button">Alle geprüften Bände speichern</button>
-        </div>
-        <div id="scanner-queue-list" class="scanner-queue-list"></div>
-        <p id="scanner-queue-message" class="form-message" role="status" aria-live="polite"></p>
-      </section>
-
-    </section>
-  </div>
-
-  <div id="series-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="series-modal-title">
-    <div class="modal-backdrop" data-close-series></div>
-    <section class="modal-card series-manager-card">
-      <div class="section-heading"><div><p class="eyebrow">Reihenverwaltung</p><h2 id="series-modal-title">Eigene Reihen</h2></div><button id="close-series" class="icon-button small-icon-button" type="button" aria-label="Reihenverwaltung schließen">×</button></div>
-      <form id="series-form" class="series-manager-form" novalidate>
-        <input id="custom-series-original-name" type="hidden">
-        <label class="field field-full"><span>Name der Reihe</span><input id="custom-series-name" type="text" maxlength="100" placeholder="z. B. LTB Mini Pocket" required></label>
-        <label class="field field-full"><span>Duckipedia-Pfad</span><input id="custom-series-pattern" type="text" maxlength="200" placeholder="z. B. LTB_Mini_Pocket_{band}"><small class="field-help">Optional. Verwende <strong>{band}</strong> als Platzhalter. Ohne Platzhalter wird die Bandnummer automatisch angehängt.</small></label>
-        <div class="series-manager-actions">
-          <button id="save-custom-series" class="primary-button" type="submit">Reihe hinzufügen</button>
-          <button id="cancel-custom-series-edit" class="secondary-button hidden" type="button">Bearbeiten abbrechen</button>
-        </div>
-      </form>
-      <p id="series-message" class="form-message" role="status" aria-live="polite"></p>
-      <div id="custom-series-list" class="management-list series-management-list"></div>
-      <details class="standard-series-details">
-        <summary>Standardreihen und Duckipedia-Pfade anzeigen</summary>
-        <div id="standard-series-list" class="management-list compact-management-list"></div>
-      </details>
-    </section>
-  </div>
-
-  <div id="missing-detail-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="missing-detail-title">
-    <div class="modal-backdrop" data-close-missing-detail></div>
-    <section class="modal-card">
-      <div class="section-heading"><div><p class="eyebrow">Wunschliste</p><h2 id="missing-detail-title">Fehlenden Band ergänzen</h2></div><button id="close-missing-detail" class="icon-button small-icon-button" type="button" aria-label="Detailfenster schließen">×</button></div>
-      <p id="missing-detail-context" class="modal-context"></p>
-      <form id="missing-detail-form" novalidate>
-        <div class="field-grid compact-field-grid">
-          <label class="field field-full"><span>Titel / Name</span><input id="missing-detail-name" type="text" maxlength="200" placeholder="Optional"></label>
-          <label class="field"><span>Erscheinungsjahr</span><input id="missing-detail-year" type="number" inputmode="numeric" min="1800" max="2035" placeholder="Optional"></label>
-          <label class="field"><span>Zustand (Wunsch / gefunden)</span><select id="missing-detail-condition"></select></label>
-          <label class="field field-full"><span>Exakter Duckipedia-Link</span><input id="missing-detail-url" type="url" inputmode="url" maxlength="1000" placeholder="Optional – sonst wird die Suche geöffnet"></label>
-          <label class="field field-full"><span>Notizen</span><textarea id="missing-detail-notes" rows="3" maxlength="2000" placeholder="Optional"></textarea></label>
-        </div>
-        <div class="modal-link-row"><a id="missing-duckipedia-link" class="secondary-button link-button" href="#" target="_blank" rel="noopener noreferrer">In Duckipedia suchen</a></div>
-        <div class="modal-actions missing-detail-actions">
-          <button class="primary-button" type="submit">Details speichern</button>
-          <button id="missing-mark-owned" class="success-button" type="button">Als vorhanden eintragen</button>
-          <button id="delete-missing-detail" class="danger-button hidden" type="button">Details löschen</button>
-          <button class="secondary-button" type="button" data-close-missing-detail>Abbrechen</button>
-        </div>
-        <p id="missing-detail-message" class="form-message" role="status" aria-live="polite"></p>
-      </form>
-    </section>
-  </div>
-
-  <div id="duplicate-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="duplicate-modal-title">
-    <div class="modal-backdrop" data-close-duplicate></div>
-    <section class="modal-card">
-      <div class="section-heading"><div><p class="eyebrow">Exemplare verwalten</p><h2 id="duplicate-modal-title">Zweites Exemplar</h2></div><button id="close-duplicate" class="icon-button small-icon-button" type="button" aria-label="Exemplarverwaltung schließen">×</button></div>
-      <p id="duplicate-context" class="modal-context"></p>
-      <form id="duplicate-form" novalidate>
-        <label class="field field-full"><span>Zustand des zweiten Exemplars</span><select id="duplicate-modal-condition"></select></label>
-        <div class="modal-actions duplicate-actions">
-          <button id="duplicate-save" class="primary-button" type="submit">Zweites Exemplar hinzufügen</button>
-          <button id="duplicate-remove" class="danger-button hidden" type="button">Zweites Exemplar entfernen</button>
-          <button class="secondary-button" type="button" data-close-duplicate>Abbrechen</button>
-        </div>
-        <p id="duplicate-message" class="form-message" role="status" aria-live="polite"></p>
-      </form>
-    </section>
-  </div>
-
-  <div id="calendar-event-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="calendar-event-modal-title">
-    <div class="modal-backdrop" data-close-calendar-event></div>
-    <section class="modal-card">
-      <div class="section-heading"><div><p class="eyebrow">Kalender</p><h2 id="calendar-event-modal-title">Termin hinzufügen</h2></div><button id="close-calendar-event" class="icon-button small-icon-button" type="button" aria-label="Terminfenster schließen">×</button></div>
-      <form id="calendar-event-form" novalidate>
-        <input id="calendar-event-id" type="hidden">
-        <div class="field-grid compact-field-grid">
-          <label class="field field-full"><span>Titel <strong aria-hidden="true">*</strong></span><input id="calendar-event-name" type="text" maxlength="200" required placeholder="z. B. Flohmarkt Köln"></label>
-          <label class="field"><span>Datum <strong aria-hidden="true">*</strong></span><input id="calendar-event-date" type="date" required></label>
-          <label class="field"><span>Kategorie</span><select id="calendar-event-category"><option value="flea-market">Flohmarkt</option><option value="comic-fair">Comicbörse / Messe</option><option value="other">Sonstiger Termin</option></select></label>
-          <label class="check-row field-full calendar-all-day-row"><input id="calendar-event-all-day" type="checkbox" checked><span>Ganztägiger Termin</span></label>
-          <label id="calendar-event-time-field" class="field hidden"><span>Uhrzeit</span><input id="calendar-event-time" type="time"></label>
-          <label class="field field-full"><span>Ort</span><input id="calendar-event-location" type="text" maxlength="300" placeholder="Optional"></label>
-          <label class="field field-full"><span>Link</span><input id="calendar-event-url" type="url" maxlength="1200" placeholder="Optional"></label>
-          <label class="field field-full"><span>Notizen</span><textarea id="calendar-event-notes" rows="3" maxlength="3000" placeholder="Optional"></textarea></label>
-          <label class="check-row field-full"><input id="calendar-event-reminder" type="checkbox" checked><span>Beim Apple-Kalender-Export mit Erinnerung übernehmen</span></label>
-        </div>
-        <div class="modal-actions">
-          <button class="primary-button" type="submit">Termin speichern</button>
-          <button id="calendar-event-delete" class="danger-button hidden" type="button">Termin löschen</button>
-          <button class="secondary-button" type="button" data-close-calendar-event>Abbrechen</button>
-        </div>
-        <p id="calendar-event-message" class="form-message" role="status" aria-live="polite"></p>
-      </form>
-    </section>
-  </div>
-
-  <div id="import-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="import-title">
-    <div class="modal-backdrop" data-close-import></div>
-    <section class="modal-card">
-      <div class="section-heading"><div><p class="eyebrow">Wiederherstellen</p><h2 id="import-title">JSON-Backup importieren</h2></div><button id="close-import" class="icon-button small-icon-button" type="button" aria-label="Import schließen">×</button></div>
-      <label class="field field-full"><span>Backup-Datei auswählen</span><input id="import-file" type="file" accept=".json,application/json"><small class="field-help">Normale Daten-Backups und vollständige Medien-Backups werden erkannt.</small></label>
-      <div id="import-summary" class="import-summary hidden" aria-live="polite"></div>
-      <ul id="import-issues" class="import-issues hidden"></ul>
-      <fieldset class="import-mode"><legend>Importart</legend><label class="check-row"><input id="import-mode-merge" name="importMode" type="radio" value="merge" checked><span><strong>Zusammenführen</strong><small>Vorhandene Einträge bleiben erhalten.</small></span></label><label class="check-row"><input id="import-mode-replace" name="importMode" type="radio" value="replace"><span><strong>Ersetzen</strong><small>Die aktuelle Sammlung wird vollständig ersetzt.</small></span></label></fieldset>
-      <div class="modal-actions"><button id="import-submit" class="primary-button" type="button" disabled>Import starten</button><button class="secondary-button" type="button" data-close-import>Abbrechen</button></div>
-      <p id="import-message" class="form-message" role="status" aria-live="polite"></p>
-    </section>
-  </div>
-
-  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-  <script src="./vendor/quagga.min.js"></script>
-  <script src="./vendor/jspdf.umd.min.js"></script>
-  <script type="module" src="./app.js"></script>
+</div>
+<p aria-live="polite" class="form-message" id="export-message" role="status"></p>
+<p class="backup-help">JSON sichert deine Daten. Eigene Coverbilder sicherst du separat unter „Medien &amp; Metadaten“.</p>
+<p class="app-version-footer">Entenarchiv <span id="app-version">v3.7.0</span></p></section>
+</main>
+<nav aria-label="Hauptnavigation" class="bottom-nav"><button class="bottom-nav-item" id="nav-calendar" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 8.5h15M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path></svg><span>Kalender</span></button><button class="bottom-nav-item bottom-nav-primary" id="nav-add" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg><span>Hinzufügen</span></button><button class="bottom-nav-item" id="nav-statistics" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"></path></svg><span>Statistiken</span></button></nav><section aria-hidden="true" aria-labelledby="add-page-title" class="app-page hidden" id="add-page">
+<header class="app-page-header">
+<button aria-label="Zurück zur Übersicht" class="app-page-back" id="close-add-page" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M15 18l-6-6 6-6"></path></svg><span>Zurück</span>
+</button>
+<div class="app-page-title"><p class="eyebrow">Sammlung verwalten</p><h2 id="add-page-title">Comic hinzufügen</h2></div>
+</header>
+<div class="app-page-content add-page-content"><section aria-labelledby="form-title" class="panel form-panel section-anchor compact-form-panel" id="add">
+<div class="section-heading compact-form-heading">
+<div><p class="eyebrow">Sammlung verwalten</p><h2 id="form-title">Comic hinzufügen</h2></div>
+<button class="text-button hidden" id="cancel-edit" type="button">Abbrechen</button>
+</div>
+<p class="required-note"><strong>*</strong> Pflichtfeld</p>
+<button class="scanner-launch-button" id="open-scanner" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M7 9v6M10 8v8M13 9v6M16 8v8"></path></svg>
+<span><strong>Serien-Scanner</strong><small>Zusatzbarcode lesen und Bandnummer automatisch übernehmen</small></span>
+</button>
+<form id="comic-form" novalidate="">
+<div class="field-grid compact-field-grid">
+<div class="field field-full">
+<div class="field-label-row"><label for="series">Reihe <strong aria-hidden="true">*</strong></label><button class="inline-action" id="open-series-manager" type="button">Reihen verwalten</button></div>
+<select autocomplete="off" id="series" name="series" required=""></select>
+<small class="field-error" id="series-error"></small>
+</div>
+<label class="field paired-field">
+<span>Bandnummer <strong aria-hidden="true">*</strong></span>
+<input autocomplete="off" id="volume-number" inputmode="numeric" maxlength="30" name="volumeNumber" placeholder="z. B. 42" required="" type="text"/>
+<small class="field-error" id="volume-number-error"></small>
+</label>
+<label class="field paired-field">
+<span>Erscheinungsjahr</span>
+<input autocomplete="off" id="publication-year" inputmode="numeric" max="2035" min="1800" name="publicationYear" placeholder="z. B. 2024" type="number"/>
+<small class="field-error" id="publication-year-error"></small>
+</label>
+<label class="field field-full">
+<span>Titel</span>
+<input autocomplete="off" id="title" maxlength="200" name="title" placeholder="Optional" type="text"/>
+<small class="field-error" id="title-error"></small>
+</label>
+<section aria-labelledby="cover-editor-title" class="cover-editor field-full">
+<div class="cover-editor-preview">
+<img alt="Covervorschau" class="hidden" id="form-cover-preview"/>
+<div aria-hidden="true" class="cover-placeholder" id="form-cover-placeholder">
+<svg viewbox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5zM7 16l3-3 2.5 2.5L15 13l2 3M8.5 9.5h.01"></path></svg>
+<span>Kein Cover</span>
+</div>
+</div>
+<div class="cover-editor-copy">
+<div><span class="field-title" id="cover-editor-title">Eigenes Coverfoto</span><small>Optional, lokal komprimiert gespeichert</small></div>
+<div class="cover-editor-actions">
+<label class="secondary-button compact-button file-button" for="cover-file">Cover aufnehmen/auswählen</label>
+<input accept="image/*" class="visually-hidden" id="cover-file" type="file"/>
+<button class="text-button danger-text hidden" id="remove-cover" type="button">Entfernen</button>
+</div>
+<p aria-live="polite" class="field-help" id="cover-status"></p>
+</div>
+</section>
+<div class="metadata-controls field-full">
+<button class="secondary-button compact-button" id="lookup-metadata" type="button">Duckipedia-Daten laden</button>
+<p aria-live="polite" class="field-help" id="metadata-status"></p>
+</div>
+<label class="field" id="primary-condition-field">
+<span id="primary-condition-label">Zustand <strong aria-hidden="true">*</strong></span>
+<select id="condition" name="condition" required=""></select>
+<small class="field-error" id="condition-error"></small>
+</label>
+<label class="field hidden" id="duplicate-condition-field">
+<span>Zustand Exemplar 2 <strong aria-hidden="true">*</strong></span>
+<select id="duplicate-condition" name="duplicateCondition"></select>
+<small class="field-error" id="duplicate-condition-error"></small>
+</label>
+</div>
+<fieldset class="switch-group compact-switch-group">
+<legend>Eigenschaften</legend>
+<label class="check-row"><input id="is-read" name="isRead" type="checkbox"/><span>Gelesen</span></label>
+<label class="check-row"><input id="is-duplicate" name="isDuplicate" type="checkbox"/><span>Doppelt</span></label>
+<label class="check-row"><input id="is-sealed" name="isSealed" type="checkbox"/><span>Foliert</span></label>
+</fieldset>
+<label class="field field-full compact-notes-field">
+<span>Notizen</span>
+<textarea id="notes" maxlength="2000" name="notes" placeholder="Optional, z. B. kleine Gebrauchsspuren" rows="3"></textarea>
+<small class="field-error" id="notes-error"></small>
+</label>
+<div class="form-actions compact-form-actions">
+<button class="primary-button" data-action="save" type="submit">Comic speichern</button>
+<button class="secondary-button" data-action="save-next" id="save-next" type="submit">Speichern &amp; nächsten Band</button>
+</div>
+<p aria-live="polite" class="form-message" id="form-message" role="status"></p>
+</form>
+</section></div>
+</section><section aria-hidden="true" aria-labelledby="statistics-title" class="app-page hidden" id="statistics-page">
+<header class="app-page-header">
+<button aria-label="Zurück zur Übersicht" class="app-page-back" id="close-statistics" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M15 18l-6-6 6-6"></path></svg><span>Zurück</span>
+</button>
+<div class="app-page-title"><p class="eyebrow">Deine Sammlung in Zahlen</p><h2 id="statistics-title">Statistiken</h2></div>
+<span class="count-badge" id="statistics-summary">0 Bücher</span>
+</header>
+<div class="app-page-content statistics-page-content">
+<section aria-label="Statistische Highlights" class="statistics-highlight-grid" id="statistics-highlights"></section>
+<section aria-labelledby="year-chart-title" class="panel statistics-chart-card">
+<div class="subsection-heading"><div><p class="eyebrow">Zeitreise</p><h3 id="year-chart-title">Erscheinungsjahre mit den meisten Büchern</h3></div><span class="muted-copy" id="year-chart-total"></span></div>
+<div class="horizontal-chart" id="year-chart"></div>
+</section>
+<section aria-labelledby="quality-chart-title" class="panel statistics-chart-card">
+<div class="subsection-heading"><div><p class="eyebrow">Bestzustand</p><h3 id="quality-chart-title">Anteil mindestens Very Fine je Reihe</h3></div></div>
+<div class="horizontal-chart" id="quality-chart"></div>
+</section>
+<section aria-labelledby="series-chart-title" class="panel statistics-chart-card">
+<div class="subsection-heading"><div><p class="eyebrow">Schwergewichte</p><h3 id="series-chart-title">Größte Reihen in deiner Sammlung</h3></div></div>
+<div class="horizontal-chart" id="series-chart"></div>
+</section>
+<div id="statistics-condition-slot"><section aria-labelledby="condition-stats-title" class="panel condition-panel">
+<div class="subsection-heading"><h3 id="condition-stats-title">Verteilung nach Zustand</h3><span class="muted-copy" id="condition-stats-total">0 Exemplare</span></div>
+<div class="condition-stats" id="condition-stats"></div>
+</section></div>
+<div id="statistics-progress-slot"><section aria-labelledby="progress-overview-title" class="panel progress-overview-card">
+<div class="progress-overview-heading">
+<div><p class="eyebrow">Vollständigkeit</p><h3 id="progress-overview-title">Reihenfortschritt</h3></div>
+<strong class="progress-overview-percent" id="progress-overview-percent">0 %</strong>
+</div>
+<p class="muted-copy progress-overview-copy" id="progress-overview-copy">Noch kein Fortschritt berechenbar.</p>
+<div aria-label="Gesamtfortschritt" aria-valuemax="100" aria-valuemin="0" aria-valuenow="0" class="progress-bar progress-overview-bar" role="progressbar"><span id="progress-overview-fill"></span></div>
+<div class="progress-overview-actions">
+<span class="count-badge" id="progress-summary">0 Reihen</span>
+<button class="secondary-button compact-button" id="open-progress" type="button">Details öffnen</button>
+</div>
+</section></div>
+</div>
+</section>
+<section aria-hidden="true" aria-labelledby="collection-page-title" class="app-page hidden" id="collection-page">
+<header class="app-page-header">
+<button aria-label="Zurück zur Sammlungsauswahl" class="app-page-back" id="close-collection" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M15 18l-6-6 6-6"></path></svg>
+<span>Zurück</span>
+</button>
+<div class="app-page-title"><p class="eyebrow">Meine Sammlung</p><h2 id="collection-page-title">Lustige Taschenbücher</h2></div>
+<span class="count-badge" id="collection-count">0 Einträge</span>
+</header>
+<div class="app-page-content collection-page-content">
+<details class="panel filter-panel collapsible-panel" id="filter-panel">
+<summary>
+<span><strong>Suchen &amp; filtern</strong><small id="filter-summary">Standardansicht</small></span>
+<span aria-hidden="true" class="disclosure-icon">⌄</span>
+</summary>
+<div class="collapsible-content">
+<div class="filter-toolbar"><span aria-live="polite" class="filter-result" id="filter-result"></span><button class="text-button" id="reset-filters" type="button">Zurücksetzen</button></div>
+<div class="filter-grid">
+<label class="field field-full"><span>Suche</span><input id="search" placeholder="Titel, Reihe, Bandnummer oder Notiz" type="search"/></label>
+<label class="field" id="filter-series-field"><span>Reihe</span><select id="filter-series"></select></label>
+<label class="field"><span>Zustand</span><select id="filter-condition"></select></label>
+<label class="field"><span>Lesestatus</span><select id="filter-read"><option value="all">Alle</option><option value="read">Nur gelesen</option><option value="unread">Nur ungelesen</option></select></label>
+<label class="field"><span>Sortierung</span><select id="sort-by"><option value="series">Reihe &amp; Bandnummer</option><option value="volume">Bandnummer</option><option value="title">Titel</option><option value="condition">Zustand</option></select></label>
+</div>
+<div class="filter-toggles">
+<label class="check-row compact-check"><input id="filter-sealed" type="checkbox"/><span>Nur foliert</span></label>
+<label class="check-row compact-check"><input id="filter-duplicate" type="checkbox"/><span>Nur doppelt</span></label>
+</div>
+</div>
+</details>
+<div class="panel empty-state" id="empty-state"><div aria-hidden="true" class="empty-icon">＋</div><h3>Noch keine Comics in diesem Bereich</h3><p>Lege über „Comic hinzufügen“ deinen ersten Band an.</p></div>
+<div class="panel empty-state hidden" id="no-results"><div aria-hidden="true" class="empty-icon">⌕</div><h3>Keine passenden Einträge</h3><p>Ändere die Suche oder setze die Filter zurück.</p></div>
+<div aria-live="polite" class="comic-list" id="comic-list"></div>
+</div>
+</section>
+<section aria-hidden="true" aria-labelledby="missing-page-title" class="app-page hidden" id="missing-page">
+<header class="app-page-header">
+<button aria-label="Zurück zur Fehlband-Auswahl" class="app-page-back" id="close-missing-page" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M15 18l-6-6 6-6"></path></svg>
+<span>Zurück</span>
+</button>
+<div class="app-page-title"><p class="eyebrow">Such- &amp; Wunschliste</p><h2 id="missing-page-title">Lustige Taschenbücher</h2></div>
+<span class="count-badge" id="missing-page-count">0 fehlen</span>
+</header>
+<div class="app-page-content missing-page-content">
+<div class="panel empty-state" id="missing-empty"><div aria-hidden="true" class="empty-icon">✓</div><h3>Keine Lücken erkannt</h3><p>In diesem Bereich wurden aktuell keine fehlenden numerischen Bände erkannt.</p></div>
+<div class="missing-list" id="missing-list"></div>
+</div>
+</section>
+<section aria-hidden="true" aria-labelledby="flea-market-title" class="app-page hidden" id="flea-market-page">
+<header class="app-page-header">
+<button aria-label="Zurück zu den fehlenden Bänden" class="app-page-back" id="close-flea-market" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M15 18l-6-6 6-6"></path></svg>
+<span>Zurück</span>
+</button>
+<div class="app-page-title"><p class="eyebrow">Unterwegs suchen</p><h2 id="flea-market-title">Flohmarkt-Modus</h2></div>
+<span class="count-badge" id="flea-market-page-count">0 gefunden</span>
+</header>
+<div class="app-page-content flea-market-content">
+<section aria-label="Flohmarkt-Status" class="panel flea-market-summary">
+<div><span class="stat-label">Noch auf der Liste</span><strong id="flea-market-missing-count">0</strong></div>
+<div><span class="stat-label">Als gefunden markiert</span><strong id="flea-market-selected-count">0</strong></div>
+</section>
+<section aria-label="Flohmarkt-Liste filtern" class="panel flea-market-controls">
+<div class="field-grid compact-field-grid">
+<label class="field field-full"><span>Suche</span><input id="flea-market-search" placeholder="Reihe, Bandnummer oder Titel" type="search"/></label>
+<label class="field"><span>Bereich</span><select id="flea-market-scope"><option value="all">Alle Reihen</option><option value="main">Nur Hauptreihe</option><option value="other">Nur Sonderreihen</option></select></label>
+<label class="field"><span>Standardzustand</span><select id="flea-market-default-condition"></select></label>
+</div>
+<button class="secondary-button compact-button" id="flea-market-apply-condition" type="button">Zustand auf gefundene Bände anwenden</button>
+</section>
+<div class="panel empty-state hidden" id="flea-market-empty">
+<div aria-hidden="true" class="empty-icon">✓</div><h3>Keine passenden fehlenden Bände</h3><p>Ändere den Filter oder ergänze zunächst Zielbandnummern.</p>
+</div>
+<div aria-live="polite" class="flea-market-list" id="flea-market-list"></div>
+<div class="flea-market-sticky-actions">
+<button class="success-button" id="flea-market-save" type="button">Gefundene Bände speichern</button>
+<button class="secondary-button" id="flea-market-clear" type="button">Markierungen zurücksetzen</button>
+<p aria-live="polite" class="form-message" id="flea-market-message" role="status"></p>
+</div>
+</div>
+</section>
+<section aria-hidden="true" aria-labelledby="progress-title" class="app-page hidden" id="progress-page">
+<header class="app-page-header">
+<button aria-label="Zurück zur Übersicht" class="app-page-back" id="close-progress" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M15 18l-6-6 6-6"></path></svg>
+<span>Zurück</span>
+</button>
+<div class="app-page-title"><p class="eyebrow">Vollständigkeit</p><h2 id="progress-title">Fortschritt je Reihe</h2></div>
+<span class="count-badge" id="progress-page-summary">0 Reihen</span>
+</header>
+<div class="app-page-content">
+<details class="progress-target-details" id="progress-target-panel">
+<summary>Zielbandnummer verwalten</summary>
+<div class="progress-target-content">
+<p class="section-intro compact-intro">Lege optional eine höchste gewünschte Bandnummer fest. Ohne Ziel wird bis zum höchsten vorhandenen Band gerechnet.</p>
+<form class="panel progress-target-form" id="progress-target-form" novalidate="">
+<label class="field"><span>Reihe</span><select id="progress-series"></select></label>
+<label class="field"><span>Höchste gewünschte Bandnummer</span><input id="progress-target" inputmode="numeric" max="99999" min="1" placeholder="z. B. 600" type="number"/></label>
+<div class="progress-target-actions">
+<button class="secondary-button" id="progress-save" type="submit">Ziel speichern</button>
+<button class="text-button danger-text hidden" id="progress-remove" type="button">Ziel entfernen</button>
+</div>
+<p aria-live="polite" class="form-message field-full" id="progress-message" role="status"></p>
+</form>
+</div>
+</details>
+<div class="progress-list" id="progress-list"></div>
+</div>
+</section>
+<section aria-hidden="true" aria-labelledby="calendar-title" class="app-page hidden" id="calendar-page">
+<header class="app-page-header">
+<button aria-label="Zurück zur Übersicht" class="app-page-back" id="close-calendar" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M15 18l-6-6 6-6"></path></svg>
+<span>Zurück</span>
+</button>
+<div class="app-page-title"><p class="eyebrow">Neuerscheinungen &amp; eigene Termine</p><h2 id="calendar-title">Kalender</h2></div>
+<span class="count-badge" id="calendar-page-summary">0 Termine</span>
+</header>
+<div class="app-page-content calendar-page-content">
+<section aria-label="Kalender steuern" class="panel calendar-toolbar">
+<div class="calendar-year-row">
+<button aria-label="Vorheriges Jahr" class="icon-button small-icon-button" id="calendar-prev-year" type="button">‹</button>
+<label class="visually-hidden" for="calendar-year-select">Kalenderjahr</label>
+<select aria-label="Kalenderjahr" class="calendar-year-select" id="calendar-year-select"></select>
+<button aria-label="Nächstes Jahr" class="icon-button small-icon-button" id="calendar-next-year" type="button">›</button>
+</div>
+<div class="calendar-toolbar-actions">
+<button class="secondary-button compact-button" id="calendar-today" type="button">Heute</button>
+<button class="primary-button compact-button" id="calendar-add-event" type="button">Termin hinzufügen</button>
+<button class="secondary-button compact-button" id="calendar-export-reminders" type="button">In Apple Kalender</button>
+</div>
+</section>
+<section aria-label="Kalender filtern" class="panel calendar-filter-panel">
+<label class="field field-full"><span>Termine durchsuchen</span><input id="calendar-search" maxlength="120" placeholder="Titel, Ort oder Notiz" type="search"/></label>
+<label class="field"><span>Anzeige</span><select id="calendar-category-filter"><option value="all">Alle Termine</option><option value="release">Neuerscheinungen</option><option value="flea-market">Flohmärkte</option><option value="comic-fair">Comicbörsen / Messen</option><option value="other">Sonstige Termine</option></select></label>
+</section>
+<details class="panel calendar-import-panel">
+<summary><span><strong>Jahrespläne verwalten</strong><small id="calendar-import-summary">Kalenderindex wird geprüft</small></span><span aria-hidden="true" class="disclosure-icon">⌄</span></summary>
+<div class="collapsible-content">
+<div class="calendar-catalog-toolbar">
+<div>
+<strong>Verfügbare LTB-Jahre</strong>
+<p class="muted-copy" id="calendar-catalog-status">Noch nicht geprüft</p>
+</div>
+<button class="secondary-button compact-button" id="calendar-refresh-catalog" type="button">Jahre prüfen</button>
+</div>
+<label class="check-row calendar-auto-sync-row"><input checked="" id="calendar-auto-sync" type="checkbox"/><span>Aktuelles und folgendes Jahr automatisch laden und aktualisieren</span></label>
+<div class="calendar-catalog-list" id="calendar-catalog-list"></div>
+<div class="calendar-import-actions">
+<label class="secondary-button file-button" for="calendar-file">Andere iCal-Datei importieren</label>
+<input accept=".ics,text/calendar" class="visually-hidden" id="calendar-file" type="file"/>
+</div>
+<p class="muted-copy compact-help">Neue Jahrgänge werden künftig nur als weitere iCal-Datei und als Eintrag in <code>data/kalender-index.json</code> ergänzt. Die App-Adresse bleibt unverändert.</p>
+<p aria-live="polite" class="form-message" id="calendar-import-message" role="status"></p>
+</div>
+</details>
+<section aria-labelledby="calendar-reminder-title" class="panel calendar-reminder-panel">
+<div>
+<h3 id="calendar-reminder-title">Erinnerungen auf dem iPhone</h3>
+<p class="muted-copy">Exportiere die Termine in Apple Kalender. Die Erinnerungen werden dort am Erscheinungstag ausgelöst – auch wenn Entenarchiv geschlossen ist.</p>
+</div>
+<label class="field calendar-reminder-time"><span>Uhrzeit</span><input id="calendar-reminder-time" type="time" value="09:00"/></label>
+</section>
+<div aria-label="Monat auswählen" class="calendar-month-tabs" id="calendar-month-tabs"></div>
+<section class="panel month-calendar-panel">
+<div class="subsection-heading"><h3 id="calendar-month-title">Januar</h3><span class="muted-copy" id="calendar-month-count">0 Termine</span></div>
+<div aria-hidden="true" class="calendar-weekdays"><span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span></div>
+<div class="calendar-grid" id="calendar-grid" role="grid"></div>
+</section>
+<section aria-labelledby="calendar-event-list-title" class="calendar-event-section">
+<div class="section-heading compact-heading"><div><p class="eyebrow">Monatsübersicht</p><h3 id="calendar-event-list-title">Termine</h3></div></div>
+<div class="calendar-event-list" id="calendar-event-list"></div>
+<div class="panel empty-state hidden" id="calendar-empty"><div aria-hidden="true" class="empty-icon">□</div><h3>Keine passenden Termine</h3><p>Ändere den Filter, lade einen Jahresplan oder füge einen eigenen Termin hinzu.</p></div>
+</section>
+</div>
+</section>
+<section aria-hidden="true" aria-labelledby="media-title" class="app-page hidden" id="media-page">
+<header class="app-page-header">
+<button aria-label="Zurück zum Backup" class="app-page-back" id="close-media" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M15 18l-6-6 6-6"></path></svg>
+<span>Zurück</span>
+</button>
+<div class="app-page-title"><p class="eyebrow">Lokale Medien</p><h2 id="media-title">Medien &amp; Metadaten</h2></div>
+<span class="count-badge" id="media-page-summary">0 Cover</span>
+</header>
+<div class="app-page-content media-page-content">
+<section aria-label="Speicherübersicht" class="media-stats-grid">
+<article class="backup-status-card"><span class="stat-label">Eigene Cover</span><strong id="media-cover-count">0</strong><small class="muted-copy" id="media-cover-size">0 KB</small></article>
+<article class="backup-status-card"><span class="stat-label">Duckipedia-Cache</span><strong id="media-cache-count">0 Einträge</strong><small class="muted-copy">Titel, Jahr und externe Coverlinks</small></article>
+<article class="backup-status-card"><span class="stat-label">Gesamter App-Speicher</span><strong id="media-origin-usage">Wird geprüft …</strong><small class="muted-copy" id="media-origin-quota"></small></article>
+<article class="backup-status-card"><span class="stat-label">Letztes Medien-Backup</span><strong id="last-media-backup">Noch keines</strong><small class="muted-copy" id="media-backup-changes">0 Medienänderungen</small></article>
+</section>
+<section aria-labelledby="media-display-title" class="panel media-settings-panel">
+<div class="subsection-heading"><h3 id="media-display-title">Darstellung</h3></div>
+<label class="check-row"><input checked="" id="show-covers" type="checkbox"/><span><strong>Cover in der Sammlung anzeigen</strong><small>Eigene Fotos haben Vorrang vor Duckipedia-Vorschauen.</small></span></label>
+<label class="check-row"><input checked="" id="auto-enrich" type="checkbox"/><span><strong>Neue Bände automatisch anreichern</strong><small>Füllt leere Titel und Jahre und merkt sich Duckipedia-Daten lokal.</small></span></label>
+</section>
+<section aria-labelledby="metadata-tools-title" class="panel media-action-panel">
+<div class="subsection-heading"><h3 id="metadata-tools-title">Duckipedia-Anreicherung</h3><span class="muted-copy" id="enrichment-count"></span></div>
+<p class="section-intro compact-intro">Ergänzt bei numerischen Bänden fehlende Titel, Erscheinungsjahre und Coverlinks. Manuell eingetragene Angaben werden nicht überschrieben.</p>
+<div class="media-action-grid">
+<button class="primary-button" id="enrich-all" type="button">Fehlende Daten ergänzen</button>
+<button class="secondary-button" id="clear-metadata-cache" type="button">Cache leeren</button>
+</div>
+<progress class="media-progress hidden" id="enrichment-progress" max="1" value="0"></progress>
+<p aria-live="polite" class="form-message" id="enrichment-status" role="status"></p>
+</section>
+<section aria-labelledby="media-backup-title" class="panel media-action-panel">
+<div class="subsection-heading"><h3 id="media-backup-title">Vollständiges Medien-Backup</h3></div>
+<p class="section-intro compact-intro">Enthält alle Sammlungsdaten, den Duckipedia-Cache und deine eigenen komprimierten Coverfotos. Die Datei kann deutlich größer als das normale JSON-Backup sein.</p>
+<div class="media-action-grid">
+<button class="primary-button" id="export-media-backup" type="button">Medien-Backup erstellen</button>
+<button class="secondary-button" id="open-media-import" type="button">Backup importieren</button>
+<button class="text-button danger-text" id="delete-all-covers" type="button">Alle eigenen Cover löschen</button>
+</div>
+<p aria-live="polite" class="form-message" id="media-message" role="status"></p>
+</section>
+</div>
+</section>
+<div aria-labelledby="scanner-modal-title" aria-modal="true" class="modal hidden" id="scanner-modal" role="dialog">
+<div class="modal-backdrop" data-close-scanner=""></div>
+<section class="modal-card scanner-modal-card">
+<div class="section-heading">
+<div><p class="eyebrow">Schnellerfassung</p><h2 id="scanner-modal-title">Serien-Scanner</h2></div>
+<button aria-label="Scanner schließen" class="icon-button small-icon-button" id="close-scanner" type="button">×</button>
+</div>
+<div class="scanner-settings-grid">
+<label class="field field-full"><span>Reihe <strong aria-hidden="true">*</strong></span><select id="scanner-series"></select></label>
+<label class="field"><span>Standardzustand</span><select id="scanner-condition"></select></label>
+<label class="field hidden" id="scanner-duplicate-condition-field"><span>Zustand Exemplar 2</span><select id="scanner-duplicate-condition"></select></label>
+</div>
+<fieldset class="switch-group compact-switch-group scanner-switches">
+<legend>Eigenschaften für gescannte Bände</legend>
+<label class="check-row"><input id="scanner-is-read" type="checkbox"/><span>Gelesen</span></label>
+<label class="check-row"><input id="scanner-is-duplicate" type="checkbox"/><span>Doppelt</span></label>
+<label class="check-row"><input id="scanner-is-sealed" type="checkbox"/><span>Foliert</span></label>
+</fieldset>
+<div class="scanner-viewport">
+<div aria-label="Kamerabild für die Barcode-Erkennung" class="scanner-camera-target" id="scanner-camera-target"></div>
+<div aria-hidden="true" class="scanner-frame"><span></span></div>
+<div class="scanner-camera-placeholder" id="scanner-camera-placeholder">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M7 9v6M10 8v8M13 9v6M16 8v8"></path></svg>
+<span>Kamera noch nicht aktiv</span>
+</div>
+</div>
+<p aria-live="polite" class="scanner-status" id="scanner-status" role="status">Bereit zum Scannen.</p>
+<div class="scanner-source-actions">
+<button class="primary-button" id="scanner-start" type="button">Kamera starten</button>
+<button class="secondary-button hidden" id="scanner-stop" type="button">Kamera stoppen</button>
+<label class="secondary-button file-button" for="scanner-photo">Foto auswerten</label>
+<input accept="image/*" capture="environment" class="visually-hidden" id="scanner-photo" type="file"/>
+</div>
+<details class="scanner-manual-fallback">
+<summary>Zusatzcode manuell eingeben</summary>
+<div class="inline-form scanner-manual-row">
+<label class="field field-full"><span>Zwei oder fünf Ziffern</span><input id="scanner-manual-code" inputmode="numeric" maxlength="5" placeholder="z. B. 03 oder 00239" type="text"/></label>
+<button class="secondary-button" id="scanner-manual-apply" type="button">Übernehmen</button>
+</div>
+</details>
+<section aria-labelledby="scanner-result-title" class="scanner-result hidden" id="scanner-result">
+<div class="scanner-result-heading">
+<div><span class="stat-label">Erkannt</span><h3 id="scanner-result-title">Band <span id="scanner-band-number"></span></h3></div>
+<span class="scanner-code-pill" id="scanner-extension"></span>
+</div>
+<p class="scanner-warning hidden" id="scanner-existing-warning"></p>
+<div class="field-grid compact-field-grid scanner-result-fields">
+<label class="field field-full"><span>Titel</span><input id="scanner-result-name" maxlength="200" placeholder="Wird nach Möglichkeit aus Duckipedia ergänzt" type="text"/></label>
+<label class="field"><span>Erscheinungsjahr</span><input id="scanner-result-year" inputmode="numeric" max="2035" min="1800" placeholder="Optional" type="number"/></label>
+<div class="field scanner-link-field"><span>Bandseite</span><a class="secondary-button link-button" href="#" id="scanner-duckipedia-link" rel="noopener noreferrer" target="_blank">Duckipedia öffnen</a></div>
+</div>
+<p aria-live="polite" class="field-help" id="scanner-lookup-status"></p>
+<div class="modal-actions scanner-result-actions">
+<button class="primary-button" id="scanner-save" type="button">Zur Warteschlange &amp; weiter</button>
+<button class="secondary-button" id="scanner-apply-form" type="button">Nur ins Formular übernehmen</button>
+<button class="text-button" id="scanner-rescan" type="button">Neu scannen</button>
+</div>
+</section>
+<section aria-labelledby="scanner-queue-title" class="scanner-queue" id="scanner-queue">
+<div class="subsection-heading scanner-queue-heading">
+<div><h3 id="scanner-queue-title">Warteschlange</h3><span class="muted-copy" id="scanner-queue-count">0 Bände</span></div>
+<button class="text-button danger-text" id="scanner-clear-queue" type="button">Liste leeren</button>
+</div>
+<p class="field-help">Scanne mehrere Bände nacheinander. Vor dem Sammelspeichern kannst du Titel, Jahr, Zustand und Eigenschaften je Band korrigieren.</p>
+<div class="scanner-queue-toolbar">
+<button class="secondary-button" id="scanner-apply-defaults" type="button">Aktuelle Einstellungen auf alle anwenden</button>
+<button class="primary-button" id="scanner-save-queue" type="button">Alle geprüften Bände speichern</button>
+</div>
+<div class="scanner-queue-list" id="scanner-queue-list"></div>
+<p aria-live="polite" class="form-message" id="scanner-queue-message" role="status"></p>
+</section>
+</section>
+</div>
+<div aria-labelledby="series-modal-title" aria-modal="true" class="modal hidden" id="series-modal" role="dialog">
+<div class="modal-backdrop" data-close-series=""></div>
+<section class="modal-card series-manager-card">
+<div class="section-heading"><div><p class="eyebrow">Reihenverwaltung</p><h2 id="series-modal-title">Eigene Reihen</h2></div><button aria-label="Reihenverwaltung schließen" class="icon-button small-icon-button" id="close-series" type="button">×</button></div>
+<form class="series-manager-form" id="series-form" novalidate="">
+<input id="custom-series-original-name" type="hidden"/>
+<label class="field field-full"><span>Name der Reihe</span><input id="custom-series-name" maxlength="100" placeholder="z. B. LTB Mini Pocket" required="" type="text"/></label>
+<label class="field field-full"><span>Duckipedia-Pfad</span><input id="custom-series-pattern" maxlength="200" placeholder="z. B. LTB_Mini_Pocket_{band}" type="text"/><small class="field-help">Optional. Verwende <strong>{band}</strong> als Platzhalter. Ohne Platzhalter wird die Bandnummer automatisch angehängt.</small></label>
+<div class="series-manager-actions">
+<button class="primary-button" id="save-custom-series" type="submit">Reihe hinzufügen</button>
+<button class="secondary-button hidden" id="cancel-custom-series-edit" type="button">Bearbeiten abbrechen</button>
+</div>
+</form>
+<p aria-live="polite" class="form-message" id="series-message" role="status"></p>
+<div class="management-list series-management-list" id="custom-series-list"></div>
+<details class="standard-series-details">
+<summary>Standardreihen und Duckipedia-Pfade anzeigen</summary>
+<div class="management-list compact-management-list" id="standard-series-list"></div>
+</details>
+</section>
+</div>
+<div aria-labelledby="missing-detail-title" aria-modal="true" class="modal hidden" id="missing-detail-modal" role="dialog">
+<div class="modal-backdrop" data-close-missing-detail=""></div>
+<section class="modal-card">
+<div class="section-heading"><div><p class="eyebrow">Wunschliste</p><h2 id="missing-detail-title">Fehlenden Band ergänzen</h2></div><button aria-label="Detailfenster schließen" class="icon-button small-icon-button" id="close-missing-detail" type="button">×</button></div>
+<p class="modal-context" id="missing-detail-context"></p>
+<form id="missing-detail-form" novalidate="">
+<div class="field-grid compact-field-grid">
+<label class="field field-full"><span>Titel / Name</span><input id="missing-detail-name" maxlength="200" placeholder="Optional" type="text"/></label>
+<label class="field"><span>Erscheinungsjahr</span><input id="missing-detail-year" inputmode="numeric" max="2035" min="1800" placeholder="Optional" type="number"/></label>
+<label class="field"><span>Zustand (Wunsch / gefunden)</span><select id="missing-detail-condition"></select></label>
+<label class="field field-full"><span>Exakter Duckipedia-Link</span><input id="missing-detail-url" inputmode="url" maxlength="1000" placeholder="Optional – sonst wird die Suche geöffnet" type="url"/></label>
+<label class="field field-full"><span>Notizen</span><textarea id="missing-detail-notes" maxlength="2000" placeholder="Optional" rows="3"></textarea></label>
+</div>
+<div class="modal-link-row"><a class="secondary-button link-button" href="#" id="missing-duckipedia-link" rel="noopener noreferrer" target="_blank">In Duckipedia suchen</a></div>
+<div class="modal-actions missing-detail-actions">
+<button class="primary-button" type="submit">Details speichern</button>
+<button class="success-button" id="missing-mark-owned" type="button">Als vorhanden eintragen</button>
+<button class="danger-button hidden" id="delete-missing-detail" type="button">Details löschen</button>
+<button class="secondary-button" data-close-missing-detail="" type="button">Abbrechen</button>
+</div>
+<p aria-live="polite" class="form-message" id="missing-detail-message" role="status"></p>
+</form>
+</section>
+</div>
+<div aria-labelledby="duplicate-modal-title" aria-modal="true" class="modal hidden" id="duplicate-modal" role="dialog">
+<div class="modal-backdrop" data-close-duplicate=""></div>
+<section class="modal-card">
+<div class="section-heading"><div><p class="eyebrow">Exemplare verwalten</p><h2 id="duplicate-modal-title">Zweites Exemplar</h2></div><button aria-label="Exemplarverwaltung schließen" class="icon-button small-icon-button" id="close-duplicate" type="button">×</button></div>
+<p class="modal-context" id="duplicate-context"></p>
+<form id="duplicate-form" novalidate="">
+<label class="field field-full"><span>Zustand des zweiten Exemplars</span><select id="duplicate-modal-condition"></select></label>
+<div class="modal-actions duplicate-actions">
+<button class="primary-button" id="duplicate-save" type="submit">Zweites Exemplar hinzufügen</button>
+<button class="danger-button hidden" id="duplicate-remove" type="button">Zweites Exemplar entfernen</button>
+<button class="secondary-button" data-close-duplicate="" type="button">Abbrechen</button>
+</div>
+<p aria-live="polite" class="form-message" id="duplicate-message" role="status"></p>
+</form>
+</section>
+</div>
+<div aria-labelledby="calendar-event-modal-title" aria-modal="true" class="modal hidden" id="calendar-event-modal" role="dialog">
+<div class="modal-backdrop" data-close-calendar-event=""></div>
+<section class="modal-card">
+<div class="section-heading"><div><p class="eyebrow">Kalender</p><h2 id="calendar-event-modal-title">Termin hinzufügen</h2></div><button aria-label="Terminfenster schließen" class="icon-button small-icon-button" id="close-calendar-event" type="button">×</button></div>
+<form id="calendar-event-form" novalidate="">
+<input id="calendar-event-id" type="hidden"/>
+<div class="field-grid compact-field-grid">
+<label class="field field-full"><span>Titel <strong aria-hidden="true">*</strong></span><input id="calendar-event-name" maxlength="200" placeholder="z. B. Flohmarkt Köln" required="" type="text"/></label>
+<label class="field"><span>Datum <strong aria-hidden="true">*</strong></span><input id="calendar-event-date" required="" type="date"/></label>
+<label class="field"><span>Kategorie</span><select id="calendar-event-category"><option value="flea-market">Flohmarkt</option><option value="comic-fair">Comicbörse / Messe</option><option value="other">Sonstiger Termin</option></select></label>
+<label class="check-row field-full calendar-all-day-row"><input checked="" id="calendar-event-all-day" type="checkbox"/><span>Ganztägiger Termin</span></label>
+<label class="field hidden" id="calendar-event-time-field"><span>Uhrzeit</span><input id="calendar-event-time" type="time"/></label>
+<label class="field field-full"><span>Ort</span><input id="calendar-event-location" maxlength="300" placeholder="Optional" type="text"/></label>
+<label class="field field-full"><span>Link</span><input id="calendar-event-url" maxlength="1200" placeholder="Optional" type="url"/></label>
+<label class="field field-full"><span>Notizen</span><textarea id="calendar-event-notes" maxlength="3000" placeholder="Optional" rows="3"></textarea></label>
+<label class="check-row field-full"><input checked="" id="calendar-event-reminder" type="checkbox"/><span>Beim Apple-Kalender-Export mit Erinnerung übernehmen</span></label>
+</div>
+<div class="modal-actions">
+<button class="primary-button" type="submit">Termin speichern</button>
+<button class="danger-button hidden" id="calendar-event-delete" type="button">Termin löschen</button>
+<button class="secondary-button" data-close-calendar-event="" type="button">Abbrechen</button>
+</div>
+<p aria-live="polite" class="form-message" id="calendar-event-message" role="status"></p>
+</form>
+</section>
+</div>
+<div aria-labelledby="import-title" aria-modal="true" class="modal hidden" id="import-modal" role="dialog">
+<div class="modal-backdrop" data-close-import=""></div>
+<section class="modal-card">
+<div class="section-heading"><div><p class="eyebrow">Wiederherstellen</p><h2 id="import-title">JSON-Backup importieren</h2></div><button aria-label="Import schließen" class="icon-button small-icon-button" id="close-import" type="button">×</button></div>
+<label class="field field-full"><span>Backup-Datei auswählen</span><input accept=".json,application/json" id="import-file" type="file"/><small class="field-help">Normale Daten-Backups und vollständige Medien-Backups werden erkannt.</small></label>
+<div aria-live="polite" class="import-summary hidden" id="import-summary"></div>
+<ul class="import-issues hidden" id="import-issues"></ul>
+<fieldset class="import-mode"><legend>Importart</legend><label class="check-row"><input checked="" id="import-mode-merge" name="importMode" type="radio" value="merge"/><span><strong>Zusammenführen</strong><small>Vorhandene Einträge bleiben erhalten.</small></span></label><label class="check-row"><input id="import-mode-replace" name="importMode" type="radio" value="replace"/><span><strong>Ersetzen</strong><small>Die aktuelle Sammlung wird vollständig ersetzt.</small></span></label></fieldset>
+<div class="modal-actions"><button class="primary-button" disabled="" id="import-submit" type="button">Import starten</button><button class="secondary-button" data-close-import="" type="button">Abbrechen</button></div>
+<p aria-live="polite" class="form-message" id="import-message" role="status"></p>
+</section>
+</div>
+<div aria-atomic="true" aria-live="polite" class="toast" id="toast" role="status"></div>
+<script src="./vendor/quagga.min.js"></script>
+<script src="./vendor/jspdf.umd.min.js"></script>
+<script src="./app.js" type="module"></script>
 </body>
 </html>

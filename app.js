@@ -119,6 +119,19 @@ const state = {
 
 const elements = {
   html: document.documentElement,
+  addPage: document.querySelector("#add-page"),
+  closeAddPage: document.querySelector("#close-add-page"),
+  navAdd: document.querySelector("#nav-add"),
+  navStatistics: document.querySelector("#nav-statistics"),
+  statisticsPage: document.querySelector("#statistics-page"),
+  closeStatistics: document.querySelector("#close-statistics"),
+  statisticsSummary: document.querySelector("#statistics-summary"),
+  statisticsHighlights: document.querySelector("#statistics-highlights"),
+  yearChart: document.querySelector("#year-chart"),
+  yearChartTotal: document.querySelector("#year-chart-total"),
+  qualityChart: document.querySelector("#quality-chart"),
+  seriesChart: document.querySelector("#series-chart"),
+  dashboardStats: document.querySelector(".stats-grid"),
   form: document.querySelector("#comic-form"),
   formTitle: document.querySelector("#form-title"),
   formMessage: document.querySelector("#form-message"),
@@ -202,13 +215,10 @@ const elements = {
   fleaMarketSave: document.querySelector("#flea-market-save"),
   fleaMarketClear: document.querySelector("#flea-market-clear"),
   fleaMarketMessage: document.querySelector("#flea-market-message"),
-  openCalendar: document.querySelector("#open-calendar"),
+  openCalendar: document.querySelector("#nav-calendar"),
   calendarPage: document.querySelector("#calendar-page"),
   closeCalendar: document.querySelector("#close-calendar"),
   calendarPageSummary: document.querySelector("#calendar-page-summary"),
-  calendarOverviewCount: document.querySelector("#calendar-overview-count"),
-  calendarOverviewEvents: document.querySelector("#calendar-overview-events"),
-  calendarOverviewCopy: document.querySelector("#calendar-overview-copy"),
   calendarPrevYear: document.querySelector("#calendar-prev-year"),
   calendarNextYear: document.querySelector("#calendar-next-year"),
   calendarYearSelect: document.querySelector("#calendar-year-select"),
@@ -250,9 +260,7 @@ const elements = {
   calendarEventMessage: document.querySelector("#calendar-event-message"),
   themeToggle: document.querySelector("#theme-toggle"),
   themeIcon: document.querySelector("#theme-icon"),
-  connectionStatus: document.querySelector("#connection-status"),
   appVersion: document.querySelector("#app-version"),
-  updateApp: document.querySelector("#update-app"),
   backupReminder: document.querySelector("#backup-reminder"),
   backupReminderText: document.querySelector("#backup-reminder-text"),
   backupReminderAction: document.querySelector("#backup-reminder-action"),
@@ -400,7 +408,6 @@ async function initializeApp() {
   applyStoredTheme();
   barcodeScanner = new MagazineBarcodeScanner(elements.scannerCameraTarget);
   bindEvents();
-  updateConnectionStatus();
   elements.appVersion.textContent = `v${APP_CONFIG.appVersion}`;
 
   try {
@@ -527,6 +534,11 @@ function createOption(value, label) {
 
 function bindEvents() {
   elements.form.addEventListener("submit", handleFormSubmit);
+  elements.navAdd.addEventListener("click", openAddPage);
+  elements.closeAddPage.addEventListener("click", closeAddPage);
+  elements.navStatistics.addEventListener("click", openStatisticsPage);
+  elements.closeStatistics.addEventListener("click", closeStatisticsPage);
+  elements.dashboardStats.addEventListener("click", handleDashboardStatClick);
   elements.coverFile.addEventListener("change", handleCoverFileSelection);
   elements.removeCover.addEventListener("click", handleRemoveCoverFromForm);
   elements.lookupMetadata.addEventListener("click", () => lookupFormMetadata({ force: true }));
@@ -537,7 +549,6 @@ function bindEvents() {
   elements.comicList.addEventListener("click", handleCardAction);
   elements.missingList.addEventListener("click", handleMissingBandClick);
   elements.themeToggle.addEventListener("click", toggleTheme);
-  elements.updateApp.addEventListener("click", handleUpdateButtonClick);
   elements.backupReminderAction.addEventListener("click", handleJsonExport);
   elements.progressTargetForm.addEventListener("submit", handleProgressTargetSubmit);
   elements.progressSeries.addEventListener("change", syncProgressTargetInput);
@@ -614,8 +625,6 @@ function bindEvents() {
   elements.scannerModal.addEventListener("click", (event) => {
     if (event.target.closest("[data-close-scanner]")) closeScannerModal();
   });
-  window.addEventListener("online", updateConnectionStatus);
-  window.addEventListener("offline", updateConnectionStatus);
 
   [
     elements.search,
@@ -682,6 +691,8 @@ function bindEvents() {
     if (!elements.missingDetailModal.classList.contains("hidden")) return closeMissingDetailModal();
     if (!elements.duplicateModal.classList.contains("hidden")) return closeDuplicateModal();
     if (!elements.scannerModal.classList.contains("hidden")) return closeScannerModal();
+    if (!elements.addPage.classList.contains("hidden")) return closeAddPage();
+    if (!elements.statisticsPage.classList.contains("hidden")) return closeStatisticsPage();
     if (!elements.collectionPage.classList.contains("hidden")) return closeCollectionPage();
     if (!elements.missingPage.classList.contains("hidden")) return closeMissingPage();
     if (!elements.fleaMarketPage.classList.contains("hidden")) return closeFleaMarketPage();
@@ -690,6 +701,61 @@ function bindEvents() {
     if (!elements.progressPage.classList.contains("hidden")) return closeProgressPage();
     if (!elements.mediaPage.classList.contains("hidden")) return closeMediaPage();
   });
+}
+
+function openAddPage() {
+  elements.addPage.classList.remove("hidden");
+  elements.addPage.setAttribute("aria-hidden", "false");
+  document.body.classList.add("app-page-open");
+  elements.addPage.scrollTop = 0;
+  window.setTimeout(() => {
+    const target = state.editingId ? elements.series : elements.closeAddPage;
+    target.focus({ preventScroll: true });
+  }, 0);
+}
+
+function closeAddPage({ returnFocus = true } = {}) {
+  elements.addPage.classList.add("hidden");
+  elements.addPage.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("app-page-open");
+  if (returnFocus) window.setTimeout(() => elements.navAdd.focus({ preventScroll: true }), 0);
+}
+
+function openStatisticsPage() {
+  renderStatistics();
+  elements.statisticsPage.classList.remove("hidden");
+  elements.statisticsPage.setAttribute("aria-hidden", "false");
+  document.body.classList.add("app-page-open");
+  elements.statisticsPage.scrollTop = 0;
+  window.setTimeout(() => elements.closeStatistics.focus({ preventScroll: true }), 0);
+}
+
+function closeStatisticsPage({ returnFocus = true } = {}) {
+  elements.statisticsPage.classList.add("hidden");
+  elements.statisticsPage.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("app-page-open");
+  if (returnFocus) window.setTimeout(() => elements.navStatistics.focus({ preventScroll: true }), 0);
+}
+
+function handleDashboardStatClick(event) {
+  const card = event.target.closest("button[data-dashboard-action]");
+  if (!card) return;
+  const action = card.dataset.dashboardAction;
+  if (action === "missing") {
+    openMissingPage("all");
+    return;
+  }
+  if (action === "series") {
+    openStatisticsPage();
+    return;
+  }
+  const presets = {
+    read: { read: "read" },
+    unread: { read: "unread" },
+    sealed: { sealed: true },
+    duplicate: { duplicate: true }
+  };
+  openCollectionPage("all", presets[action] || {});
 }
 
 async function handleFormSubmit(event) {
@@ -1119,6 +1185,7 @@ async function refreshCollection() {
     renderSeriesProgress();
     renderBackupStatus();
     renderCalendarOverview();
+    if (!elements.calendarPage.classList.contains("hidden")) renderCalendarPage();
   } catch (error) {
     console.error(error);
     showFormMessage(`Lokale Daten konnten nicht geladen werden: ${error.message}`, "error");
@@ -1151,7 +1218,9 @@ function syncCollectionSeriesFilter(availableSeries = getAvailableSeries(state.s
   const mainSeries = "Lustiges Taschenbuch";
   const options = state.collectionScope === "main"
     ? [mainSeries]
-    : availableSeries.filter((seriesName) => seriesName !== mainSeries);
+    : state.collectionScope === "other"
+      ? availableSeries.filter((seriesName) => seriesName !== mainSeries)
+      : availableSeries;
 
   elements.filterSeries.replaceChildren();
 
@@ -1162,7 +1231,7 @@ function syncCollectionSeriesFilter(availableSeries = getAvailableSeries(state.s
     return;
   }
 
-  elements.filterSeries.append(createOption("all", "Alle Sonderreihen"));
+  elements.filterSeries.append(createOption("all", state.collectionScope === "other" ? "Alle Sonderreihen" : "Alle Reihen"));
   options.forEach((seriesName) => elements.filterSeries.append(createOption(seriesName, seriesName)));
   elements.filterSeries.value = options.includes(preferredValue) ? preferredValue : "all";
   elements.filterSeriesField.classList.remove("hidden");
@@ -1177,13 +1246,22 @@ function renderCollectionHub() {
   elements.otherCollectionCount.setAttribute("aria-label", formatEntryCount(otherCount));
 }
 
-function openCollectionPage(scope) {
-  state.collectionScope = scope === "other" ? "other" : "main";
+function openCollectionPage(scope, presets = {}) {
+  state.collectionScope = scope === "other" ? "other" : scope === "all" ? "all" : "main";
   resetFilters({ keepPageOpen: true });
   syncCollectionSeriesFilter(getAvailableSeries(state.settings, state.comics));
+  if (presets.series && [...elements.filterSeries.options].some((option) => option.value === presets.series)) {
+    elements.filterSeries.value = presets.series;
+  }
+  if (presets.read) elements.filterRead.value = presets.read;
+  if (presets.sealed) elements.filterSealed.checked = true;
+  if (presets.duplicate) elements.filterDuplicate.checked = true;
+  if (presets.search) elements.search.value = String(presets.search);
   elements.collectionPageTitle.textContent = state.collectionScope === "main"
     ? "Lustige Taschenbücher"
-    : "Sonderbände & weitere Reihen";
+    : state.collectionScope === "other"
+      ? "Sonderbände & weitere Reihen"
+      : "Alle Comics";
   renderCollection();
   elements.collectionPage.classList.remove("hidden");
   elements.collectionPage.setAttribute("aria-hidden", "false");
@@ -1198,7 +1276,11 @@ function closeCollectionPage({ returnFocus = true } = {}) {
   document.body.classList.remove("app-page-open");
   if (returnFocus) {
     window.setTimeout(() => {
-      const target = state.collectionScope === "main" ? elements.openMainCollection : elements.openOtherCollection;
+      const target = state.collectionScope === "main"
+        ? elements.openMainCollection
+        : state.collectionScope === "other"
+          ? elements.openOtherCollection
+          : elements.dashboardStats;
       target.focus({ preventScroll: true });
     }, 0);
   }
@@ -1209,7 +1291,9 @@ function getScopedMissingGroups() {
   return state.missingGroups.filter((group) => (
     state.missingScope === "main"
       ? group.series === mainSeries
-      : group.series !== mainSeries
+      : state.missingScope === "other"
+        ? group.series !== mainSeries
+        : true
   ));
 }
 
@@ -1231,11 +1315,13 @@ function renderMissingHub() {
 }
 
 function openMissingPage(scope) {
-  state.missingScope = scope === "other" ? "other" : "main";
+  state.missingScope = scope === "other" ? "other" : scope === "all" ? "all" : "main";
   state.openMissingSeries = new Set();
   elements.missingPageTitle.textContent = state.missingScope === "main"
     ? "Lustige Taschenbücher"
-    : "Sonderbände & weitere Reihen";
+    : state.missingScope === "other"
+      ? "Sonderbände & weitere Reihen"
+      : "Alle fehlenden Bände";
   renderMissingBands();
   elements.missingPage.classList.remove("hidden");
   elements.missingPage.setAttribute("aria-hidden", "false");
@@ -1250,7 +1336,11 @@ function closeMissingPage({ returnFocus = true } = {}) {
   document.body.classList.remove("app-page-open");
   if (returnFocus) {
     window.setTimeout(() => {
-      const target = state.missingScope === "main" ? elements.openMainMissing : elements.openOtherMissing;
+      const target = state.missingScope === "main"
+        ? elements.openMainMissing
+        : state.missingScope === "other"
+          ? elements.openOtherMissing
+          : elements.dashboardStats;
       target.focus({ preventScroll: true });
     }, 0);
   }
@@ -2037,6 +2127,7 @@ function renderCollection() {
 
 function getScopedComics() {
   const mainSeries = "Lustiges Taschenbuch";
+  if (state.collectionScope === "all") return [...state.comics];
   return state.collectionScope === "other"
     ? state.comics.filter((comic) => comic.series !== mainSeries)
     : state.comics.filter((comic) => comic.series === mainSeries);
@@ -2384,6 +2475,21 @@ function renderStats() {
   elements.statSealed.textContent = sealed;
   elements.statDuplicate.textContent = duplicate;
   elements.statMissing.textContent = missingCount;
+
+  const dashboardLabels = {
+    total: ["Gesamt", total],
+    series: ["Reihen", seriesCount],
+    read: ["Gelesen", read],
+    unread: ["Ungelesen", total - read],
+    sealed: ["Foliert", sealed],
+    duplicate: ["Doppelt", duplicate],
+    missing: ["Fehlende Bände", missingCount]
+  };
+  elements.dashboardStats.querySelectorAll("[data-dashboard-action]").forEach((button) => {
+    const [label, value] = dashboardLabels[button.dataset.dashboardAction] || ["Kennzahl", ""];
+    button.setAttribute("aria-label", `${label}: ${value}. Zugehörige Ansicht öffnen`);
+  });
+
   elements.conditionStatsTotal.textContent = physicalCopies === 1 ? "1 Exemplar" : `${physicalCopies} Exemplare`;
 
   elements.conditionStats.replaceChildren();
@@ -2412,6 +2518,114 @@ function renderStats() {
     countElement.textContent = count;
     row.append(label, bar, countElement);
     elements.conditionStats.append(row);
+  });
+  renderStatistics();
+}
+
+function renderStatistics() {
+  if (!elements.statisticsHighlights) return;
+  const physicalCopies = state.comics.reduce((sum, comic) => sum + (comic.isDuplicate ? 2 : 1), 0);
+  const readCount = state.comics.filter((comic) => comic.isRead).length;
+  const readRate = state.comics.length ? Math.round((readCount / state.comics.length) * 100) : 0;
+  const progressData = getSeriesProgressData();
+  const completeSeries = progressData.filter((entry) => entry.percentage >= 100).length;
+  elements.statisticsSummary.textContent = physicalCopies === 1 ? "1 Buch" : `${physicalCopies} Bücher`;
+
+  const years = new Map();
+  const seriesCounts = new Map();
+  const seriesQuality = new Map();
+  const conditions = new Map();
+  state.comics.forEach((comic) => {
+    const copies = [comic.condition];
+    if (comic.isDuplicate) copies.push(comic.duplicateCondition || comic.condition);
+    const count = copies.length;
+    if (Number.isInteger(comic.publicationYear)) years.set(comic.publicationYear, (years.get(comic.publicationYear) || 0) + count);
+    seriesCounts.set(comic.series, (seriesCounts.get(comic.series) || 0) + count);
+    if (!seriesQuality.has(comic.series)) seriesQuality.set(comic.series, { good: 0, total: 0 });
+    const quality = seriesQuality.get(comic.series);
+    copies.forEach((condition) => {
+      conditions.set(condition, (conditions.get(condition) || 0) + 1);
+      quality.total += 1;
+      if (getConditionRank(condition) <= getConditionRank("VF")) quality.good += 1;
+    });
+  });
+
+  const oldestYear = years.size ? Math.min(...years.keys()) : null;
+  const mostCommonCondition = [...conditions.entries()].sort((a, b) => b[1] - a[1])[0];
+  const bestProgress = progressData.filter((entry) => entry.target > 0).sort((a, b) => b.percentage - a.percentage || b.target - a.target)[0];
+  const highlightData = [
+    { label: "Lesefortschritt", value: `${readRate} %`, copy: `${readCount} von ${state.comics.length} Bänden gelesen` },
+    { label: "Vollständige Reihen", value: String(completeSeries), copy: progressData.length ? `von ${progressData.length} bewerteten Reihen` : "Noch keine Ziele berechenbar" },
+    { label: "Ältestes Erscheinungsjahr", value: oldestYear ? String(oldestYear) : "–", copy: oldestYear ? "in deiner Sammlung" : "Noch kein Jahr erfasst" },
+    { label: "Häufigster Zustand", value: mostCommonCondition ? mostCommonCondition[0] : "–", copy: mostCommonCondition ? `${mostCommonCondition[1]} Exemplare` : "Noch keine Bücher" },
+    { label: "Vollständigste Reihe", value: bestProgress ? `${Math.round(bestProgress.percentage)} %` : "–", copy: bestProgress ? bestProgress.series : "Noch nicht berechenbar" }
+  ];
+  elements.statisticsHighlights.replaceChildren();
+  highlightData.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "statistics-highlight-card";
+    const label = document.createElement("span"); label.textContent = item.label;
+    const value = document.createElement("strong"); value.textContent = item.value;
+    const copy = document.createElement("small"); copy.textContent = item.copy;
+    card.append(label, value, copy);
+    elements.statisticsHighlights.append(card);
+  });
+
+  const yearData = [...years.entries()]
+    .sort((a, b) => b[1] - a[1] || b[0] - a[0])
+    .slice(0, 10)
+    .map(([year, count]) => ({ label: String(year), value: count, display: `${count}` }));
+  elements.yearChartTotal.textContent = years.size ? `${years.size} Jahrgänge erfasst` : "Keine Jahresdaten";
+  renderHorizontalChart(elements.yearChart, yearData, { empty: "Noch keine Erscheinungsjahre eingetragen." });
+
+  const qualityData = [...seriesQuality.entries()]
+    .map(([series, value]) => ({
+      label: series,
+      value: value.total ? (value.good / value.total) * 100 : 0,
+      display: `${Math.round(value.total ? (value.good / value.total) * 100 : 0)} %`,
+      detail: `${value.good} von ${value.total} Exemplaren`
+    }))
+    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, "de"))
+    .slice(0, 10);
+  renderHorizontalChart(elements.qualityChart, qualityData, { maximum: 100, empty: "Noch keine Zustände vorhanden." });
+
+  const seriesData = [...seriesCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "de"))
+    .slice(0, 10)
+    .map(([series, count]) => ({ label: series, value: count, display: `${count}` }));
+  renderHorizontalChart(elements.seriesChart, seriesData, { empty: "Noch keine Reihen vorhanden." });
+}
+
+function renderHorizontalChart(container, data, options = {}) {
+  container.replaceChildren();
+  if (!data.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted-copy";
+    empty.textContent = options.empty || "Noch keine Daten vorhanden.";
+    container.append(empty);
+    return;
+  }
+  const maximum = Number(options.maximum) || Math.max(...data.map((item) => Number(item.value) || 0), 1);
+  data.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "horizontal-chart-row";
+    const heading = document.createElement("div");
+    heading.className = "horizontal-chart-heading";
+    const label = document.createElement("span"); label.textContent = item.label;
+    const value = document.createElement("strong"); value.textContent = item.display ?? String(item.value);
+    heading.append(label, value);
+    const track = document.createElement("div");
+    track.className = "horizontal-chart-track";
+    const fill = document.createElement("span");
+    fill.style.width = `${Math.max(2, Math.min(100, ((Number(item.value) || 0) / maximum) * 100))}%`;
+    track.append(fill);
+    row.append(heading, track);
+    if (item.detail) {
+      const detail = document.createElement("small");
+      detail.textContent = item.detail;
+      row.append(detail);
+    }
+    container.append(row);
   });
 }
 
@@ -2689,6 +2903,7 @@ function startEditing(comic) {
   clearValidationErrors();
   showFormMessage("Du bearbeitest einen vorhandenen Eintrag.");
 
+  openAddPage();
   elements.form.scrollIntoView({ behavior: "smooth", block: "start" });
   elements.series.focus({ preventScroll: true });
 }
@@ -3505,6 +3720,7 @@ function handleScannerApplyToForm() {
   elements.isSealed.checked = elements.scannerIsSealed.checked;
   updateDuplicateConditionVisibility();
   closeScannerModal();
+  openAddPage();
   showFormMessage("Bandnummer und erkannte Duckipedia-Daten wurden übernommen. Bitte prüfe die Angaben und speichere den Comic.", "success");
   elements.form.scrollIntoView({ behavior: "smooth", block: "start" });
   window.setTimeout(() => elements.condition.focus({ preventScroll: true }), 350);
@@ -4708,107 +4924,38 @@ function applyTheme(theme) {
   document.querySelector('meta[name="theme-color"]').setAttribute("content", themeColor);
 }
 
-function updateConnectionStatus() {
-  const isOnline = navigator.onLine;
-  elements.connectionStatus.textContent = isOnline ? "Online" : "Offline";
-  elements.connectionStatus.dataset.status = isOnline ? "online" : "offline";
-}
-
 function registerServiceWorker() {
-  if (!("serviceWorker" in navigator)) {
-    return;
-  }
+  if (!("serviceWorker" in navigator)) return;
 
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js", {
-        updateViaCache: "none"
-      });
+      const registration = await navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" });
+      const activateUpdate = (worker) => {
+        if (!worker) return;
+        state.waitingServiceWorker = worker;
+        worker.postMessage({ type: "SKIP_WAITING" });
+      };
 
-      if (registration.waiting) {
-        showAvailableUpdate(registration.waiting);
-      }
-
+      if (registration.waiting) activateUpdate(registration.waiting);
       registration.addEventListener("updatefound", () => {
         const installingWorker = registration.installing;
-
-        if (!installingWorker) {
-          return;
-        }
-
+        if (!installingWorker) return;
         installingWorker.addEventListener("statechange", () => {
-          if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
-            showAvailableUpdate(installingWorker);
-          }
+          if (installingWorker.state === "installed" && navigator.serviceWorker.controller) activateUpdate(installingWorker);
         });
       });
 
       let hasReloaded = false;
       navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (hasReloaded) {
-          return;
-        }
-
+        if (hasReloaded) return;
         hasReloaded = true;
         window.location.reload();
       });
-
       await registration.update();
     } catch (error) {
       console.error("Service Worker konnte nicht registriert werden:", error);
     }
   });
-}
-
-function showAvailableUpdate(worker) {
-  state.waitingServiceWorker = worker;
-  elements.updateApp.classList.remove("hidden");
-  elements.updateApp.textContent = "Jetzt aktualisieren";
-  elements.updateApp.disabled = false;
-  showToast("Eine neue Entenarchiv-Version ist verfügbar.");
-}
-
-async function handleUpdateButtonClick() {
-  if (state.waitingServiceWorker) {
-    elements.updateApp.disabled = true;
-    elements.updateApp.textContent = "Aktualisiere …";
-    state.waitingServiceWorker.postMessage({ type: "SKIP_WAITING" });
-    return;
-  }
-
-  elements.updateApp.disabled = true;
-  elements.updateApp.textContent = "Prüfe …";
-
-  try {
-    if (!navigator.onLine) {
-      showToast("Für die Updateprüfung wird kurz eine Internetverbindung benötigt.", "error");
-      return;
-    }
-
-    // navigator.serviceWorker.ready ist auf iOS zuverlässiger als getRegistration mit relativer Scope-URL.
-    const registration = await navigator.serviceWorker.ready;
-    await registration.update();
-
-    // Safari aktualisiert registration.waiting teilweise erst im nächsten Task.
-    await new Promise((resolve) => window.setTimeout(resolve, 250));
-
-    if (registration.waiting) {
-      showAvailableUpdate(registration.waiting);
-      return;
-    }
-
-    showToast(`Entenarchiv v${APP_CONFIG.appVersion} ist aktuell.`);
-  } catch (error) {
-    console.error("Updateprüfung fehlgeschlagen:", error);
-
-    // Die App bleibt nutzbar; Safari prüft den Service Worker zusätzlich bei jedem Start automatisch.
-    showToast("Manuelle Prüfung nicht möglich. Beim nächsten App-Start wird automatisch erneut geprüft.");
-  } finally {
-    if (!state.waitingServiceWorker) {
-      elements.updateApp.disabled = false;
-      elements.updateApp.textContent = "Updates prüfen";
-    }
-  }
 }
 
 function getSafeCalendarYear(value = state.settings.calendarSelectedYear) {
@@ -4838,35 +4985,7 @@ function getCalendarImportedSources() {
 }
 
 function renderCalendarOverview() {
-  const events = getCalendarEvents();
-  const currentYear = new Date().getFullYear();
-  const yearEvents = getEventsForYear(events, currentYear);
-  const upcoming = getUpcomingEvents(events, new Date(), 3);
-  elements.calendarOverviewCount.textContent = yearEvents.length === 1 ? "1 Termin" : `${yearEvents.length} Termine`;
-  elements.calendarOverviewCopy.textContent = state.settings.calendarLastImportAt
-    ? `Jahrespläne zuletzt aktualisiert: ${formatDateTime(state.settings.calendarLastImportAt)}`
-    : "Neuerscheinungen und eigene Termine";
-  elements.calendarOverviewEvents.replaceChildren();
-
-  if (upcoming.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "muted-copy";
-    empty.textContent = events.length ? "Keine weiteren Termine geplant." : "Noch keine Erscheinungstermine importiert.";
-    elements.calendarOverviewEvents.append(empty);
-    return;
-  }
-
-  upcoming.forEach((event) => {
-    const row = document.createElement("div");
-    row.className = `calendar-overview-event calendar-event-${event.category}`;
-    const date = document.createElement("span");
-    date.className = "calendar-overview-date";
-    date.textContent = formatCalendarDate(event.startDate, { includeWeekday: false, includeYear: event.startDate.slice(0, 4) !== String(currentYear) });
-    const title = document.createElement("strong");
-    title.textContent = event.title;
-    row.append(date, title);
-    elements.calendarOverviewEvents.append(row);
-  });
+  // Die Kalenderübersicht lebt ab Version 3.7 ausschließlich in der Kalender-Unterseite.
 }
 
 async function openCalendarPage() {
@@ -4883,11 +5002,11 @@ async function openCalendarPage() {
   await refreshCalendarCatalog({ silent: true, autoImport: true });
 }
 
-function closeCalendarPage() {
+function closeCalendarPage({ returnFocus = true } = {}) {
   elements.calendarPage.classList.add("hidden");
   elements.calendarPage.setAttribute("aria-hidden", "true");
   document.body.classList.remove("app-page-open");
-  window.setTimeout(() => elements.openCalendar.focus({ preventScroll: true }), 0);
+  if (returnFocus) window.setTimeout(() => elements.openCalendar.focus({ preventScroll: true }), 0);
 }
 
 function renderCalendarPage() {
@@ -5091,14 +5210,27 @@ function renderCalendarEventList(events) {
 
     const copy = document.createElement("div");
     copy.className = "calendar-event-copy";
+    const badgeRow = document.createElement("div");
+    badgeRow.className = "calendar-event-badge-row";
     const badge = document.createElement("span");
     badge.className = "calendar-event-badge";
     badge.textContent = event.source === "publisher" ? "Neuerscheinung" : event.category === "flea-market" ? "Flohmarkt" : event.category === "comic-fair" ? "Comicbörse" : "Eigener Termin";
+    badgeRow.append(badge);
+
+    const releaseLink = resolveCalendarRelease(event);
+    if (releaseLink) {
+      const status = getCalendarCollectionStatus(releaseLink);
+      const statusBadge = document.createElement("span");
+      statusBadge.className = `calendar-collection-status calendar-collection-${status.type}`;
+      statusBadge.textContent = status.label;
+      badgeRow.append(statusBadge);
+    }
+
     const title = document.createElement("h4");
     title.textContent = event.title;
     const metadata = document.createElement("p");
     metadata.textContent = [event.startTime, event.location].filter(Boolean).join(" · ") || (event.source === "publisher" ? event.sourceName : "Ganztägig");
-    copy.append(badge, title, metadata);
+    copy.append(badgeRow, title, metadata);
 
     const actions = document.createElement("div");
     actions.className = "calendar-event-actions";
@@ -5111,6 +5243,17 @@ function renderCalendarEventList(events) {
       link.rel = "noopener noreferrer";
       link.textContent = "Details ↗";
       actions.append(link);
+    }
+    if (releaseLink) {
+      const status = getCalendarCollectionStatus(releaseLink);
+      const action = document.createElement("button");
+      action.type = "button";
+      action.className = status.type === "owned" ? "success-button compact-button" : "secondary-button compact-button";
+      action.dataset.calendarCollectionAction = status.type === "owned" ? "owned" : status.type === "missing" ? "missing" : "watch";
+      action.dataset.series = releaseLink.series;
+      action.dataset.bandNumber = String(releaseLink.bandNumber);
+      action.textContent = status.type === "owned" ? "In Sammlung" : status.type === "missing" ? "Fehlband öffnen" : "Auf Wunschliste";
+      actions.append(action);
     }
     if (event.source === "custom") {
       const edit = document.createElement("button");
@@ -5125,11 +5268,71 @@ function renderCalendarEventList(events) {
   });
 }
 
+function normalizeCalendarSeriesName(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("de");
+}
+
+function resolveCalendarRelease(event) {
+  if (event?.source !== "publisher" || event?.category !== "release") return null;
+  const match = String(event.title || "").trim().match(/^(.*?)\s+(\d+)$/);
+  if (!match) return null;
+  const prefix = match[1].trim();
+  const bandNumber = Number(match[2]);
+  if (!Number.isSafeInteger(bandNumber) || bandNumber < 1) return null;
+
+  const availableSeries = getAvailableSeries(state.settings, state.comics);
+  const aliases = [
+    { alias: "LTB", series: "Lustiges Taschenbuch" },
+    { alias: "Lustiges Taschenbuch", series: "Lustiges Taschenbuch" },
+    { alias: "LTB Frohe Ostern", series: "LTB Ostern" },
+    { alias: "LTB Ultimate", series: "LTB Ultimate Phantomias" },
+    { alias: "LTB Phantomias Collection", series: "LTB Phantomias Collection" },
+    ...availableSeries.map((series) => ({ alias: series, series }))
+  ].sort((a, b) => b.alias.length - a.alias.length);
+  const normalizedPrefix = normalizeCalendarSeriesName(prefix);
+  const matchAlias = aliases.find((entry) => normalizeCalendarSeriesName(entry.alias) === normalizedPrefix);
+  if (!matchAlias) return null;
+  return { series: matchAlias.series, bandNumber };
+}
+
+function getCalendarCollectionStatus({ series, bandNumber }) {
+  const owned = state.comics.some((comic) => comic.series === series && comic.numericBandNumber === bandNumber);
+  if (owned) return { type: "owned", label: "Im Besitz" };
+  const missing = state.missingGroups.some((group) => group.series === series && group.missingBands.includes(bandNumber));
+  if (missing) return { type: "missing", label: "Fehlt" };
+  return { type: "planned", label: "Noch nicht vorgemerkt" };
+}
+
 function inferDuckipediaUrlFromCalendarTitle(title) {
-  const match = String(title || "").trim().match(/^LTB(?:\s+(.+?))?\s+(\d+)$/i);
-  if (!match) return "";
-  const series = match[1] ? `LTB ${match[1]}` : "Lustiges Taschenbuch";
-  return createConfiguredDuckipediaUrl(series, Number(match[2]), title);
+  const pseudoEvent = { source: "publisher", category: "release", title };
+  const release = resolveCalendarRelease(pseudoEvent);
+  return release ? createConfiguredDuckipediaUrl(release.series, release.bandNumber, title) : "";
+}
+
+async function handleCalendarCollectionAction(button) {
+  const series = button.dataset.series;
+  const bandNumber = Number(button.dataset.bandNumber);
+  if (!series || !Number.isSafeInteger(bandNumber)) return;
+  const action = button.dataset.calendarCollectionAction;
+
+  if (action === "owned") {
+    closeCalendarPage({ returnFocus: false });
+    openCollectionPage("all", { series, search: bandNumber });
+    return;
+  }
+
+  if (action === "watch") {
+    const nextTargets = { ...(state.settings.knownHighestBandBySeries || {}) };
+    const currentTarget = Number(nextTargets[series]) || 0;
+    if (bandNumber > currentTarget) nextTargets[series] = bandNumber;
+    await saveMeaningfulSettings({ knownHighestBandBySeries: nextTargets });
+    state.missingGroups = calculateMissingBands(state.comics, nextTargets);
+    renderMissingHub();
+    renderMissingBands();
+    renderStats();
+    renderSeriesProgress();
+  }
+  await openMissingDetailModal(series, bandNumber);
 }
 
 async function changeCalendarYear(delta) {
@@ -5180,6 +5383,14 @@ function handleCalendarDayClick(event) {
 }
 
 function handleCalendarEventListClick(event) {
+  const collectionAction = event.target.closest("button[data-calendar-collection-action]");
+  if (collectionAction) {
+    handleCalendarCollectionAction(collectionAction).catch((error) => {
+      console.error("Kalenderverknüpfung fehlgeschlagen:", error);
+      showToast(`Kalenderverknüpfung fehlgeschlagen: ${error.message}`, "error");
+    });
+    return;
+  }
   const edit = event.target.closest("button[data-calendar-edit]");
   if (!edit) return;
   const calendarEvent = getCalendarEvents().find((item) => item.id === edit.dataset.calendarEdit);
