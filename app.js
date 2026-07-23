@@ -51,6 +51,8 @@ import {
 } from "./export.js";
 import { dataUrlToBlob, prepareCoverImage } from "./media.js";
 import {
+  BUNDLED_RELEASE_CALENDAR_URL,
+  BUNDLED_RELEASE_CALENDAR_YEAR,
   DEFAULT_RELEASE_CALENDAR_URL,
   buildCalendarIcs,
   compareCalendarEvents,
@@ -4835,7 +4837,7 @@ async function openCalendarPage() {
   window.setTimeout(() => elements.closeCalendar.focus({ preventScroll: true }), 0);
 
   const publisherEvents = getCalendarEvents().filter((event) => event.source === "publisher");
-  if (publisherEvents.length === 0 && navigator.onLine) {
+  if (publisherEvents.length === 0) {
     await loadCalendarFromSource({ silent: true });
   }
 }
@@ -5014,37 +5016,34 @@ function handleCalendarEventListClick(event) {
 
 function syncCalendarSourceLink() {
   const value = elements.calendarSourceUrl.value.trim() || DEFAULT_RELEASE_CALENDAR_URL;
-  elements.calendarOpenSource.href = value;
+  try {
+    const parsedUrl = new URL(value);
+    elements.calendarOpenSource.href = parsedUrl.protocol === "https:"
+      ? `webcal://${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}`
+      : value;
+  } catch {
+    elements.calendarOpenSource.href = "#";
+  }
 }
 
 async function loadCalendarFromSource({ silent = false } = {}) {
   if (state.calendarImporting) return;
-  const sourceUrl = elements.calendarSourceUrl.value.trim() || state.settings.calendarSourceUrl || DEFAULT_RELEASE_CALENDAR_URL;
-  let parsedUrl;
-  try {
-    parsedUrl = new URL(sourceUrl);
-    if (parsedUrl.protocol !== "https:") throw new Error();
-  } catch {
-    if (!silent) showCalendarImportMessage("Bitte gib eine gültige HTTPS-Adresse ein.", "error");
-    return;
-  }
+  const officialSourceUrl = elements.calendarSourceUrl.value.trim() || state.settings.calendarSourceUrl || DEFAULT_RELEASE_CALENDAR_URL;
 
   state.calendarImporting = true;
   elements.calendarFetchSource.disabled = true;
-  if (!silent) showCalendarImportMessage("Jahresplan wird geladen …", "info");
+  if (!silent) showCalendarImportMessage(`LTB-Termine ${BUNDLED_RELEASE_CALENDAR_YEAR} werden aus der lokal mitgelieferten Kalenderdatei geladen …`, "info");
   try {
-    const response = await fetch(parsedUrl.href, { cache: "no-store", mode: "cors" });
+    const response = await fetch(BUNDLED_RELEASE_CALENDAR_URL, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
-    await importCalendarText(text, parsedUrl.href, "LTB Jahresplan");
-    if (!silent) showCalendarImportMessage("Der Jahresplan wurde erfolgreich aktualisiert.", "success");
+    await importCalendarText(text, officialSourceUrl, `LTB Jahresplan ${BUNDLED_RELEASE_CALENDAR_YEAR}`);
+    if (!silent) showCalendarImportMessage(`100 LTB-Termine für ${BUNDLED_RELEASE_CALENDAR_YEAR} wurden geladen. Dafür war kein Download über Safari nötig.`, "success");
   } catch (error) {
-    console.warn("Kalenderquelle konnte nicht direkt geladen werden:", error);
-    if (!silent) {
-      showCalendarImportMessage("Direktes Laden wurde vom Server oder Browser blockiert. Öffne die iCal-Datei und importiere sie anschließend über „iCal-Datei importieren“.", "error");
-    } else {
-      elements.calendarImportSummary.textContent = "iCal-Datei manuell importieren";
-    }
+    console.error("Mitgelieferter LTB-Kalender konnte nicht geladen werden:", error);
+    const message = `Die lokale Kalenderdatei fehlt oder ist noch nicht im Offline-Cache. Bitte prüfe, ob Entenarchiv v${APP_CONFIG.appVersion} vollständig veröffentlicht wurde, und öffne die App anschließend erneut.`;
+    if (!silent) showCalendarImportMessage(message, "error");
+    else elements.calendarImportSummary.textContent = "Lokale Kalenderdatei nicht verfügbar";
   } finally {
     state.calendarImporting = false;
     elements.calendarFetchSource.disabled = false;

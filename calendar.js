@@ -4,6 +4,8 @@ const MONTH_NAMES = [
 ];
 
 export const DEFAULT_RELEASE_CALENDAR_URL = "https://www.lustiges-taschenbuch.de/sites/default/files/2025-11/ltb_evt_2026v2.ics";
+export const BUNDLED_RELEASE_CALENDAR_URL = "./data/ltb_evt_2026_bundled.ics";
+export const BUNDLED_RELEASE_CALENDAR_YEAR = 2026;
 
 export function getMonthName(monthIndex) {
   return MONTH_NAMES[monthIndex] || "";

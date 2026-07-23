@@ -35,7 +35,7 @@
       <span id="connection-status" class="status-pill">Online</span>
       <span class="status-copy">Lokale Sammlung</span>
       <button id="update-app" class="update-pill" type="button">Updates prüfen</button>
-      <span id="app-version" class="version-pill">v3.5.0</span>
+      <span id="app-version" class="version-pill">v3.5.1</span>
     </section>
 
     <section id="backup-reminder" class="backup-reminder hidden" aria-live="polite">
@@ -406,13 +406,14 @@
       <details class="panel calendar-import-panel">
         <summary><span><strong>LTB-Jahresplan importieren</strong><small id="calendar-import-summary">Noch nicht importiert</small></span><span class="disclosure-icon" aria-hidden="true">⌄</span></summary>
         <div class="collapsible-content">
-          <label class="field field-full"><span>iCal-Adresse des Verlags</span><input id="calendar-source-url" type="url" inputmode="url"></label>
+          <label class="field field-full"><span>Offizielle Kalenderquelle</span><input id="calendar-source-url" type="url" inputmode="url" readonly></label>
           <div class="calendar-import-actions">
-            <button id="calendar-fetch-source" class="primary-button" type="button">Jahresplan laden</button>
-            <a id="calendar-open-source" class="secondary-button link-button" href="#" target="_blank" rel="noopener noreferrer">iCal-Datei öffnen</a>
-            <label class="secondary-button file-button" for="calendar-file">iCal-Datei importieren</label>
+            <button id="calendar-fetch-source" class="primary-button" type="button">LTB-Termine 2026 laden</button>
+            <a id="calendar-open-source" class="secondary-button link-button" href="#">In Apple Kalender abonnieren</a>
+            <label class="secondary-button file-button" for="calendar-file">Andere iCal-Datei importieren</label>
             <input id="calendar-file" class="visually-hidden" type="file" accept=".ics,text/calendar">
           </div>
+          <p class="muted-copy compact-help">Die Termine für 2026 sind direkt in Entenarchiv enthalten. Safari muss die Verlagsdatei nicht herunterladen und der Verlag muss keinen Browserzugriff erlauben.</p>
           <p id="calendar-import-message" class="form-message" role="status" aria-live="polite"></p>
         </div>
       </details>

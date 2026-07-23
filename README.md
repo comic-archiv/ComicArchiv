@@ -1,8 +1,8 @@
-# Entenarchiv 3.5.0
+# Entenarchiv 3.5.1
 
 Private mobile PWA zur Verwaltung einer Sammlung von Lustigen Taschenbüchern und Sonderbänden.
 
-## Neu in 3.5.0
+## Neu in 3.5.1
 
 - Kalenderansicht für Neuerscheinungen und eigene Termine
 - Import von iCalendar-Dateien (`.ics`)
@@ -20,3 +20,8 @@ Sammlung, Kalendertermine und eigene Veranstaltungen werden lokal in IndexedDB g
 ## Hinweis zu Erinnerungen
 
 Entenarchiv verwendet für zuverlässige Erinnerungen ohne eigenen Server den Export in Apple Kalender. Echter Web Push für eine geschlossene PWA benötigt einen Push-Server, der die Benachrichtigungen zum richtigen Zeitpunkt versendet.
+
+
+## Kalender-Hotfix 3.5.1
+
+Der offizielle LTB-Jahresplan 2026 ist als lokale iCal-Kopie im Projekt enthalten. Dadurch funktioniert der Import auf iPhone und iPad ohne CORS-Zugriff und ohne vorheriges Speichern der Verlagsdatei in der Dateien-App.
