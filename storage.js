@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, normalizeDuckipediaPattern } from "./config.js";
+import { DEFAULT_CONDITION_CODE, DEFAULT_SETTINGS, normalizeConditionCode, normalizeDuckipediaPattern } from "./config.js";
 
 const DATABASE_NAME = "comicarchiv-db";
 const DATABASE_VERSION = 4;
@@ -342,7 +342,7 @@ function normalizeSettings(settings) {
         publicationYear: Number.isInteger(publicationYear) && publicationYear >= 1800 && publicationYear <= 2035
           ? publicationYear
           : null,
-        desiredCondition: typeof value.desiredCondition === "string" ? value.desiredCondition.slice(0, 10) : "",
+        desiredCondition: normalizeConditionCode(value.desiredCondition, ""),
         notes: typeof value.notes === "string" ? value.notes.trim().slice(0, 2000) : "",
         duckipediaUrl: normalizeOptionalUrl(value.duckipediaUrl),
         updatedAt: isValidDateString(value.updatedAt) ? value.updatedAt : null
@@ -493,7 +493,7 @@ function normalizeFleaMarketSession(value) {
     if (typeof key !== "string" || !key || !item || typeof item !== "object" || Array.isArray(item)) return;
     const series = typeof item.series === "string" ? item.series.trim().slice(0, 100) : "";
     const bandNumber = Number(item.bandNumber);
-    const condition = typeof item.condition === "string" ? item.condition.slice(0, 10) : "VG";
+    const condition = normalizeConditionCode(item.condition, DEFAULT_CONDITION_CODE);
     if (!series || !Number.isSafeInteger(bandNumber) || bandNumber < 1 || bandNumber > 99999) return;
     items[key.slice(0, 500)] = {
       series,

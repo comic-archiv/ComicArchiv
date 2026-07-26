@@ -1,67 +1,51 @@
-# Entenarchiv 3.7.0
+# Entenarchiv 3.8.0
 
 Private, mobile Progressive Web App zur Verwaltung einer Sammlung von Lustigen Taschenbüchern und Sonderbänden.
 
-## Neu in 3.7.0
+## Neu in 3.8.0
 
-### Aufgeräumte Startseite
+### Deutsches Comic-Zustandssystem
 
-- Der große Bereich „Comic hinzufügen“ befindet sich nicht mehr im Hauptfeed.
-- Der Kalender befindet sich nicht mehr im Hauptfeed.
-- Die bisherige Statuszeile mit Online-Status, lokalem Speicher und Updateprüfung wurde entfernt.
-- Die Versionsnummer steht kompakt am Ende des Backup-Bereichs.
-- Das Backup-Center zeigt nur die wichtigsten Angaben; technische Speicherdetails sind einklappbar.
+Das bisherige internationale Raster N, NM, VF, FN, VG, GD, FR und PR wurde durch das in der deutschen Comicsammler-Szene gebräuchliche System ersetzt:
 
-### Neue Hauptnavigation
+- Zustand 0 – Perfekt
+- Zustand 0-1 – Fast perfekt
+- Zustand 1 – Sehr gut
+- Zustand 1-2 – Fast sehr gut
+- Zustand 2 – Gut
+- Zustand 2-3 – Noch recht gut
+- Zustand 3 – Noch sammelwürdig
+- Zustand 3-4 – Schlecht
+- Zustand 4 – Zum Wegwerfen zu schade
+- Zustand 5 – Unvollständiger Comic
 
-Am unteren Bildschirmrand stehen dauerhaft drei zentrale Bereiche bereit:
+In allen relevanten Bereichen steht eine Bewertungshilfe mit Beschreibungen, Preisrelationen und Hinweisen zu typischen Mängeln bereit.
 
-- Kalender
-- Hinzufügen
-- Statistiken
+### Verlustfreie Migration vorhandener Bewertungen
 
-„Hinzufügen“ ist als mittlere Hauptaktion hervorgehoben. Alle drei Bereiche öffnen eine eigene bildschirmfüllende Ansicht.
+Beim ersten Start werden frühere Zustände automatisch und konservativ übertragen:
 
-### Klickbares Dashboard
+| Bisher | Neu |
+| --- | --- |
+| N | 0-1 |
+| NM | 1 |
+| VF | 1-2 |
+| FN | 2 |
+| VG | 2-3 |
+| GD | 3 |
+| FR | 3-4 |
+| PR | 4 |
 
-Die Kennzahlen auf dem Dashboard führen direkt zur passenden Ansicht:
+Die Zuordnung vermeidet eine künstliche Aufwertung. Vorhandene Comic-Einträge, zweite Exemplare, Fehlband-Wunschzustände und Flohmarkt-Markierungen bleiben erhalten. Alte JSON-Backups werden beim Import ebenfalls automatisch umgewandelt.
 
-- Gesamt → komplette Sammlung
-- Reihen → Statistiken
-- Gelesen / Ungelesen → entsprechend gefilterte Sammlung
-- Foliert → gefilterte Sammlung
-- Doppelt → gefilterte Sammlung
-- Fehlende Bände → vollständige Fehlbandliste
+### Angepasste Statistiken
 
-### Neue Statistiken
-
-Die Statistikseite enthält unter anderem:
-
-- Lesefortschritt
-- vollständige Reihen
-- ältestes Erscheinungsjahr
-- häufigster Zustand
-- vollständigste Reihe
-- Erscheinungsjahre mit den meisten Exemplaren
-- Anteil der Exemplare ab Zustand Very Fine je Reihe
-- größte Reihen nach Anzahl physischer Exemplare
-- Zustandsverteilung
-- detaillierten Reihenfortschritt
-
-### Verknüpfung von Kalender und Sammlung
-
-Erkannte Neuerscheinungen werden mit der lokalen Sammlung abgeglichen. Im Kalender erscheint je Ausgabe einer der Zustände:
-
-- Im Besitz
-- Fehlt
-- Noch nicht vorgemerkt
-
-Je nach Status lässt sich die vorhandene Ausgabe öffnen, der Fehlband direkt aufrufen oder die Ausgabe auf die persönliche Wunschliste setzen. Unterstützt werden die Hauptreihe, passende Standardreihen, eigene Reihen mit übereinstimmendem Namen und bekannte Namensvarianten wie „LTB Frohe Ostern“.
+Die Qualitätsstatistik verwendet nun „Zustand 1-2 oder besser“ anstelle von „mindestens Very Fine“. Zustandskarten und Verteilungsbalken folgen weiterhin einer Farbskala von Hellblau und Grün bis Orange, Rot und Dunkelrot.
 
 ## Datenspeicherung
 
-Sammlung, eigene Termine, Coverbilder und Einstellungen bleiben unverändert lokal in IndexedDB auf dem Gerät gespeichert. Version 3.7.0 ändert weder den Datenbanknamen noch das Backupformat.
+Die bestehende IndexedDB `comicarchiv-db` bleibt unverändert. Version 3.8.0 erhöht nur die interne Datenformat-Version und speichert die migrierten Zustandswerte in den vorhandenen Datensätzen.
 
-## Jahreskalender
+## Update
 
-Verfügbare Jahrespläne werden weiterhin über `data/kalender-index.json` verwaltet. Neue Jahrgänge lassen sich unter derselben GitHub-Pages-Adresse ergänzen. Eine Vorlage befindet sich in `data/README.txt`.
+Vor dem Update wird wie immer ein aktuelles JSON-Backup empfohlen. Nach dem Upload aller Dateien und der Veröffentlichung über GitHub Pages muss unten im Backup-Bereich `Entenarchiv v3.8.0` stehen.

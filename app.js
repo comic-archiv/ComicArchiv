@@ -1,13 +1,16 @@
 import {
   APP_CONFIG,
+  DEFAULT_CONDITION_CODE,
   DEFAULT_SETTINGS,
   STANDARD_DUCKIPEDIA_PATTERNS,
   createDuckipediaUrl as buildDuckipediaUrl,
   createMetadataCacheKey,
   createMissingDetailKey,
   getAvailableSeries,
+  getConditionDetails,
   getConditionLabel,
   getConditionRank,
+  normalizeConditionCode,
   normalizeDuckipediaPattern
 } from "./config.js";
 import {
@@ -107,6 +110,7 @@ const state = {
   missingLookupSequence: 0,
   fleaMarketScope: "all",
   selectedDuplicateComicId: null,
+  conditionGuideReturnTarget: null,
   editingCustomSeriesName: "",
   selectedCalendarEventId: null,
   calendarImporting: false,
@@ -356,6 +360,9 @@ const elements = {
   duplicateSave: document.querySelector("#duplicate-save"),
   duplicateRemove: document.querySelector("#duplicate-remove"),
   duplicateMessage: document.querySelector("#duplicate-message"),
+  conditionGuideModal: document.querySelector("#condition-guide-modal"),
+  closeConditionGuide: document.querySelector("#close-condition-guide"),
+  conditionGuideList: document.querySelector("#condition-guide-list"),
   openScanner: document.querySelector("#open-scanner"),
   scannerModal: document.querySelector("#scanner-modal"),
   closeScanner: document.querySelector("#close-scanner"),
@@ -422,6 +429,7 @@ async function initializeApp() {
     console.warn("Einstellungen konnten nicht geladen werden:", error);
   }
 
+  renderConditionGuide();
   populateConfiguration();
   updateDuplicateConditionVisibility();
   renderScannerQueue();
@@ -438,7 +446,7 @@ function populateConfiguration() {
   const availableSeries = getAvailableSeries(state.settings, state.comics);
   const selectedSeries = elements.series.value;
   const selectedFilterSeries = elements.filterSeries.value;
-  const selectedCondition = elements.condition.value || "VG";
+  const selectedCondition = elements.condition.value || DEFAULT_CONDITION_CODE;
   const selectedDuplicateCondition = elements.duplicateCondition.value || selectedCondition;
   const selectedFilterCondition = elements.filterCondition.value;
   const selectedMissingCondition = elements.missingDetailCondition.value;
@@ -446,8 +454,8 @@ function populateConfiguration() {
   const selectedScannerCondition = elements.scannerCondition.value || selectedCondition;
   const selectedScannerDuplicateCondition = elements.scannerDuplicateCondition.value || selectedDuplicateCondition;
   const selectedProgressSeries = elements.progressSeries.value || selectedSeries;
-  const selectedFleaMarketCondition = elements.fleaMarketDefaultCondition.value || "VG";
-  const selectedDuplicateModalCondition = elements.duplicateModalCondition.value || selectedDuplicateCondition || "VG";
+  const selectedFleaMarketCondition = elements.fleaMarketDefaultCondition.value || DEFAULT_CONDITION_CODE;
+  const selectedDuplicateModalCondition = elements.duplicateModalCondition.value || selectedDuplicateCondition || DEFAULT_CONDITION_CODE;
 
   elements.series.replaceChildren();
   elements.series.append(createOption("", "Reihe auswählen"));
@@ -465,12 +473,12 @@ function populateConfiguration() {
   [elements.condition, elements.duplicateCondition].forEach((select) => {
     select.replaceChildren();
     APP_CONFIG.conditions.forEach((condition) => {
-      select.append(createOption(condition.code, `${condition.label} – ${condition.code}`));
+      select.append(createOption(condition.code, `Zustand ${condition.code} – ${condition.label}`));
     });
   });
   elements.condition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedCondition)
     ? selectedCondition
-    : "VG";
+    : DEFAULT_CONDITION_CODE;
   elements.duplicateCondition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedDuplicateCondition)
     ? selectedDuplicateCondition
     : elements.condition.value;
@@ -478,7 +486,7 @@ function populateConfiguration() {
   elements.filterCondition.replaceChildren();
   elements.filterCondition.append(createOption("all", "Alle Zustände"));
   APP_CONFIG.conditions.forEach((condition) => {
-    elements.filterCondition.append(createOption(condition.code, `${condition.label} – ${condition.code}`));
+    elements.filterCondition.append(createOption(condition.code, `Zustand ${condition.code} – ${condition.label}`));
   });
   elements.filterCondition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedFilterCondition)
     ? selectedFilterCondition
@@ -492,12 +500,12 @@ function populateConfiguration() {
   [elements.scannerCondition, elements.scannerDuplicateCondition].forEach((select) => {
     select.replaceChildren();
     APP_CONFIG.conditions.forEach((condition) => {
-      select.append(createOption(condition.code, `${condition.label} – ${condition.code}`));
+      select.append(createOption(condition.code, `Zustand ${condition.code} – ${condition.label}`));
     });
   });
   elements.scannerCondition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedScannerCondition)
     ? selectedScannerCondition
-    : "VG";
+    : DEFAULT_CONDITION_CODE;
   elements.scannerDuplicateCondition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedScannerDuplicateCondition)
     ? selectedScannerDuplicateCondition
     : elements.scannerCondition.value;
@@ -505,7 +513,7 @@ function populateConfiguration() {
   elements.missingDetailCondition.replaceChildren();
   elements.missingDetailCondition.append(createOption("", "Nicht festgelegt"));
   APP_CONFIG.conditions.forEach((condition) => {
-    elements.missingDetailCondition.append(createOption(condition.code, `${condition.label} – ${condition.code}`));
+    elements.missingDetailCondition.append(createOption(condition.code, `Zustand ${condition.code} – ${condition.label}`));
   });
   elements.missingDetailCondition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedMissingCondition)
     ? selectedMissingCondition
@@ -514,15 +522,15 @@ function populateConfiguration() {
   [elements.fleaMarketDefaultCondition, elements.duplicateModalCondition].forEach((select) => {
     select.replaceChildren();
     APP_CONFIG.conditions.forEach((condition) => {
-      select.append(createOption(condition.code, `${condition.label} – ${condition.code}`));
+      select.append(createOption(condition.code, `Zustand ${condition.code} – ${condition.label}`));
     });
   });
   elements.fleaMarketDefaultCondition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedFleaMarketCondition)
     ? selectedFleaMarketCondition
-    : "VG";
+    : DEFAULT_CONDITION_CODE;
   elements.duplicateModalCondition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedDuplicateModalCondition)
     ? selectedDuplicateModalCondition
-    : "VG";
+    : DEFAULT_CONDITION_CODE;
 }
 
 function createOption(value, label) {
@@ -678,6 +686,13 @@ function bindEvents() {
   elements.duplicateModal.addEventListener("click", (event) => {
     if (event.target.closest("[data-close-duplicate]")) closeDuplicateModal();
   });
+  document.querySelectorAll("[data-open-condition-guide]").forEach((button) => {
+    button.addEventListener("click", openConditionGuide);
+  });
+  elements.closeConditionGuide.addEventListener("click", closeConditionGuide);
+  elements.conditionGuideModal.addEventListener("click", (event) => {
+    if (event.target.closest("[data-close-condition-guide]")) closeConditionGuide();
+  });
   elements.importModal.addEventListener("click", (event) => {
     if (event.target.closest("[data-close-import]")) {
       closeImportModal();
@@ -686,6 +701,7 @@ function bindEvents() {
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
+    if (!elements.conditionGuideModal.classList.contains("hidden")) return closeConditionGuide();
     if (!elements.importModal.classList.contains("hidden")) return closeImportModal();
     if (!elements.seriesModal.classList.contains("hidden")) return closeSeriesModal();
     if (!elements.missingDetailModal.classList.contains("hidden")) return closeMissingDetailModal();
@@ -701,6 +717,53 @@ function bindEvents() {
     if (!elements.progressPage.classList.contains("hidden")) return closeProgressPage();
     if (!elements.mediaPage.classList.contains("hidden")) return closeMediaPage();
   });
+}
+
+function renderConditionGuide() {
+  if (!elements.conditionGuideList) return;
+  const selectedCode = normalizeConditionCode(elements.condition?.value, DEFAULT_CONDITION_CODE);
+  elements.conditionGuideList.replaceChildren();
+
+  APP_CONFIG.conditions.forEach((condition) => {
+    const details = document.createElement("details");
+    details.className = "condition-guide-item";
+    details.open = condition.code === selectedCode;
+
+    const summary = document.createElement("summary");
+    const badge = createConditionBadge(condition.code, "Bewertung");
+    badge.classList.add("condition-guide-badge");
+
+    const heading = document.createElement("span");
+    heading.className = "condition-guide-heading";
+    const title = document.createElement("strong");
+    title.textContent = `Zustand ${condition.code} – ${condition.label}`;
+    const relation = document.createElement("small");
+    relation.textContent = condition.priceRelation;
+    heading.append(title, relation);
+    summary.append(badge, heading);
+
+    const description = document.createElement("p");
+    description.textContent = condition.description;
+    details.append(summary, description);
+    elements.conditionGuideList.append(details);
+  });
+}
+
+function openConditionGuide(event) {
+  state.conditionGuideReturnTarget = event?.currentTarget || document.activeElement;
+  renderConditionGuide();
+  elements.conditionGuideModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+  window.setTimeout(() => elements.closeConditionGuide.focus(), 0);
+}
+
+function closeConditionGuide() {
+  if (elements.conditionGuideModal.classList.contains("hidden")) return;
+  elements.conditionGuideModal.classList.add("hidden");
+  restoreBodyModalState();
+  const target = state.conditionGuideReturnTarget;
+  state.conditionGuideReturnTarget = null;
+  if (target && typeof target.focus === "function") target.focus();
 }
 
 function openAddPage() {
@@ -1167,9 +1230,47 @@ function createStableId() {
   return `comic-${Date.now()}-${randomPart}`;
 }
 
+function migrateLegacyComicConditions(comics) {
+  let migratedRatings = 0;
+  let migratedComics = 0;
+
+  const normalizedComics = comics.map((comic) => {
+    const normalizedPrimary = normalizeConditionCode(comic.condition, DEFAULT_CONDITION_CODE);
+    const normalizedDuplicate = comic.isDuplicate
+      ? normalizeConditionCode(comic.duplicateCondition || comic.condition, normalizedPrimary)
+      : null;
+
+    const primaryChanged = normalizedPrimary !== comic.condition;
+    const duplicateChanged = comic.isDuplicate && normalizedDuplicate !== comic.duplicateCondition;
+    const versionChanged = Number(comic.dataFormatVersion) !== APP_CONFIG.dataFormatVersion;
+
+    if (!primaryChanged && !duplicateChanged && !versionChanged) return comic;
+
+    if (primaryChanged) migratedRatings += 1;
+    if (duplicateChanged) migratedRatings += 1;
+    migratedComics += 1;
+
+    return {
+      ...comic,
+      dataFormatVersion: APP_CONFIG.dataFormatVersion,
+      condition: normalizedPrimary,
+      duplicateCondition: comic.isDuplicate ? normalizedDuplicate : null
+    };
+  });
+
+  return { comics: normalizedComics, migratedRatings, migratedComics };
+}
+
 async function refreshCollection() {
   try {
-    state.comics = await getAllComics();
+    const storedComics = await getAllComics();
+    const migration = migrateLegacyComicConditions(storedComics);
+    state.comics = migration.comics;
+
+    if (migration.migratedComics > 0) {
+      await upsertComics(migration.comics.filter((comic, index) => comic !== storedComics[index]));
+    }
+
     populateConfiguration();
     state.missingGroups = calculateMissingBands(
       state.comics,
@@ -1186,6 +1287,10 @@ async function refreshCollection() {
     renderBackupStatus();
     renderCalendarOverview();
     if (!elements.calendarPage.classList.contains("hidden")) renderCalendarPage();
+
+    if (migration.migratedRatings > 0) {
+      showToast(`${migration.migratedRatings} gespeicherte Zustandswertungen wurden automatisch in das deutsche 0–5-System übertragen.`, "success");
+    }
   } catch (error) {
     console.error(error);
     showFormMessage(`Lokale Daten konnten nicht geladen werden: ${error.message}`, "error");
@@ -1490,7 +1595,7 @@ function renderFleaMarket() {
     condition.dataset.marketCondition = item.key;
     condition.setAttribute("aria-label", `Zustand für ${item.series} Band ${item.bandNumber}`);
     APP_CONFIG.conditions.forEach((entry) => condition.append(createOption(entry.code, entry.code)));
-    condition.value = selected?.condition || item.desiredCondition || elements.fleaMarketDefaultCondition.value || "VG";
+    condition.value = selected?.condition || item.desiredCondition || elements.fleaMarketDefaultCondition.value || DEFAULT_CONDITION_CODE;
     condition.disabled = !selected;
 
     const link = document.createElement("a");
@@ -1519,7 +1624,7 @@ async function handleFleaMarketListChange(event) {
       items[candidate.key] = {
         series: candidate.series,
         bandNumber: candidate.bandNumber,
-        condition: candidate.desiredCondition || elements.fleaMarketDefaultCondition.value || "VG",
+        condition: candidate.desiredCondition || elements.fleaMarketDefaultCondition.value || DEFAULT_CONDITION_CODE,
         markedAt: new Date().toISOString()
       };
     } else {
@@ -1601,7 +1706,7 @@ async function saveFleaMarketFinds() {
         numericBandNumber: candidate.bandNumber,
         title: candidate.title || metadata?.title || "",
         publicationYear: candidate.publicationYear || metadata?.publicationYear || null,
-        condition: APP_CONFIG.conditions.some((condition) => condition.code === session.condition) ? session.condition : "VG",
+        condition: APP_CONFIG.conditions.some((condition) => condition.code === session.condition) ? session.condition : DEFAULT_CONDITION_CODE,
         duplicateCondition: null,
         isRead: false,
         isDuplicate: false,
@@ -2428,7 +2533,8 @@ function clearCardCoverObjectUrls() {
 function createConditionBadge(conditionCode, contextLabel) {
   const badge = document.createElement("span");
   const normalizedCode = String(conditionCode || "").toUpperCase();
-  badge.className = `condition-badge condition-${normalizedCode.toLowerCase()}`;
+  const classToken = normalizedCode.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  badge.className = `condition-badge condition-${classToken}`;
   badge.textContent = normalizedCode || "–";
   badge.title = `${contextLabel}: ${getConditionLabel(normalizedCode)}`;
   badge.setAttribute("aria-label", badge.title);
@@ -2510,7 +2616,8 @@ function renderStats() {
     bar.className = "condition-stat-bar";
     bar.setAttribute("aria-hidden", "true");
     const fill = document.createElement("span");
-    fill.className = "condition-stat-fill";
+    const conditionClassToken = condition.code.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    fill.className = `condition-stat-fill condition-fill-${conditionClassToken}`;
     fill.style.width = `${percentage}%`;
     bar.append(fill);
     const countElement = document.createElement("span");
@@ -2546,7 +2653,7 @@ function renderStatistics() {
     copies.forEach((condition) => {
       conditions.set(condition, (conditions.get(condition) || 0) + 1);
       quality.total += 1;
-      if (getConditionRank(condition) <= getConditionRank("VF")) quality.good += 1;
+      if (getConditionRank(condition) <= getConditionRank("1-2")) quality.good += 1;
     });
   });
 
@@ -2557,7 +2664,7 @@ function renderStatistics() {
     { label: "Lesefortschritt", value: `${readRate} %`, copy: `${readCount} von ${state.comics.length} Bänden gelesen` },
     { label: "Vollständige Reihen", value: String(completeSeries), copy: progressData.length ? `von ${progressData.length} bewerteten Reihen` : "Noch keine Ziele berechenbar" },
     { label: "Ältestes Erscheinungsjahr", value: oldestYear ? String(oldestYear) : "–", copy: oldestYear ? "in deiner Sammlung" : "Noch kein Jahr erfasst" },
-    { label: "Häufigster Zustand", value: mostCommonCondition ? mostCommonCondition[0] : "–", copy: mostCommonCondition ? `${mostCommonCondition[1]} Exemplare` : "Noch keine Bücher" },
+    { label: "Häufigster Zustand", value: mostCommonCondition ? `Zustand ${mostCommonCondition[0]}` : "–", copy: mostCommonCondition ? `${getConditionDetails(mostCommonCondition[0])?.label || ""} · ${mostCommonCondition[1]} Exemplare` : "Noch keine Bücher" },
     { label: "Vollständigste Reihe", value: bestProgress ? `${Math.round(bestProgress.percentage)} %` : "–", copy: bestProgress ? bestProgress.series : "Noch nicht berechenbar" }
   ];
   elements.statisticsHighlights.replaceChildren();
@@ -2745,7 +2852,7 @@ async function handleCardAction(event) {
 function openDuplicateModal(comic) {
   state.selectedDuplicateComicId = comic.id;
   elements.duplicateContext.textContent = `${comic.series} · Band ${comic.volumeNumber}${comic.title ? ` · ${comic.title}` : ""}`;
-  elements.duplicateModalCondition.value = comic.duplicateCondition || comic.condition || "VG";
+  elements.duplicateModalCondition.value = comic.duplicateCondition || comic.condition || DEFAULT_CONDITION_CODE;
   elements.duplicateSave.textContent = comic.isDuplicate ? "Zustand speichern" : "Zweites Exemplar hinzufügen";
   elements.duplicateRemove.classList.toggle("hidden", !comic.isDuplicate);
   elements.duplicateMessage.textContent = comic.isDuplicate
@@ -2967,8 +3074,8 @@ function resetForm() {
   window.clearTimeout(state.metadataLookupTimer);
   elements.form.reset();
   resetCoverEditorState();
-  elements.condition.value = "VG";
-  elements.duplicateCondition.value = "VG";
+  elements.condition.value = DEFAULT_CONDITION_CODE;
+  elements.duplicateCondition.value = DEFAULT_CONDITION_CODE;
   updateDuplicateConditionVisibility();
   state.editingId = null;
   state.editingComic = null;
@@ -3015,7 +3122,7 @@ function updateDuplicateConditionVisibility() {
   requiredMark.textContent = "*";
   elements.primaryConditionLabel.replaceChildren(labelText, requiredMark);
   if (isDuplicate && !elements.duplicateCondition.value) {
-    elements.duplicateCondition.value = elements.condition.value || "VG";
+    elements.duplicateCondition.value = elements.condition.value || DEFAULT_CONDITION_CODE;
   }
 }
 
@@ -3075,7 +3182,7 @@ async function openScannerModal() {
     elements.scannerSeries.value = elements.series.value;
   }
 
-  elements.scannerCondition.value = elements.condition.value || "VG";
+  elements.scannerCondition.value = elements.condition.value || DEFAULT_CONDITION_CODE;
   elements.scannerDuplicateCondition.value = elements.duplicateCondition.value || elements.scannerCondition.value;
   elements.scannerIsRead.checked = elements.isRead.checked;
   elements.scannerIsDuplicate.checked = elements.isDuplicate.checked;
@@ -3458,7 +3565,7 @@ function createQueueConditionSelect(labelText, fieldName, value) {
   const select = document.createElement("select");
   select.dataset.queueField = fieldName;
   APP_CONFIG.conditions.forEach((condition) => {
-    select.append(createOption(condition.code, `${condition.label} – ${condition.code}`));
+    select.append(createOption(condition.code, `Zustand ${condition.code} – ${condition.label}`));
   });
   select.value = value;
   label.append(span, select);
@@ -3751,7 +3858,7 @@ function updateScannerDuplicateConditionVisibility() {
   elements.scannerDuplicateCondition.disabled = !isDuplicate;
 
   if (isDuplicate && !elements.scannerDuplicateCondition.value) {
-    elements.scannerDuplicateCondition.value = elements.scannerCondition.value || "VG";
+    elements.scannerDuplicateCondition.value = elements.scannerCondition.value || DEFAULT_CONDITION_CODE;
   }
 }
 
@@ -4323,7 +4430,7 @@ function normalizeHttpUrl(value) {
 }
 
 function restoreBodyModalState() {
-  const anyModalOpen = [elements.importModal, elements.seriesModal, elements.missingDetailModal, elements.duplicateModal, elements.scannerModal]
+  const anyModalOpen = [elements.conditionGuideModal, elements.importModal, elements.seriesModal, elements.missingDetailModal, elements.duplicateModal, elements.scannerModal]
     .some((modal) => !modal.classList.contains("hidden"));
   document.body.classList.toggle("modal-open", anyModalOpen);
 }

@@ -120,7 +120,7 @@
 </div>
 <p aria-live="polite" class="form-message" id="export-message" role="status"></p>
 <p class="backup-help">JSON sichert deine Daten. Eigene Coverbilder sicherst du separat unter „Medien &amp; Metadaten“.</p>
-<p class="app-version-footer">Entenarchiv <span id="app-version">v3.7.0</span></p></section>
+<p class="app-version-footer">Entenarchiv <span id="app-version">v3.8.0</span></p></section>
 </main>
 <nav aria-label="Hauptnavigation" class="bottom-nav"><button class="bottom-nav-item" id="nav-calendar" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 8.5h15M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path></svg><span>Kalender</span></button><button class="bottom-nav-item bottom-nav-primary" id="nav-add" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg><span>Hinzufügen</span></button><button class="bottom-nav-item" id="nav-statistics" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"></path></svg><span>Statistiken</span></button></nav><section aria-hidden="true" aria-labelledby="add-page-title" class="app-page hidden" id="add-page">
 <header class="app-page-header">
@@ -183,11 +183,11 @@
 <button class="secondary-button compact-button" id="lookup-metadata" type="button">Duckipedia-Daten laden</button>
 <p aria-live="polite" class="field-help" id="metadata-status"></p>
 </div>
-<label class="field" id="primary-condition-field">
-<span id="primary-condition-label">Zustand <strong aria-hidden="true">*</strong></span>
+<div class="field" id="primary-condition-field">
+<div class="field-label-row"><label for="condition" id="primary-condition-label">Zustand <strong aria-hidden="true">*</strong></label><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Bewertungshilfe</button></div>
 <select id="condition" name="condition" required=""></select>
 <small class="field-error" id="condition-error"></small>
-</label>
+</div>
 <label class="field hidden" id="duplicate-condition-field">
 <span>Zustand Exemplar 2 <strong aria-hidden="true">*</strong></span>
 <select id="duplicate-condition" name="duplicateCondition"></select>
@@ -227,7 +227,7 @@
 <div class="horizontal-chart" id="year-chart"></div>
 </section>
 <section aria-labelledby="quality-chart-title" class="panel statistics-chart-card">
-<div class="subsection-heading"><div><p class="eyebrow">Bestzustand</p><h3 id="quality-chart-title">Anteil mindestens Very Fine je Reihe</h3></div></div>
+<div class="subsection-heading"><div><p class="eyebrow">Bestzustand</p><h3 id="quality-chart-title">Anteil Zustand 1–2 oder besser je Reihe</h3></div></div>
 <div class="horizontal-chart" id="quality-chart"></div>
 </section>
 <section aria-labelledby="series-chart-title" class="panel statistics-chart-card">
@@ -319,7 +319,7 @@
 <div class="field-grid compact-field-grid">
 <label class="field field-full"><span>Suche</span><input id="flea-market-search" placeholder="Reihe, Bandnummer oder Titel" type="search"/></label>
 <label class="field"><span>Bereich</span><select id="flea-market-scope"><option value="all">Alle Reihen</option><option value="main">Nur Hauptreihe</option><option value="other">Nur Sonderreihen</option></select></label>
-<label class="field"><span>Standardzustand</span><select id="flea-market-default-condition"></select></label>
+<div class="field"><div class="field-label-row"><label for="flea-market-default-condition">Standardzustand</label><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Hilfe</button></div><select id="flea-market-default-condition"></select></div>
 </div>
 <button class="secondary-button compact-button" id="flea-market-apply-condition" type="button">Zustand auf gefundene Bände anwenden</button>
 </section>
@@ -481,7 +481,7 @@
 </div>
 <div class="scanner-settings-grid">
 <label class="field field-full"><span>Reihe <strong aria-hidden="true">*</strong></span><select id="scanner-series"></select></label>
-<label class="field"><span>Standardzustand</span><select id="scanner-condition"></select></label>
+<div class="field"><div class="field-label-row"><label for="scanner-condition">Standardzustand</label><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Hilfe</button></div><select id="scanner-condition"></select></div>
 <label class="field hidden" id="scanner-duplicate-condition-field"><span>Zustand Exemplar 2</span><select id="scanner-duplicate-condition"></select></label>
 </div>
 <fieldset class="switch-group compact-switch-group scanner-switches">
@@ -575,7 +575,7 @@
 <div class="field-grid compact-field-grid">
 <label class="field field-full"><span>Titel / Name</span><input id="missing-detail-name" maxlength="200" placeholder="Optional" type="text"/></label>
 <label class="field"><span>Erscheinungsjahr</span><input id="missing-detail-year" inputmode="numeric" max="2035" min="1800" placeholder="Optional" type="number"/></label>
-<label class="field"><span>Zustand (Wunsch / gefunden)</span><select id="missing-detail-condition"></select></label>
+<div class="field"><div class="field-label-row"><label for="missing-detail-condition">Zustand (Wunsch / gefunden)</label><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Hilfe</button></div><select id="missing-detail-condition"></select></div>
 <label class="field field-full"><span>Exakter Duckipedia-Link</span><input id="missing-detail-url" inputmode="url" maxlength="1000" placeholder="Optional – sonst wird die Suche geöffnet" type="url"/></label>
 <label class="field field-full"><span>Notizen</span><textarea id="missing-detail-notes" maxlength="2000" placeholder="Optional" rows="3"></textarea></label>
 </div>
@@ -596,7 +596,7 @@
 <div class="section-heading"><div><p class="eyebrow">Exemplare verwalten</p><h2 id="duplicate-modal-title">Zweites Exemplar</h2></div><button aria-label="Exemplarverwaltung schließen" class="icon-button small-icon-button" id="close-duplicate" type="button">×</button></div>
 <p class="modal-context" id="duplicate-context"></p>
 <form id="duplicate-form" novalidate="">
-<label class="field field-full"><span>Zustand des zweiten Exemplars</span><select id="duplicate-modal-condition"></select></label>
+<div class="field field-full"><div class="field-label-row"><label for="duplicate-modal-condition">Zustand des zweiten Exemplars</label><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Hilfe</button></div><select id="duplicate-modal-condition"></select></div>
 <div class="modal-actions duplicate-actions">
 <button class="primary-button" id="duplicate-save" type="submit">Zweites Exemplar hinzufügen</button>
 <button class="danger-button hidden" id="duplicate-remove" type="button">Zweites Exemplar entfernen</button>
@@ -630,6 +630,15 @@
 </div>
 <p aria-live="polite" class="form-message" id="calendar-event-message" role="status"></p>
 </form>
+</section>
+</div>
+<div aria-labelledby="condition-guide-title" aria-modal="true" class="modal hidden" id="condition-guide-modal" role="dialog">
+<div class="modal-backdrop" data-close-condition-guide=""></div>
+<section class="modal-card condition-guide-card">
+<div class="section-heading"><div><p class="eyebrow">Einheitlich bewerten</p><h2 id="condition-guide-title">Zustandshilfe 0–5</h2></div><button aria-label="Zustandshilfe schließen" class="icon-button small-icon-button" id="close-condition-guide" type="button">×</button></div>
+<p class="condition-guide-intro">Das deutsche System bewertet vollständige Comics von Zustand 0 bis 4. Zwischenstufen liegen jeweils zwischen den beiden ganzen Stufen. Zustand 5 kennzeichnet einen im Comicteil unvollständigen Band. Preisrelationen sind nur grobe Richtwerte und keine automatische Wertbestimmung.</p>
+<div class="condition-guide-list" id="condition-guide-list"></div>
+<p class="condition-guide-footnote">Tipp: Bewerte den Gesamteindruck und notiere besondere Mängel wie Lochung, Restaurierung, Tesa, fehlende Sammelmarken oder Wasserschäden zusätzlich im Notizfeld.</p>
 </section>
 </div>
 <div aria-labelledby="import-title" aria-modal="true" class="modal hidden" id="import-modal" role="dialog">

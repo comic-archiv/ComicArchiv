@@ -1,6 +1,19 @@
+export const DEFAULT_CONDITION_CODE = "2";
+
+export const LEGACY_CONDITION_MAP = Object.freeze({
+  N: "0-1",
+  NM: "1",
+  VF: "1-2",
+  FN: "2",
+  VG: "2-3",
+  GD: "3",
+  FR: "3-4",
+  PR: "4"
+});
+
 export const APP_CONFIG = Object.freeze({
-  appVersion: "3.7.0",
-  dataFormatVersion: 7,
+  appVersion: "3.8.0",
+  dataFormatVersion: 8,
   minimumSupportedBackupVersion: 1,
   storageName: "ComicArchiv",
   displayName: "Entenarchiv",
@@ -39,14 +52,66 @@ export const APP_CONFIG = Object.freeze({
     "Sonstige"
   ]),
   conditions: Object.freeze([
-    { code: "N", label: "Neu" },
-    { code: "NM", label: "Near Mint" },
-    { code: "VF", label: "Very Fine" },
-    { code: "FN", label: "Fine" },
-    { code: "VG", label: "Very Good" },
-    { code: "GD", label: "Good" },
-    { code: "FR", label: "Fair" },
-    { code: "PR", label: "Poor" }
+    {
+      code: "0",
+      label: "Perfekt",
+      priceRelation: "ca. 150 % von Zustand 1",
+      description: "Ein Heft, auf dem praktisch kein Stäubchen lastet. Nur produktionsbedingte Unregelmäßigkeiten wie minimale Bindefehler oder andere minimale Druckmängel, die erst auf den zweiten Blick auffallen, können auftreten. Das Heft sollte ungelesen wirken."
+    },
+    {
+      code: "0-1",
+      label: "Fast perfekt",
+      priceRelation: "Zwischenstufe zwischen Zustand 0 und 1",
+      description: "Ein neuwertiges Heft, dem man erst auf den zweiten Blick ansieht, dass es einmal aufgeblättert wurde. Neben kleinen produktionsbedingten Fehlern dürfen auch minimale Lagerungsspuren wie eine Druckstelle, eine angestoßene Ecke oder die Rundung einer Eckkante auftreten."
+    },
+    {
+      code: "1",
+      label: "Sehr gut",
+      priceRelation: "Basispreis = 100 %",
+      description: "Ein neuwertig wirkendes, nahezu fehlerfreies Heft. Nur der eine oder andere Kleinstfehler, zum Beispiel ein Einriss im Millimeterbereich, ein kleiner Knick oder angelaufene Klammern, ist zulässig. Diese Fehler dürfen nicht auf den ersten Blick auffallen oder den hervorragenden Gesamteindruck stören."
+    },
+    {
+      code: "1-2",
+      label: "Fast sehr gut",
+      priceRelation: "Zwischenstufe zwischen Zustand 1 und 2",
+      description: "Ein sehr gepflegtes Heft, bei dem mehr Kleinstfehler auftreten dürfen als bei Zustand 1. Möglich sind ein kaum störender Schriftzug oder Stempel, ein leichter Wasserschaden oder eine leichte Verschmutzung der Rückseite. Bei einem sonst sehr guten Heft darf auch ein einzelner größerer Mangel wie ein Riss bis etwa 2 cm oder ein kleiner Fettfleck vorkommen. Fehlende Sammelmarken müssen angegeben werden."
+    },
+    {
+      code: "2",
+      label: "Gut",
+      priceRelation: "ca. 40 % von Zustand 1",
+      description: "Ein ordentliches Heft, dessen Gesamteindruck weiterhin ohne Einschränkung als gut bezeichnet werden kann. In tolerierbarer Anzahl und Intensität dürfen Stempel oder Schriftzüge, gelöste Rätsel, Knicke, Risse und Verschmutzungen auftreten. Sammelmarke oder Sammelbild können fehlen."
+    },
+    {
+      code: "2-3",
+      label: "Noch recht gut",
+      priceRelation: "Zwischenstufe zwischen Zustand 2 und 3",
+      description: "Ein insgesamt befriedigend erhaltenes, aber erkennbar gebrauchtes Heft. Häufigkeit oder Intensität der Mängel ist höher als bei Zustand 2. Zusätzlich möglich sind eine stärkere Wulst, ein größerer Wasserschaden, ein Riss bis etwa 5 cm, deutlichere Beschriftungen sowie Stock- und andere Flecken. Professionelle Restaurationen und sparsam verwendeter Tesa-Film müssen angegeben werden. Fehlstellen werden nur im Bereich weniger Millimeter toleriert."
+    },
+    {
+      code: "3",
+      label: "Noch sammelwürdig",
+      priceRelation: "ca. 20 % von Zustand 1",
+      description: "Ein vollständiges, aber oft gelesenes Heft. Zusätzlich möglich sind ordentliche Klebungen, kleinere Fehlstellen ohne Textverlust und starke Falzschäden. Umschlag oder Mittelseite dürfen von den Klammern gelöst sein. Trotz der Mängel muss das Heft noch sammelwürdig und nicht unappetitlich wirken. Gelochte Hefte in sonst gutem Zustand gehören ebenfalls hierher; die Lochung ist anzugeben."
+    },
+    {
+      code: "3-4",
+      label: "Schlecht",
+      priceRelation: "Zwischenstufe zwischen Zustand 3 und 4",
+      description: "Ein überaus stark gebrauchtes Heft mit sehr großer Häufung oder Intensität an Mängeln. Es besitzt noch Lesewert, auch wenn es nicht unbedingt appetitlich wirkt. Fehlstellen dürfen größer sein, den Fortgang der Geschichte aber nicht stören. Häufig sind unsachgemäße Klebungen oder Restaurationen mit Fremdmaterial. Dazu gehören auch gelochte Hefte im durchschnittlichen Zustand sowie beschnittene Hefte aus Sammelbänden."
+    },
+    {
+      code: "4",
+      label: "Zum Wegwerfen zu schade",
+      priceRelation: "ca. 10 % von Zustand 1",
+      description: "Auch in diesem Zustand müssen der Comicteil und die Umschlagseiten vollständig sein; Redaktionsseiten dürfen fehlen. An Mängeln ist nahezu alles erlaubt. Bilder können bemalt sein und auch größere Stücke dürfen fehlen. Comics in diesem Zustand dienen in der Regel nur als Platzhalter."
+    },
+    {
+      code: "5",
+      label: "Unvollständiger Comic",
+      priceRelation: "Keine reguläre Zustandsbewertung",
+      description: "Der Comicteil ist nicht vollständig. Solche Hefte können nicht in das reguläre Zustandssystem einbezogen werden und werden als unvollständiger Comic beziehungsweise Zustand 5 geführt."
+    }
   ]),
   knownHighestBandBySeries: Object.freeze({})
 });
@@ -108,13 +173,29 @@ export const DEFAULT_SETTINGS = Object.freeze({
   calendarReminderTime: "09:00"
 });
 
+export function normalizeConditionCode(code, fallback = "") {
+  const normalized = String(code ?? "").trim().toUpperCase().replace(/–/g, "-");
+  if (!normalized) return fallback;
+  if (Object.prototype.hasOwnProperty.call(LEGACY_CONDITION_MAP, normalized)) {
+    return LEGACY_CONDITION_MAP[normalized];
+  }
+  const direct = APP_CONFIG.conditions.find((entry) => entry.code === normalized);
+  return direct ? direct.code : fallback;
+}
+
+export function getConditionDetails(code) {
+  const normalized = normalizeConditionCode(code);
+  return APP_CONFIG.conditions.find((entry) => entry.code === normalized) || null;
+}
+
 export function getConditionLabel(code) {
-  const condition = APP_CONFIG.conditions.find((entry) => entry.code === code);
-  return condition ? `${condition.label} – ${condition.code}` : code;
+  const condition = getConditionDetails(code);
+  return condition ? `Zustand ${condition.code} – ${condition.label}` : String(code || "");
 }
 
 export function getConditionRank(code) {
-  const index = APP_CONFIG.conditions.findIndex((entry) => entry.code === code);
+  const normalized = normalizeConditionCode(code);
+  const index = APP_CONFIG.conditions.findIndex((entry) => entry.code === normalized);
   return index === -1 ? APP_CONFIG.conditions.length : index;
 }
 

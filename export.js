@@ -1,8 +1,10 @@
 import {
   APP_CONFIG,
+  DEFAULT_CONDITION_CODE,
   createDuckipediaSearchUrl,
   createMetadataCacheKey,
   createMissingDetailKey,
+  normalizeConditionCode,
   normalizeDuckipediaPattern
 } from "./config.js";
 import { blobToDataUrl } from "./media.js";
@@ -660,10 +662,11 @@ function normalizeImportedComic(comic, index) {
   const title = normalizeOptionalString(comic.title, 200, `${label}: Titel`);
   const notes = normalizeOptionalString(comic.notes, 2000, `${label}: Notizen`);
   const publicationYear = normalizePublicationYear(comic.publicationYear, label);
-  const condition = normalizeRequiredString(comic.condition, 10, `${label}: Zustand`);
+  const rawCondition = normalizeRequiredString(comic.condition, 10, `${label}: Zustand`);
+  const condition = normalizeConditionCode(rawCondition);
 
-  if (!APP_CONFIG.conditions.some((entry) => entry.code === condition)) {
-    throw new Error(`${label}: Der Zustand „${condition}“ ist unbekannt.`);
+  if (!condition) {
+    throw new Error(`${label}: Der Zustand „${rawCondition}“ ist unbekannt.`);
   }
 
   ["isRead", "isDuplicate", "isSealed"].forEach((fieldName) => {
@@ -674,10 +677,11 @@ function normalizeImportedComic(comic, index) {
 
   let duplicateCondition = null;
   if (comic.isDuplicate) {
-    duplicateCondition = typeof comic.duplicateCondition === "string" && comic.duplicateCondition
+    const rawDuplicateCondition = typeof comic.duplicateCondition === "string" && comic.duplicateCondition
       ? comic.duplicateCondition
       : condition;
-    if (!APP_CONFIG.conditions.some((entry) => entry.code === duplicateCondition)) {
+    duplicateCondition = normalizeConditionCode(rawDuplicateCondition);
+    if (!duplicateCondition) {
       throw new Error(`${label}: Der Zustand des zweiten Exemplars ist unbekannt.`);
     }
   }
@@ -745,9 +749,7 @@ function normalizeImportedSettings(settings, seriesConfiguration) {
     const publicationYear = detail.publicationYear === null || detail.publicationYear === undefined || detail.publicationYear === ""
       ? null
       : Number(detail.publicationYear);
-    const desiredCondition = typeof detail.desiredCondition === "string" && APP_CONFIG.conditions.some((entry) => entry.code === detail.desiredCondition)
-      ? detail.desiredCondition
-      : "";
+    const desiredCondition = normalizeConditionCode(detail.desiredCondition, "");
     missingBandDetails[key.slice(0, 500)] = {
       title: normalizeOptionalString(detail.title, 200, "Fehlband-Titel"),
       publicationYear: Number.isInteger(publicationYear) && publicationYear >= 1800 && publicationYear <= APP_CONFIG.publicationYearMaximum ? publicationYear : null,
@@ -840,9 +842,7 @@ function normalizeImportedFleaMarketSession(value) {
     if (!key || !isPlainObject(item)) return;
     const series = normalizeOptionalString(item.series, 100, "Flohmarkt-Reihe");
     const bandNumber = Number(item.bandNumber);
-    const condition = typeof item.condition === "string" && APP_CONFIG.conditions.some((entry) => entry.code === item.condition)
-      ? item.condition
-      : "VG";
+    const condition = normalizeConditionCode(item.condition, DEFAULT_CONDITION_CODE);
     if (!series || !Number.isSafeInteger(bandNumber) || bandNumber < 1 || bandNumber > 99999) return;
     items[key.slice(0, 500)] = {
       series,
