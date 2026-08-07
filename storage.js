@@ -1,15 +1,38 @@
-import { DEFAULT_CONDITION_CODE, DEFAULT_SETTINGS, normalizeConditionCode, normalizeDuckipediaPattern } from "./config.js";
+import {
+  APP_CONFIG,
+  ARCHIVE_MODEL_VERSION,
+  DEFAULT_CONDITION_CODE,
+  DEFAULT_SETTINGS,
+  normalizeConditionCode,
+  normalizeDuckipediaPattern
+} from "./config.js";
+import {
+  buildSeriesCatalog,
+  createCustomSeriesId,
+  createSeriesDefinition,
+  legacyComicToArchiveRecords,
+  materializeLegacyComics,
+  migrateLegacyComicsToArchive,
+  validateArchiveGraph
+} from "./archive-model.js";
 
 const DATABASE_NAME = resolveDatabaseName();
 const STORAGE_MODE = DATABASE_NAME.endsWith("-test") ? "test" : "production";
-const DATABASE_VERSION = 4;
+const DATABASE_VERSION = 5;
 const COMICS_STORE = "comics";
 const SETTINGS_STORE = "settings";
 const COVER_STORE = "coverMedia";
 const METADATA_STORE = "metadataCache";
+const SERIES_STORE = "seriesCatalog";
+const ISSUES_STORE = "issues";
+const COPIES_STORE = "copies";
+const ARCHIVE_META_STORE = "archiveMeta";
+const MIGRATION_SNAPSHOT_STORE = "migrationSnapshots";
+const ARCHIVE_CORE_META_KEY = "archive-core";
 const SETTINGS_KEY = "app";
 
 let databasePromise;
+let archiveCorePromise;
 
 export function getStorageMode() {
   return STORAGE_MODE;
@@ -17,6 +40,10 @@ export function getStorageMode() {
 
 export function getDatabaseName() {
   return DATABASE_NAME;
+}
+
+export function getDatabaseVersion() {
+  return DATABASE_VERSION;
 }
 
 function resolveDatabaseName() {
@@ -62,26 +89,51 @@ function createDatabaseConnection() {
         const metadataStore = database.createObjectStore(METADATA_STORE, { keyPath: "key" });
         metadataStore.createIndex("fetchedAt", "fetchedAt", { unique: false });
       }
+
+      if (!database.objectStoreNames.contains(SERIES_STORE)) {
+        const seriesStore = database.createObjectStore(SERIES_STORE, { keyPath: "id" });
+        seriesStore.createIndex("name", "name", { unique: false });
+        seriesStore.createIndex("category", "category", { unique: false });
+        seriesStore.createIndex("updatedAt", "updatedAt", { unique: false });
+      }
+
+      if (!database.objectStoreNames.contains(ISSUES_STORE)) {
+        const issueStore = database.createObjectStore(ISSUES_STORE, { keyPath: "id" });
+        issueStore.createIndex("seriesId", "seriesId", { unique: false });
+        issueStore.createIndex("seriesVolumeKey", "seriesVolumeKey", { unique: true });
+        issueStore.createIndex("numericBandNumber", "numericBandNumber", { unique: false });
+        issueStore.createIndex("updatedAt", "updatedAt", { unique: false });
+      }
+
+      if (!database.objectStoreNames.contains(COPIES_STORE)) {
+        const copyStore = database.createObjectStore(COPIES_STORE, { keyPath: "id" });
+        copyStore.createIndex("issueId", "issueId", { unique: false });
+        copyStore.createIndex("condition", "condition", { unique: false });
+        copyStore.createIndex("updatedAt", "updatedAt", { unique: false });
+      }
+
+      if (!database.objectStoreNames.contains(ARCHIVE_META_STORE)) {
+        database.createObjectStore(ARCHIVE_META_STORE, { keyPath: "key" });
+      }
+
+      if (!database.objectStoreNames.contains(MIGRATION_SNAPSHOT_STORE)) {
+        const snapshotStore = database.createObjectStore(MIGRATION_SNAPSHOT_STORE, { keyPath: "id" });
+        snapshotStore.createIndex("createdAt", "createdAt", { unique: false });
+      }
     };
 
     request.onsuccess = () => {
       const database = request.result;
-
       database.onversionchange = () => {
         database.close();
         databasePromise = undefined;
+        archiveCorePromise = undefined;
       };
-
       resolve(database);
     };
 
-    request.onerror = () => {
-      reject(request.error || new Error("Die lokale Datenbank konnte nicht geöffnet werden."));
-    };
-
-    request.onblocked = () => {
-      reject(new Error("Die Datenbank-Aktualisierung ist blockiert. Bitte schließe andere geöffnete Entenarchiv-Fenster."));
-    };
+    request.onerror = () => reject(request.error || new Error("Die lokale Datenbank konnte nicht geöffnet werden."));
+    request.onblocked = () => reject(new Error("Die Datenbank-Aktualisierung ist blockiert. Bitte schließe andere geöffnete Entenarchiv-Fenster."));
   });
 }
 
@@ -89,10 +141,10 @@ function getDatabase() {
   if (!databasePromise) {
     databasePromise = createDatabaseConnection().catch((error) => {
       databasePromise = undefined;
+      archiveCorePromise = undefined;
       throw error;
     });
   }
-
   return databasePromise;
 }
 
@@ -111,48 +163,523 @@ function transactionDone(transaction) {
   });
 }
 
+async function readAll(database, storeName) {
+  const transaction = database.transaction(storeName, "readonly");
+  const records = await requestToPromise(transaction.objectStore(storeName).getAll());
+  await transactionDone(transaction);
+  return records;
+}
+
+async function readRecord(database, storeName, key) {
+  const transaction = database.transaction(storeName, "readonly");
+  const record = await requestToPromise(transaction.objectStore(storeName).get(key));
+  await transactionDone(transaction);
+  return record || null;
+}
+
+async function readSettingsValue(database) {
+  const transaction = database.transaction(SETTINGS_STORE, "readonly");
+  const record = await requestToPromise(transaction.objectStore(SETTINGS_STORE).get(SETTINGS_KEY));
+  await transactionDone(transaction);
+  return record?.value || {};
+}
+
+async function readIssueByIdentity(database, seriesVolumeKey) {
+  if (!seriesVolumeKey) return null;
+  const transaction = database.transaction(ISSUES_STORE, "readonly");
+  const record = await requestToPromise(
+    transaction.objectStore(ISSUES_STORE).index("seriesVolumeKey").get(seriesVolumeKey)
+  );
+  await transactionDone(transaction);
+  return record || null;
+}
+
+async function readArchiveMeta(database) {
+  const transaction = database.transaction(ARCHIVE_META_STORE, "readonly");
+  const record = await requestToPromise(transaction.objectStore(ARCHIVE_META_STORE).get(ARCHIVE_CORE_META_KEY));
+  await transactionDone(transaction);
+  return record || null;
+}
+
+async function writeArchiveMeta(database, meta) {
+  const transaction = database.transaction(ARCHIVE_META_STORE, "readwrite");
+  transaction.objectStore(ARCHIVE_META_STORE).put({ key: ARCHIVE_CORE_META_KEY, ...meta });
+  await transactionDone(transaction);
+}
+
+async function getLatestMigrationSnapshotRecord(database) {
+  const transaction = database.transaction(MIGRATION_SNAPSHOT_STORE, "readonly");
+  const records = await requestToPromise(transaction.objectStore(MIGRATION_SNAPSHOT_STORE).getAll());
+  await transactionDone(transaction);
+  return records.sort((first, second) => Date.parse(second.createdAt || 0) - Date.parse(first.createdAt || 0))[0] || null;
+}
+
+async function ensureArchiveCoreReady() {
+  if (!archiveCorePromise) {
+    archiveCorePromise = migrateArchiveCore().catch((error) => ({
+      ready: false,
+      status: "failed",
+      error: error instanceof Error ? error.message : String(error)
+    }));
+  }
+  return archiveCorePromise;
+}
+
+async function migrateArchiveCore() {
+  const database = await getDatabase();
+  const existingMeta = await readArchiveMeta(database);
+  if (existingMeta?.status === "complete" && existingMeta.archiveModelVersion === ARCHIVE_MODEL_VERSION) {
+    return { ready: true, justMigrated: false, ...existingMeta };
+  }
+
+  const startedAt = new Date().toISOString();
+  await writeArchiveMeta(database, {
+    archiveModelVersion: ARCHIVE_MODEL_VERSION,
+    status: "running",
+    startedAt,
+    completedAt: null,
+    error: ""
+  });
+
+  try {
+    const [legacyComics, settings, existingSeries, existingSnapshot, existingCovers] = await Promise.all([
+      readAll(database, COMICS_STORE),
+      readSettingsValue(database),
+      readAll(database, SERIES_STORE),
+      getLatestMigrationSnapshotRecord(database),
+      readAll(database, COVER_STORE)
+    ]);
+    const catalog = buildSeriesCatalog({ legacyComics, settings, existingSeries });
+    const migration = migrateLegacyComicsToArchive(legacyComics, catalog.series, {
+      dataFormatVersion: APP_CONFIG.dataFormatVersion
+    });
+    if (migration.report.skippedCount > 0) {
+      throw new Error(
+        `Die Umstellung wurde vorsorglich abgebrochen, weil ${migration.report.skippedCount} Eintrag${migration.report.skippedCount === 1 ? "" : "e"} nicht sicher zugeordnet werden konnte${migration.report.skippedCount === 1 ? "" : "n"}. `
+        + "Die bisherige Sammlung bleibt unverändert und kann über den sicheren Modus exportiert werden."
+      );
+    }
+    const graph = validateArchiveGraph(migration);
+    if (!graph.valid) {
+      throw new Error(`Der neue Archivkern konnte nicht validiert werden: ${graph.problems.slice(0, 3).join(" ")}`);
+    }
+
+    const materialized = materializeLegacyComics(migration.issues, migration.copies, migration.series);
+    const issueIdByLegacyId = new Map();
+    migration.issues.forEach((issue) => {
+      [issue.id, ...(issue.legacyComicIds || [])].forEach((legacyId) => {
+        if (legacyId) issueIdByLegacyId.set(String(legacyId), issue.id);
+      });
+    });
+    const remappedCoverByIssue = new Map();
+    let remappedCovers = 0;
+    existingCovers.forEach((cover) => {
+      const originalId = String(cover?.comicId || "");
+      if (!originalId) return;
+      const targetId = issueIdByLegacyId.get(originalId) || originalId;
+      if (targetId !== originalId) remappedCovers += 1;
+      const candidate = { ...cover, comicId: targetId };
+      const previous = remappedCoverByIssue.get(targetId);
+      const candidateTime = Date.parse(candidate.updatedAt || "") || 0;
+      const previousTime = Date.parse(previous?.updatedAt || "") || 0;
+      if (!previous || candidateTime >= previousTime) remappedCoverByIssue.set(targetId, candidate);
+    });
+    migration.report.remappedCovers = remappedCovers;
+
+    const completedAt = new Date().toISOString();
+    const transaction = database.transaction(
+      [SERIES_STORE, ISSUES_STORE, COPIES_STORE, COMICS_STORE, COVER_STORE, ARCHIVE_META_STORE, MIGRATION_SNAPSHOT_STORE],
+      "readwrite"
+    );
+    const seriesStore = transaction.objectStore(SERIES_STORE);
+    const issueStore = transaction.objectStore(ISSUES_STORE);
+    const copyStore = transaction.objectStore(COPIES_STORE);
+    const legacyStore = transaction.objectStore(COMICS_STORE);
+    const coverStore = transaction.objectStore(COVER_STORE);
+    seriesStore.clear();
+    issueStore.clear();
+    copyStore.clear();
+    legacyStore.clear();
+    coverStore.clear();
+    migration.series.forEach((record) => seriesStore.put(record));
+    migration.issues.forEach((record) => issueStore.put(record));
+    migration.copies.forEach((record) => copyStore.put(record));
+    materialized.forEach((record) => legacyStore.put(record));
+    remappedCoverByIssue.forEach((record) => coverStore.put(record));
+
+    if (!existingSnapshot) {
+      transaction.objectStore(MIGRATION_SNAPSHOT_STORE).put({
+        id: `pre-archive-core-${completedAt.replace(/[^0-9]/g, "")}`,
+        kind: "pre-archive-core",
+        createdAt: completedAt,
+        sourceDatabaseVersion: 4,
+        sourceDataFormatVersion: Math.max(1, ...legacyComics.map((comic) => Number(comic?.dataFormatVersion) || 1)),
+        comics: legacyComics,
+        settings
+      });
+    }
+
+    const meta = {
+      key: ARCHIVE_CORE_META_KEY,
+      archiveModelVersion: ARCHIVE_MODEL_VERSION,
+      status: "complete",
+      startedAt,
+      completedAt,
+      report: migration.report,
+      counts: graph.counts,
+      error: ""
+    };
+    transaction.objectStore(ARCHIVE_META_STORE).put(meta);
+    await transactionDone(transaction);
+
+    const counts = await getCoreStoreCounts(database);
+    if (counts.issues !== migration.report.issueCount || counts.copies !== migration.report.copyCount) {
+      throw new Error(`Migrationsprüfung fehlgeschlagen: ${counts.issues} Ausgaben und ${counts.copies} Exemplare wurden gespeichert.`);
+    }
+
+    return { ready: true, justMigrated: true, ...meta, counts };
+  } catch (error) {
+    await writeArchiveMeta(database, {
+      archiveModelVersion: ARCHIVE_MODEL_VERSION,
+      status: "failed",
+      startedAt,
+      completedAt: null,
+      error: error instanceof Error ? error.message : String(error)
+    }).catch(() => {});
+    throw error;
+  }
+}
+
+async function getCoreStoreCounts(database) {
+  const transaction = database.transaction([SERIES_STORE, ISSUES_STORE, COPIES_STORE], "readonly");
+  const [series, issues, copies] = await Promise.all([
+    requestToPromise(transaction.objectStore(SERIES_STORE).count()),
+    requestToPromise(transaction.objectStore(ISSUES_STORE).count()),
+    requestToPromise(transaction.objectStore(COPIES_STORE).count())
+  ]);
+  await transactionDone(transaction);
+  return { series, issues, copies };
+}
+
+async function readArchiveGraph(database) {
+  const transaction = database.transaction([SERIES_STORE, ISSUES_STORE, COPIES_STORE], "readonly");
+  const [series, issues, copies] = await Promise.all([
+    requestToPromise(transaction.objectStore(SERIES_STORE).getAll()),
+    requestToPromise(transaction.objectStore(ISSUES_STORE).getAll()),
+    requestToPromise(transaction.objectStore(COPIES_STORE).getAll())
+  ]);
+  await transactionDone(transaction);
+  return { series, issues, copies };
+}
+
+export async function getArchiveGraph() {
+  const database = await getDatabase();
+  const core = await ensureArchiveCoreReady();
+  if (!core.ready) return null;
+  return readArchiveGraph(database);
+}
+
+export async function getArchiveCoreStatus() {
+  const database = await getDatabase();
+  const result = await ensureArchiveCoreReady();
+  const meta = await readArchiveMeta(database).catch(() => null);
+  const counts = result.ready
+    ? await getCoreStoreCounts(database).catch(() => ({ series: 0, issues: 0, copies: 0 }))
+    : null;
+  const snapshot = await getLatestMigrationSnapshotRecord(database).catch(() => null);
+  return {
+    ready: Boolean(result.ready),
+    justMigrated: Boolean(result.justMigrated),
+    archiveModelVersion: meta?.archiveModelVersion || ARCHIVE_MODEL_VERSION,
+    status: meta?.status || result.status || "unknown",
+    startedAt: meta?.startedAt || null,
+    completedAt: meta?.completedAt || null,
+    counts: counts || meta?.counts || null,
+    report: meta?.report || null,
+    warnings: Array.isArray(meta?.report?.warnings) ? meta.report.warnings : [],
+    error: meta?.error || result.error || "",
+    hasRollbackSnapshot: Boolean(snapshot),
+    rollbackSnapshotCreatedAt: snapshot?.createdAt || null
+  };
+}
+
+export async function getLatestMigrationSnapshot() {
+  const database = await getDatabase();
+  return getLatestMigrationSnapshotRecord(database);
+}
+
+export async function restoreLatestMigrationSnapshot() {
+  const database = await getDatabase();
+  const snapshot = await getLatestMigrationSnapshotRecord(database);
+  if (!snapshot || !Array.isArray(snapshot.comics)) {
+    throw new Error("Es ist kein alter Datenstand für eine Wiederherstellung vorhanden.");
+  }
+  await replaceAllComics(snapshot.comics);
+  if (snapshot.settings && typeof snapshot.settings === "object") await saveAppSettings(snapshot.settings);
+  return { comics: snapshot.comics.length, createdAt: snapshot.createdAt };
+}
+
 export async function getAllComics() {
   const database = await getDatabase();
-  const transaction = database.transaction(COMICS_STORE, "readonly");
-  const request = transaction.objectStore(COMICS_STORE).getAll();
-  const comics = await requestToPromise(request);
-  await transactionDone(transaction);
-  return comics;
+  const core = await ensureArchiveCoreReady();
+  if (!core.ready) return readAll(database, COMICS_STORE);
+  try {
+    const graph = await readArchiveGraph(database);
+    return materializeLegacyComics(graph.issues, graph.copies, graph.series);
+  } catch (error) {
+    console.warn("Archivkern konnte nicht gelesen werden; Legacy-Speicher wird verwendet:", error);
+    return readAll(database, COMICS_STORE);
+  }
 }
 
 export async function saveComic(comic) {
   const database = await getDatabase();
-  const transaction = database.transaction(COMICS_STORE, "readwrite");
-  const request = transaction.objectStore(COMICS_STORE).put(comic);
-  await requestToPromise(request);
+  const core = await ensureArchiveCoreReady();
+  if (!core.ready) {
+    const transaction = database.transaction(COMICS_STORE, "readwrite");
+    transaction.objectStore(COMICS_STORE).put(comic);
+    await transactionDone(transaction);
+    return comic;
+  }
+
+  const [settings, existingSeries] = await Promise.all([
+    readSettingsValue(database),
+    readAll(database, SERIES_STORE)
+  ]);
+  const catalog = buildSeriesCatalog({ legacyComics: [comic], settings, existingSeries });
+  const firstPass = legacyComicToArchiveRecords(comic, catalog.series, [], {
+    dataFormatVersion: APP_CONFIG.dataFormatVersion
+  });
+  const identityMatch = await readIssueByIdentity(database, firstPass.issue.seriesVolumeKey);
+  const requestedIssueId = String(comic.issueId || comic.id || firstPass.issue.id);
+  const targetIssueId = identityMatch?.id || requestedIssueId;
+  const sourceIssueId = requestedIssueId;
+  const previousCopies = await readCopiesForIssue(database, targetIssueId);
+  const sourceCopies = sourceIssueId !== targetIssueId
+    ? await readCopiesForIssue(database, sourceIssueId)
+    : [];
+  const isAdditionalLegacyEntry = Boolean(identityMatch && sourceIssueId !== identityMatch.id);
+  const [sourceCover, targetCover] = sourceIssueId !== targetIssueId
+    ? await Promise.all([
+        readRecord(database, COVER_STORE, sourceIssueId),
+        readRecord(database, COVER_STORE, targetIssueId)
+      ])
+    : [null, null];
+
+  let records = legacyComicToArchiveRecords({
+    ...comic,
+    id: targetIssueId,
+    issueId: targetIssueId,
+    seriesId: firstPass.series.id,
+    createdAt: identityMatch?.createdAt || comic.createdAt
+  }, catalog.series, isAdditionalLegacyEntry ? [] : previousCopies, {
+    dataFormatVersion: APP_CONFIG.dataFormatVersion
+  });
+
+  if (identityMatch) {
+    records.issue = {
+      ...identityMatch,
+      ...records.issue,
+      id: identityMatch.id,
+      createdAt: identityMatch.createdAt || records.issue.createdAt,
+      title: records.issue.title || identityMatch.title || "",
+      publicationYear: records.issue.publicationYear ?? identityMatch.publicationYear ?? null,
+      duckipediaPageUrl: records.issue.duckipediaPageUrl || identityMatch.duckipediaPageUrl || "",
+      duckipediaCoverUrl: records.issue.duckipediaCoverUrl || identityMatch.duckipediaCoverUrl || "",
+      legacyComicIds: [...new Set([
+        ...(identityMatch.legacyComicIds || []),
+        ...(records.issue.legacyComicIds || []),
+        requestedIssueId
+      ].filter(Boolean))]
+    };
+
+    if (isAdditionalLegacyEntry) {
+      const incomingCopies = records.copies.map((copy, index) => ({
+        ...copy,
+        id: previousCopies.some((existing) => existing.id === copy.id) ? `${copy.id}-${Date.now()}-${index + 1}` : copy.id,
+        issueId: identityMatch.id,
+        displayOrder: previousCopies.length + index + 1
+      }));
+      records.copies = [
+        ...previousCopies.map((copy, index) => ({ ...copy, issueId: identityMatch.id, displayOrder: index + 1 })),
+        ...incomingCopies
+      ];
+    } else {
+      records.copies = records.copies.map((copy, index) => ({
+        ...copy,
+        issueId: identityMatch.id,
+        displayOrder: index + 1
+      }));
+    }
+  }
+
+  const projected = materializeLegacyComics([records.issue], records.copies, [records.series])[0];
+  const oldCopyIds = [...new Set([
+    ...previousCopies.map((copy) => copy.id),
+    ...sourceCopies.map((copy) => copy.id)
+  ])];
+  const stores = [SERIES_STORE, ISSUES_STORE, COPIES_STORE, COMICS_STORE];
+  if (sourceIssueId !== targetIssueId) stores.push(COVER_STORE);
+  const transaction = database.transaction(stores, "readwrite");
+  const copiesStore = transaction.objectStore(COPIES_STORE);
+  const issuesStore = transaction.objectStore(ISSUES_STORE);
+  const legacyStore = transaction.objectStore(COMICS_STORE);
+  transaction.objectStore(SERIES_STORE).put(records.series);
+  if (sourceIssueId !== targetIssueId) issuesStore.delete(sourceIssueId);
+  issuesStore.put(records.issue);
+  oldCopyIds.forEach((copyId) => copiesStore.delete(copyId));
+  records.copies.forEach((copy) => copiesStore.put(copy));
+  legacyStore.put(projected);
+  if (sourceIssueId !== projected.id) legacyStore.delete(sourceIssueId);
+
+  if (sourceIssueId !== targetIssueId) {
+    const coverStore = transaction.objectStore(COVER_STORE);
+    if (sourceCover) {
+      const sourceIsNewer = Date.parse(sourceCover.updatedAt || 0) > Date.parse(targetCover?.updatedAt || 0);
+      if (!targetCover || sourceIsNewer) coverStore.put({ ...sourceCover, comicId: targetIssueId });
+      coverStore.delete(sourceIssueId);
+    }
+  }
+
   await transactionDone(transaction);
-  return comic;
+  return projected;
 }
 
 export async function deleteComic(id) {
   const database = await getDatabase();
-  const transaction = database.transaction([COMICS_STORE, COVER_STORE], "readwrite");
+  const core = await ensureArchiveCoreReady();
+  const copyIds = core.ready
+    ? (await readCopiesForIssue(database, id)).map((copy) => copy.id)
+    : [];
+  const stores = [COMICS_STORE, COVER_STORE];
+  if (core.ready) stores.push(ISSUES_STORE, COPIES_STORE);
+  const transaction = database.transaction(stores, "readwrite");
   transaction.objectStore(COMICS_STORE).delete(id);
   transaction.objectStore(COVER_STORE).delete(id);
+  if (core.ready) {
+    transaction.objectStore(ISSUES_STORE).delete(id);
+    const copyStore = transaction.objectStore(COPIES_STORE);
+    copyIds.forEach((copyId) => copyStore.delete(copyId));
+  }
   await transactionDone(transaction);
 }
 
 export async function replaceAllComics(comics) {
   const database = await getDatabase();
-  const transaction = database.transaction(COMICS_STORE, "readwrite");
-  const store = transaction.objectStore(COMICS_STORE);
-  store.clear();
-  comics.forEach((comic) => store.put(comic));
+  const core = await ensureArchiveCoreReady();
+  if (!core.ready) {
+    const transaction = database.transaction(COMICS_STORE, "readwrite");
+    const store = transaction.objectStore(COMICS_STORE);
+    store.clear();
+    comics.forEach((comic) => store.put(comic));
+    await transactionDone(transaction);
+    return;
+  }
+
+  const [settings, existingSeries, existingMeta] = await Promise.all([
+    readSettingsValue(database),
+    readAll(database, SERIES_STORE),
+    readArchiveMeta(database).catch(() => null)
+  ]);
+  const catalog = buildSeriesCatalog({ legacyComics: comics, settings, existingSeries });
+  const migration = migrateLegacyComicsToArchive(comics, catalog.series, {
+    dataFormatVersion: APP_CONFIG.dataFormatVersion
+  });
+  if (migration.report.skippedCount > 0) {
+    throw new Error(`${migration.report.skippedCount} Eintrag${migration.report.skippedCount === 1 ? "" : "e"} konnte${migration.report.skippedCount === 1 ? "" : "n"} nicht sicher in den Archivkern übernommen werden.`);
+  }
+  const graphValidation = validateArchiveGraph(migration);
+  if (!graphValidation.valid) throw new Error(graphValidation.problems.slice(0, 5).join(" "));
+  const projected = materializeLegacyComics(migration.issues, migration.copies, migration.series);
+
+  const transaction = database.transaction(
+    [SERIES_STORE, ISSUES_STORE, COPIES_STORE, COMICS_STORE, ARCHIVE_META_STORE],
+    "readwrite"
+  );
+  const seriesStore = transaction.objectStore(SERIES_STORE);
+  const issueStore = transaction.objectStore(ISSUES_STORE);
+  const copyStore = transaction.objectStore(COPIES_STORE);
+  const legacyStore = transaction.objectStore(COMICS_STORE);
+  seriesStore.clear();
+  issueStore.clear();
+  copyStore.clear();
+  legacyStore.clear();
+  migration.series.forEach((record) => seriesStore.put(record));
+  migration.issues.forEach((record) => issueStore.put(record));
+  migration.copies.forEach((record) => copyStore.put(record));
+  projected.forEach((record) => legacyStore.put(record));
+  const rebuiltAt = new Date().toISOString();
+  transaction.objectStore(ARCHIVE_META_STORE).put({
+    key: ARCHIVE_CORE_META_KEY,
+    archiveModelVersion: ARCHIVE_MODEL_VERSION,
+    status: "complete",
+    startedAt: existingMeta?.startedAt || rebuiltAt,
+    completedAt: existingMeta?.completedAt || rebuiltAt,
+    lastRebuiltAt: rebuiltAt,
+    report: existingMeta?.report || migration.report,
+    lastRebuildReport: migration.report,
+    counts: graphValidation.counts,
+    error: ""
+  });
   await transactionDone(transaction);
 }
 
-export async function upsertComics(comics) {
+export async function saveSeriesDefinition(definition) {
   const database = await getDatabase();
-  const transaction = database.transaction(COMICS_STORE, "readwrite");
-  const store = transaction.objectStore(COMICS_STORE);
-  comics.forEach((comic) => store.put(comic));
+  const core = await ensureArchiveCoreReady();
+  if (!core.ready) return null;
+  const normalized = createSeriesDefinition(definition);
+  const transaction = database.transaction(SERIES_STORE, "readwrite");
+  transaction.objectStore(SERIES_STORE).put(normalized);
   await transactionDone(transaction);
+  return normalized;
 }
+
+export async function removeSeriesDefinition(seriesId) {
+  const normalizedId = String(seriesId || "").trim();
+  if (!normalizedId) return { removed: false, archived: false, issueCount: 0 };
+
+  const database = await getDatabase();
+  const core = await ensureArchiveCoreReady();
+  if (!core.ready) return { removed: false, archived: false, issueCount: 0 };
+
+  const [series, issueCount] = await Promise.all([
+    readRecord(database, SERIES_STORE, normalizedId),
+    new Promise((resolve, reject) => {
+      const readTransaction = database.transaction(ISSUES_STORE, "readonly");
+      const request = readTransaction.objectStore(ISSUES_STORE).index("seriesId").count(IDBKeyRange.only(normalizedId));
+      request.onsuccess = () => resolve(Number(request.result || 0));
+      request.onerror = () => reject(request.error || new Error("Reihennutzung konnte nicht geprüft werden."));
+    })
+  ]);
+
+  if (series) {
+    const transaction = database.transaction(SERIES_STORE, "readwrite");
+    const seriesStore = transaction.objectStore(SERIES_STORE);
+    if (issueCount > 0) {
+      seriesStore.put({ ...series, isArchived: true, updatedAt: new Date().toISOString() });
+    } else {
+      seriesStore.delete(normalizedId);
+    }
+    await transactionDone(transaction);
+  }
+  return { removed: Boolean(series && issueCount === 0), archived: Boolean(series && issueCount > 0), issueCount };
+}
+
+export async function upsertComics(comics) {
+  for (const comic of comics) await saveComic(comic);
+}
+
+async function readCopiesForIssue(database, issueId) {
+  if (!issueId) return [];
+  const transaction = database.transaction(COPIES_STORE, "readonly");
+  const records = await requestToPromise(
+    transaction.objectStore(COPIES_STORE).index("issueId").getAll(IDBKeyRange.only(issueId))
+  );
+  await transactionDone(transaction);
+  return records;
+}
+
 
 export async function getAppSettings() {
   const database = await getDatabase();
@@ -407,7 +934,10 @@ function normalizeSettings(settings) {
     calendarSelectedMonth: normalizeCalendarMonth(source.calendarSelectedMonth),
     calendarReminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(source.calendarReminderTime || ""))
       ? String(source.calendarReminderTime)
-      : DEFAULT_SETTINGS.calendarReminderTime
+      : DEFAULT_SETTINGS.calendarReminderTime,
+    archiveMigrationAcknowledgedAt: isValidDateString(source.archiveMigrationAcknowledgedAt)
+      ? source.archiveMigrationAcknowledgedAt
+      : null
   };
 }
 
@@ -484,12 +1014,23 @@ function normalizeCustomSeriesConfigs(value, legacySeries = []) {
     const name = typeof entry.name === "string" ? entry.name.trim().slice(0, 100) : "";
     if (!name) return;
     const duckipediaPattern = normalizeDuckipediaPattern(entry.duckipediaPattern);
-    normalized.push({ name, duckipediaPattern });
+    normalized.push({
+      id: typeof entry.id === "string" && entry.id.trim()
+        ? entry.id.trim().slice(0, 120)
+        : createCustomSeriesId(name),
+      name,
+      duckipediaPattern,
+      category: ["main", "special", "other"].includes(entry.category) ? entry.category : "special",
+      aliases: Array.isArray(entry.aliases)
+        ? [...new Set(entry.aliases.filter((alias) => typeof alias === "string" && alias.trim()).map((alias) => alias.trim().slice(0, 100)))]
+        : [],
+      isArchived: entry.isArchived === true
+    });
   });
 
   legacySeries.forEach((name) => {
     if (!normalized.some((entry) => entry.name.localeCompare(name, "de", { sensitivity: "base" }) === 0)) {
-      normalized.push({ name, duckipediaPattern: "" });
+      normalized.push({ id: createCustomSeriesId(name), name, duckipediaPattern: "", category: "special", aliases: [], isArchived: false });
     }
   });
 

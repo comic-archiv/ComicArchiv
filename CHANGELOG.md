@@ -1,37 +1,49 @@
 # Änderungsprotokoll
 
-## 3.9.0 – Sicherheits- und Qualitätsfundament
+## 4.0.0 – Archivkern
 
 ### Neu
 
-- unabhängiger sicherer Modus vor dem eigentlichen App-Start
-- JSON- und Medien-Notfall-Backup direkt aus IndexedDB
-- Reparatur ungültiger Kalenderdaten und technischer Einstellungen
-- kontrolliertes Erneuern von Service Worker und App-Cache
-- lokales technisches Fehlerprotokoll
-- exportierbarer Diagnosebericht ohne reguläre Comic-Inhalte
-- Diagnoseoberfläche für Datenbank, Speicher, Service Worker und optionale Module
-- separater Testmodus mit eigener IndexedDB
-- bedarfsgeladenes Scanner-Modul
-- bedarfsgeladenes PDF-Modul
-- Service Worker mit kritischen, optionalen und bedarfsgeladenen Dateien
-- `version.json` als maschinenlesbare Release-Information
-- 19 automatisierte Logik- und Strukturtests
-- statische Projektvalidierung
-- automatischer GitHub-Pages-Workflow mit vorgeschalteter Qualitätsprüfung
-- sauberer Produktions-Build über `scripts/build-static.mjs`
+- stabiles Datenmodell mit getrennten Reihen, Ausgaben und physischen Exemplaren
+- dauerhafte interne IDs für Standardreihen und eigene Reihen
+- eindeutige Ausgabeidentität aus Reihen-ID und normalisierter Bandnummer
+- beliebig viele physische Exemplare pro Ausgabe
+- eigener Zustand, Lesestatus, Folierungsstatus und Notiz pro Exemplar
+- Exemplarmanager über das Einstellungsmenü jeder Comic-Karte
+- lokaler Rückfall-Schnappschuss vor der ersten Umstellung
+- einmaliger, exportierbarer und später erneut aufrufbarer Migrationsbericht
+- expliziter Archivkern in JSON- und Medien-Backups
+- Diagnoseprüfungen für Reihen, Ausgaben, Exemplare und Archivstatus
+- Notfall-Backups mit Archivkern im sicheren Modus
+- `archive-model.js` als eigenständiges, testbares Kernmodul
+- realer Browser-Migrationstest für IndexedDB-Schema 4 auf 5
 
 ### Verbessert
 
-- optionale Speicher- und Medienprüfungen können den Start nicht mehr abbrechen
-- fehlgeschlagene optionale Module lassen sich erneut laden
-- Startüberwachung auf iPhone-freundliche 30 Sekunden erhöht
-- technische Fehler werden kontextbezogen protokolliert
-- Diagnose- und Notfallfunktionen erzeugen nicht unbeabsichtigt eine leere Datenbank
-- große Drittanbieter-Bibliotheken werden beim normalen App-Start nicht mehr ausgeführt
+- Scanner, manuelle Erfassung, Flohmarkt-Modus und Import führen dieselbe Ausgabe nicht mehr als getrennte Bände
+- rein numerische Bandnummern mit führenden Nullen werden vereinheitlicht
+- alte Dubletten werden als weitere physische Exemplare übernommen
+- eigene Reihen können umbenannt werden, ohne ihre interne Identität zu verlieren
+- ungenutzte eigene Reihen werden vollständig entfernt; verwendete Reihen werden intern archiviert
+- Cover werden bei zusammengeführten Altdatensätzen auf die richtige Ausgabe übertragen
+- CSV-Export erzeugt eine Zeile pro physischem Exemplar
+- Import zeigt Ausgaben und physische Exemplare getrennt an
+- Zusammenführen von Backups liefert eine sichere Cover-ID-Zuordnung
+- fehlgeschlagene Migration lässt den bisherigen Datenspeicher unverändert
 
 ### Kompatibilität
 
-- keine Änderung des IndexedDB-Schemas
-- keine Änderung des Datenformats
-- keine Migration bestehender Sammlungsdaten notwendig
+- Datenbankname bleibt `comicarchiv-db`
+- Datenformat steigt von 8 auf 9
+- IndexedDB-Schema steigt von 4 auf 5
+- Archivmodell startet mit Version 1
+- ältere JSON- und Medien-Backups bleiben importierbar
+- bisherige Oberfläche arbeitet über eine kompatible Projektion weiter
+
+## 3.9.0 – Sicherheits- und Qualitätsfundament
+
+- unabhängiger sicherer Modus
+- Diagnosebericht und Testdatenbank
+- bedarfsgeladener Scanner und PDF-Export
+- robuster Service Worker
+- automatische Tests und GitHub-Actions-Veröffentlichung

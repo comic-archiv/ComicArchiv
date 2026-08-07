@@ -1,6 +1,6 @@
-const APP_VERSION = "3.9.0";
+const APP_VERSION = "4.0.0";
 const CACHE_PREFIX = "entenarchiv-shell-";
-const CACHE_NAME = `${CACHE_PREFIX}v3-9-0`;
+const CACHE_NAME = `${CACHE_PREFIX}v4-0-0`;
 
 const CORE_SHELL = Object.freeze([
   "./",
@@ -10,6 +10,7 @@ const CORE_SHELL = Object.freeze([
   "./asset-loader.js",
   "./diagnostics.js",
   "./config.js",
+  "./archive-model.js",
   "./storage.js",
   "./missing.js",
   "./export.js",

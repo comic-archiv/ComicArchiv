@@ -2,6 +2,7 @@ import {
   APP_CONFIG,
   DEFAULT_CONDITION_CODE,
   DEFAULT_SETTINGS,
+  STANDARD_SERIES_DEFINITIONS,
   STANDARD_DUCKIPEDIA_PATTERNS,
   createDuckipediaUrl as buildDuckipediaUrl,
   createMetadataCacheKey,
@@ -22,12 +23,17 @@ import {
   getAllCoverMedia,
   getAllMetadataCache,
   getAppSettings,
+  getArchiveCoreStatus,
+  getLatestMigrationSnapshot,
+  restoreLatestMigrationSnapshot,
   getCoverMedia,
   getCoverMediaStats,
   getMetadataCache,
   replaceAllComics,
   replaceAllCoverMedia,
   replaceMetadataCache,
+  removeSeriesDefinition,
+  saveSeriesDefinition,
   saveAppSettings,
   saveComic,
   saveCoverMedia,
@@ -81,6 +87,16 @@ import {
   parseIcsCalendar,
   removePublisherCalendarYear
 } from "./calendar.js";
+import {
+  countPhysicalCopies,
+  createCustomSeriesId,
+  createEntityId,
+  createIssueIdentityKey,
+  getComicCopies,
+  mergeFormValuesIntoCopies,
+  normalizeCopy,
+  normalizeSeriesLookup
+} from "./archive-model.js";
 
 const THEME_STORAGE_KEY = "comicarchiv-theme";
 const IS_TEST_MODE = new URLSearchParams(window.location.search).get("testmode") === "1";
@@ -119,7 +135,9 @@ const state = {
   openMissingSeries: new Set(),
   missingLookupSequence: 0,
   fleaMarketScope: "all",
-  selectedDuplicateComicId: null,
+  selectedCopyComicId: null,
+  copyManagerDraft: [],
+  archiveCoreStatus: null,
   conditionGuideReturnTarget: null,
   editingCustomSeriesName: "",
   selectedCalendarEventId: null,
@@ -306,6 +324,8 @@ const elements = {
   backupChangeCount: document.querySelector("#backup-change-count"),
   storagePersistence: document.querySelector("#storage-persistence"),
   storageUsage: document.querySelector("#storage-usage"),
+  archiveCoreSummary: document.querySelector("#archive-core-summary"),
+  openArchiveMigration: document.querySelector("#open-archive-migration"),
   requestPersistence: document.querySelector("#request-persistence"),
   openDiagnostics: document.querySelector("#open-diagnostics"),
   diagnosticsModal: document.querySelector("#diagnostics-modal"),
@@ -382,10 +402,17 @@ const elements = {
   closeDuplicate: document.querySelector("#close-duplicate"),
   duplicateForm: document.querySelector("#duplicate-form"),
   duplicateContext: document.querySelector("#duplicate-context"),
-  duplicateModalCondition: document.querySelector("#duplicate-modal-condition"),
+  copyManagerList: document.querySelector("#copy-manager-list"),
+  copyManagerAdd: document.querySelector("#copy-manager-add"),
   duplicateSave: document.querySelector("#duplicate-save"),
-  duplicateRemove: document.querySelector("#duplicate-remove"),
   duplicateMessage: document.querySelector("#duplicate-message"),
+  archiveMigrationModal: document.querySelector("#archive-migration-modal"),
+  closeArchiveMigration: document.querySelector("#close-archive-migration"),
+  archiveMigrationSummary: document.querySelector("#archive-migration-summary"),
+  archiveMigrationConfirm: document.querySelector("#archive-migration-confirm"),
+  archiveMigrationExport: document.querySelector("#archive-migration-export"),
+  archiveMigrationRestore: document.querySelector("#archive-migration-restore"),
+  archiveMigrationMessage: document.querySelector("#archive-migration-message"),
   conditionGuideModal: document.querySelector("#condition-guide-modal"),
   closeConditionGuide: document.querySelector("#close-condition-guide"),
   conditionGuideList: document.querySelector("#condition-guide-list"),
@@ -467,6 +494,7 @@ async function initializeApp() {
   renderScannerQueue();
   resetCoverEditorState();
   await refreshCollection();
+  await refreshArchiveCoreStatus();
   renderBackupStatus();
   await Promise.allSettled([
     runOptionalStartupTask("Speicherstatus", refreshStorageStatus),
@@ -486,6 +514,212 @@ async function runOptionalStartupTask(name, task) {
   } catch (error) {
     console.warn(`${name} konnte beim Start nicht geladen werden:`, error);
     recordDiagnosticError(error, name, "warning");
+  }
+}
+
+async function refreshArchiveCoreStatus({ showReport = true } = {}) {
+  if (!elements.archiveCoreSummary) return null;
+
+  try {
+    const status = await getArchiveCoreStatus();
+    state.archiveCoreStatus = status;
+
+    if (status.ready) {
+      const issues = Number(status.counts?.issues || status.report?.issueCount || 0);
+      const copies = Number(status.counts?.copies || status.report?.copyCount || 0);
+      const series = Number(status.counts?.series || status.report?.seriesCount || 0);
+      elements.archiveCoreSummary.textContent = `${issues} Ausgaben · ${copies} Exemplare · ${series} Reihen`;
+      elements.archiveCoreSummary.dataset.type = "success";
+    } else {
+      elements.archiveCoreSummary.textContent = "Legacy-Fallback aktiv";
+      elements.archiveCoreSummary.dataset.type = "warning";
+      if (status.error) recordDiagnosticError(new Error(status.error), "Archivkern", "warning");
+    }
+
+    const hasMigrationReport = Boolean(
+      status.ready &&
+      status.completedAt &&
+      status.report &&
+      Number(status.report.legacyComicCount || 0) > 0
+    );
+    elements.openArchiveMigration?.classList.toggle("hidden", !hasMigrationReport);
+
+    const shouldShowReport = Boolean(
+      showReport &&
+      hasMigrationReport &&
+      state.settings.archiveMigrationAcknowledgedAt !== status.completedAt
+    );
+
+    if (shouldShowReport) openArchiveMigrationModal(status);
+    return status;
+  } catch (error) {
+    console.warn("Archivkern-Status konnte nicht geladen werden:", error);
+    elements.archiveCoreSummary.textContent = "Status nicht verfügbar";
+    elements.archiveCoreSummary.dataset.type = "warning";
+    recordDiagnosticError(error, "Archivkern-Status", "warning");
+    return null;
+  }
+}
+
+function openArchiveMigrationModal(status = state.archiveCoreStatus) {
+  if (!elements.archiveMigrationModal || !status?.report) return;
+  const report = status.report;
+  const metrics = [
+    ["Vorherige Einträge", report.legacyComicCount ?? 0],
+    ["Ausgaben", report.issueCount ?? status.counts?.issues ?? 0],
+    ["Physische Exemplare", report.copyCount ?? status.counts?.copies ?? 0],
+    ["Verwendete Reihen", report.usedSeriesCount ?? 0]
+  ];
+
+  elements.archiveMigrationSummary.replaceChildren();
+  const grid = document.createElement("div");
+  grid.className = "archive-migration-metrics";
+  metrics.forEach(([labelText, value]) => {
+    const card = document.createElement("div");
+    card.className = "archive-migration-metric";
+    const valueElement = document.createElement("strong");
+    valueElement.textContent = String(value);
+    const label = document.createElement("span");
+    label.textContent = labelText;
+    card.append(valueElement, label);
+    grid.append(card);
+  });
+
+  const explanation = document.createElement("p");
+  explanation.className = "muted-copy";
+  explanation.textContent = "Deine sichtbare Sammlung bleibt unverändert. Intern sind Reihen, Ausgaben und beliebig viele physische Exemplare jetzt getrennt und stabil miteinander verknüpft.";
+  elements.archiveMigrationSummary.append(grid, explanation);
+
+  if (
+    Number(report.collapsedLegacyDuplicates || 0) > 0
+    || Number(report.migratedDuplicateCopies || 0) > 0
+    || Number(report.remappedCovers || 0) > 0
+  ) {
+    const mergeNote = document.createElement("p");
+    mergeNote.className = "archive-migration-note";
+    const parts = [];
+    if (report.collapsedLegacyDuplicates) parts.push(`${report.collapsedLegacyDuplicates} doppelte Ausgaben zusammengeführt`);
+    if (report.migratedDuplicateCopies) parts.push(`${report.migratedDuplicateCopies} zusätzliche Exemplare übernommen`);
+    if (report.remappedCovers) parts.push(`${report.remappedCovers} Cover neu zugeordnet`);
+    mergeNote.textContent = parts.join(" · ");
+    elements.archiveMigrationSummary.append(mergeNote);
+  }
+
+  if (Array.isArray(status.warnings) && status.warnings.length > 0) {
+    const details = document.createElement("details");
+    details.className = "archive-migration-warnings";
+    const summary = document.createElement("summary");
+    summary.textContent = `${status.warnings.length} Hinweis${status.warnings.length === 1 ? "" : "e"} ansehen`;
+    const list = document.createElement("ul");
+    status.warnings.slice(0, 20).forEach((warning) => {
+      const item = document.createElement("li");
+      item.textContent = warning;
+      list.append(item);
+    });
+    details.append(summary, list);
+    elements.archiveMigrationSummary.append(details);
+  }
+
+  elements.archiveMigrationRestore.classList.toggle("hidden", !status.hasRollbackSnapshot);
+  elements.archiveMigrationMessage.textContent = status.hasRollbackSnapshot
+    ? "Vor der Umstellung wurde zusätzlich ein lokaler Rückfallstand angelegt."
+    : "Die Umstellung wurde erfolgreich geprüft.";
+  elements.archiveMigrationMessage.dataset.type = "success";
+  elements.archiveMigrationModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+  window.setTimeout(() => elements.archiveMigrationConfirm?.focus(), 0);
+}
+
+async function acknowledgeArchiveMigration() {
+  if (!elements.archiveMigrationModal || elements.archiveMigrationModal.classList.contains("hidden")) return;
+  const completedAt = state.archiveCoreStatus?.completedAt;
+  try {
+    if (completedAt && state.settings.archiveMigrationAcknowledgedAt !== completedAt) {
+      state.settings = await saveAppSettings({
+        ...state.settings,
+        archiveMigrationAcknowledgedAt: completedAt
+      });
+    }
+  } catch (error) {
+    console.warn("Migrationshinweis konnte nicht bestätigt werden:", error);
+    recordDiagnosticError(error, "Migrationshinweis bestätigen", "warning");
+  }
+  elements.archiveMigrationModal.classList.add("hidden");
+  restoreBodyModalState();
+}
+
+async function exportArchiveMigrationReport() {
+  const status = state.archiveCoreStatus || await getArchiveCoreStatus();
+  const snapshot = await getLatestMigrationSnapshot().catch(() => null);
+  const report = {
+    app: APP_CONFIG.displayName,
+    appVersion: APP_CONFIG.appVersion,
+    archiveModelVersion: status.archiveModelVersion,
+    status: status.status,
+    completedAt: status.completedAt,
+    counts: status.counts,
+    migration: status.report,
+    rollbackSnapshot: snapshot ? { id: snapshot.id, createdAt: snapshot.createdAt, comicCount: snapshot.comics?.length || 0 } : null
+  };
+
+  elements.archiveMigrationExport.disabled = true;
+  try {
+    const result = await shareOrDownloadText({
+      content: JSON.stringify(report, null, 2),
+      filename: createAppFilename("Entenarchiv-Migrationsbericht", "json"),
+      mimeType: "application/json;charset=utf-8",
+      title: "Entenarchiv Migrationsbericht",
+      text: "Technischer Bericht zur Umstellung auf den neuen Archivkern."
+    });
+    elements.archiveMigrationMessage.textContent = result.method === "share"
+      ? "Migrationsbericht wurde an das Teilen-Menü übergeben."
+      : result.method === "cancelled"
+        ? "Teilen wurde abgebrochen."
+        : "Migrationsbericht wurde heruntergeladen.";
+    elements.archiveMigrationMessage.dataset.type = result.method === "cancelled" ? "info" : "success";
+  } catch (error) {
+    elements.archiveMigrationMessage.textContent = `Bericht konnte nicht exportiert werden: ${error.message}`;
+    elements.archiveMigrationMessage.dataset.type = "error";
+  } finally {
+    elements.archiveMigrationExport.disabled = false;
+  }
+}
+
+async function restoreArchiveMigrationSnapshot() {
+  const confirmed = window.confirm(
+    "Den lokalen Datenstand direkt vor der Umstellung wiederherstellen? Alle danach vorgenommenen Änderungen an der Sammlung gehen dabei verloren. Erstelle vorher ein aktuelles JSON-Backup."
+  );
+  if (!confirmed) return;
+
+  elements.archiveMigrationRestore.disabled = true;
+  elements.archiveMigrationConfirm.disabled = true;
+  elements.archiveMigrationMessage.textContent = "Vorheriger Datenstand wird wiederhergestellt …";
+  elements.archiveMigrationMessage.dataset.type = "info";
+
+  try {
+    const result = await restoreLatestMigrationSnapshot();
+    state.settings = await getAppSettings();
+    await refreshCollection();
+    const status = await refreshArchiveCoreStatus({ showReport: false });
+    if (status?.completedAt) {
+      state.settings = await saveAppSettings({
+        ...state.settings,
+        archiveMigrationAcknowledgedAt: status.completedAt
+      });
+    }
+    elements.archiveMigrationMessage.textContent = `${result.comics} frühere Einträge wurden wiederhergestellt.`;
+    elements.archiveMigrationMessage.dataset.type = "success";
+    window.setTimeout(() => {
+      elements.archiveMigrationModal.classList.add("hidden");
+      restoreBodyModalState();
+      showToast("Der Datenstand vor der Umstellung wurde wiederhergestellt.", "success");
+    }, 900);
+  } catch (error) {
+    elements.archiveMigrationMessage.textContent = `Wiederherstellung fehlgeschlagen: ${error.message}`;
+    elements.archiveMigrationMessage.dataset.type = "error";
+  } finally {
+    elements.archiveMigrationRestore.disabled = false;
+    elements.archiveMigrationConfirm.disabled = false;
   }
 }
 
@@ -528,7 +762,6 @@ function populateConfiguration() {
   const selectedScannerDuplicateCondition = elements.scannerDuplicateCondition.value || selectedDuplicateCondition;
   const selectedProgressSeries = elements.progressSeries.value || selectedSeries;
   const selectedFleaMarketCondition = elements.fleaMarketDefaultCondition.value || DEFAULT_CONDITION_CODE;
-  const selectedDuplicateModalCondition = elements.duplicateModalCondition.value || selectedDuplicateCondition || DEFAULT_CONDITION_CODE;
 
   elements.series.replaceChildren();
   elements.series.append(createOption("", "Reihe auswählen"));
@@ -592,7 +825,7 @@ function populateConfiguration() {
     ? selectedMissingCondition
     : "";
 
-  [elements.fleaMarketDefaultCondition, elements.duplicateModalCondition].forEach((select) => {
+  [elements.fleaMarketDefaultCondition].forEach((select) => {
     select.replaceChildren();
     APP_CONFIG.conditions.forEach((condition) => {
       select.append(createOption(condition.code, `Zustand ${condition.code} – ${condition.label}`));
@@ -600,9 +833,6 @@ function populateConfiguration() {
   });
   elements.fleaMarketDefaultCondition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedFleaMarketCondition)
     ? selectedFleaMarketCondition
-    : DEFAULT_CONDITION_CODE;
-  elements.duplicateModalCondition.value = APP_CONFIG.conditions.some((entry) => entry.code === selectedDuplicateModalCondition)
-    ? selectedDuplicateModalCondition
     : DEFAULT_CONDITION_CODE;
 }
 
@@ -726,6 +956,7 @@ function bindEvents() {
   elements.exportMissingPdf.addEventListener("click", handleMissingPdfExport);
   elements.requestPersistence.addEventListener("click", handlePersistenceRequest);
   elements.openDiagnostics.addEventListener("click", openDiagnosticsModal);
+  elements.openArchiveMigration?.addEventListener("click", () => openArchiveMigrationModal());
   elements.closeDiagnostics.addEventListener("click", closeDiagnosticsModal);
   elements.runDiagnostics.addEventListener("click", runDiagnostics);
   elements.exportDiagnostics.addEventListener("click", handleDiagnosticExport);
@@ -770,11 +1001,21 @@ function bindEvents() {
   elements.missingDetailModal.addEventListener("click", (event) => {
     if (event.target.closest("[data-close-missing-detail]")) closeMissingDetailModal();
   });
-  elements.duplicateForm.addEventListener("submit", handleSaveDuplicateCopy);
-  elements.duplicateRemove.addEventListener("click", handleRemoveDuplicateCopy);
+  elements.duplicateForm.addEventListener("submit", handleSaveCopyManager);
+  elements.copyManagerAdd.addEventListener("click", addCopyManagerCopy);
+  elements.copyManagerList.addEventListener("input", handleCopyManagerInput);
+  elements.copyManagerList.addEventListener("change", handleCopyManagerInput);
+  elements.copyManagerList.addEventListener("click", handleCopyManagerClick);
   elements.closeDuplicate.addEventListener("click", closeDuplicateModal);
   elements.duplicateModal.addEventListener("click", (event) => {
     if (event.target.closest("[data-close-duplicate]")) closeDuplicateModal();
+  });
+  elements.closeArchiveMigration?.addEventListener("click", acknowledgeArchiveMigration);
+  elements.archiveMigrationConfirm?.addEventListener("click", acknowledgeArchiveMigration);
+  elements.archiveMigrationExport?.addEventListener("click", exportArchiveMigrationReport);
+  elements.archiveMigrationRestore?.addEventListener("click", restoreArchiveMigrationSnapshot);
+  elements.archiveMigrationModal?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-close-archive-migration]")) acknowledgeArchiveMigration();
   });
   document.querySelectorAll("[data-open-condition-guide]").forEach((button) => {
     button.addEventListener("click", openConditionGuide);
@@ -791,6 +1032,7 @@ function bindEvents() {
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
+    if (elements.archiveMigrationModal && !elements.archiveMigrationModal.classList.contains("hidden")) return acknowledgeArchiveMigration();
     if (!elements.conditionGuideModal.classList.contains("hidden")) return closeConditionGuide();
     if (!elements.diagnosticsModal.classList.contains("hidden")) return closeDiagnosticsModal();
     if (!elements.importModal.classList.contains("hidden")) return closeImportModal();
@@ -920,20 +1162,41 @@ async function handleFormSubmit(event) {
   try {
     const action = event.submitter?.dataset.action || "save";
     const wasEditing = Boolean(state.editingId);
-    const comic = buildComicFromForm();
-    await saveComic(comic);
-    const coverChanged = await commitCoverChanges(comic.id);
+    const formComic = buildComicFromForm();
+    let comicToSave = formComic;
+    let addedToExisting = false;
+
+    if (!wasEditing) {
+      const existing = findComicBySeriesAndVolume(formComic.series, formComic.volumeNumber);
+      if (existing) {
+        const confirmed = window.confirm(
+          `${existing.series}, Band ${existing.volumeNumber} ist bereits vorhanden. ` +
+          `Die neue Eingabe wird als weiteres physisches Exemplar gespeichert, ohne einen doppelten Bandeintrag anzulegen. Fortfahren?`
+        );
+        if (!confirmed) return;
+        comicToSave = appendFormCopiesToExistingComic(existing, formComic);
+        addedToExisting = true;
+      }
+    }
+
+    const savedComic = await saveComic(comicToSave);
+    const coverChanged = await commitCoverChanges(savedComic.id);
     await recordDataChange(1);
     if (coverChanged) await recordMediaChange(1);
     await refreshCollection();
+    await refreshArchiveCoreStatus();
     if (coverChanged) await refreshMediaStatus();
 
     if (action === "save-next" && !wasEditing) {
-      prepareNextComic(comic);
-      showToast("Comic gespeichert. Der nächste Band ist vorbereitet.");
+      prepareNextComic(formComic);
+      showToast(addedToExisting
+        ? "Weiteres Exemplar gespeichert. Der nächste Band ist vorbereitet."
+        : "Comic gespeichert. Der nächste Band ist vorbereitet.");
     } else {
       resetForm();
-      showToast(wasEditing ? "Änderungen gespeichert." : "Comic gespeichert.");
+      showToast(addedToExisting
+        ? "Weiteres Exemplar ohne Dubletten-Eintrag gespeichert."
+        : wasEditing ? "Änderungen gespeichert." : "Comic gespeichert.");
     }
   } catch (error) {
     if (error.name === "ValidationError") {
@@ -945,6 +1208,82 @@ async function handleFormSubmit(event) {
   } finally {
     setFormBusy(false);
   }
+}
+
+function findComicBySeriesAndVolume(series, volumeNumber) {
+  const seriesId = resolveConfiguredSeriesId(series);
+  const identityKey = seriesId ? createIssueIdentityKey(seriesId, volumeNumber) : "";
+  const seriesKey = normalizeSeriesLookup(series);
+  const rawVolume = String(volumeNumber || "").trim().normalize("NFC");
+  const volumeKey = /^[0-9]+$/.test(rawVolume) && Number(rawVolume) > 0 ? String(Number(rawVolume)) : rawVolume;
+
+  return state.comics.find((comic) => {
+    const comicSeriesId = comic.seriesId || resolveConfiguredSeriesId(comic.series);
+    if (identityKey && comicSeriesId) {
+      return createIssueIdentityKey(comicSeriesId, comic.volumeNumber) === identityKey;
+    }
+    const comicRawVolume = String(comic.volumeNumber || "").trim().normalize("NFC");
+    const comicVolumeKey = /^[0-9]+$/.test(comicRawVolume) && Number(comicRawVolume) > 0
+      ? String(Number(comicRawVolume))
+      : comicRawVolume;
+    return normalizeSeriesLookup(comic.series) === seriesKey && comicVolumeKey === volumeKey;
+  }) || null;
+}
+
+function resolveConfiguredSeriesId(seriesName) {
+  const lookup = normalizeSeriesLookup(seriesName);
+  if (!lookup) return null;
+  const custom = (state.settings.customSeriesConfigs || []).find((entry) => {
+    if (normalizeSeriesLookup(entry?.name) === lookup) return true;
+    return Array.isArray(entry?.aliases) && entry.aliases.some((alias) => normalizeSeriesLookup(alias) === lookup);
+  });
+  if (custom?.id) return custom.id;
+  const standard = STANDARD_SERIES_DEFINITIONS.find((entry) => (
+    normalizeSeriesLookup(entry.name) === lookup
+    || entry.aliases.some((alias) => normalizeSeriesLookup(alias) === lookup)
+  ));
+  return standard?.id || null;
+}
+
+function appendFormCopiesToExistingComic(existing, formComic) {
+  const now = new Date().toISOString();
+  const existingCopies = getComicCopies(existing);
+  const incomingCopies = getComicCopies(formComic).map((copy, index) => normalizeCopy({
+    ...copy,
+    id: createEntityId("copy"),
+    issueId: existing.id,
+    displayOrder: existingCopies.length + index + 1,
+    source: "manual-additional",
+    createdAt: now,
+    updatedAt: now
+  }, { issueId: existing.id, position: existingCopies.length + index + 1, now }));
+  const copies = [...existingCopies, ...incomingCopies].map((copy, index) => ({
+    ...copy,
+    issueId: existing.id,
+    displayOrder: index + 1
+  }));
+  const primary = copies[0];
+  const secondary = copies[1] || null;
+
+  return {
+    ...existing,
+    seriesId: existing.seriesId || formComic.seriesId || null,
+    title: existing.title || formComic.title || "",
+    publicationYear: existing.publicationYear || formComic.publicationYear || null,
+    duckipediaPageUrl: existing.duckipediaPageUrl || formComic.duckipediaPageUrl || "",
+    duckipediaCoverUrl: existing.duckipediaCoverUrl || formComic.duckipediaCoverUrl || "",
+    metadataStatus: existing.metadataStatus || formComic.metadataStatus || "",
+    metadataFetchedAt: existing.metadataFetchedAt || formComic.metadataFetchedAt || null,
+    copies,
+    copyCount: copies.length,
+    condition: primary.condition,
+    duplicateCondition: secondary?.condition || null,
+    isRead: primary.isRead,
+    isSealed: primary.isSealed,
+    isDuplicate: copies.length > 1,
+    dataFormatVersion: APP_CONFIG.dataFormatVersion,
+    updatedAt: now
+  };
 }
 
 function buildComicFromForm() {
@@ -1022,8 +1361,11 @@ function buildComicFromForm() {
   );
   const metadata = formMetadataApplies ? state.formMetadata : null;
 
-  return {
+  const comic = {
     id: state.editingId || createStableId(),
+    seriesId: state.editingComic?.series === series
+      ? (state.editingComic?.seriesId || resolveConfiguredSeriesId(series))
+      : resolveConfiguredSeriesId(series),
     dataFormatVersion: APP_CONFIG.dataFormatVersion,
     series,
     volumeNumber,
@@ -1047,6 +1389,9 @@ function buildComicFromForm() {
     createdAt: state.editingComic?.createdAt || now,
     updatedAt: now
   };
+  comic.copies = mergeFormValuesIntoCopies(state.editingComic, comic);
+  comic.copyCount = comic.copies.length;
+  return comic;
 }
 
 async function commitCoverChanges(comicId) {
@@ -1326,26 +1671,35 @@ function migrateLegacyComicConditions(comics) {
   let migratedComics = 0;
 
   const normalizedComics = comics.map((comic) => {
-    const normalizedPrimary = normalizeConditionCode(comic.condition, DEFAULT_CONDITION_CODE);
-    const normalizedDuplicate = comic.isDuplicate
-      ? normalizeConditionCode(comic.duplicateCondition || comic.condition, normalizedPrimary)
-      : null;
-
-    const primaryChanged = normalizedPrimary !== comic.condition;
-    const duplicateChanged = comic.isDuplicate && normalizedDuplicate !== comic.duplicateCondition;
+    const originalCopies = getComicCopies(comic);
+    const copies = originalCopies.map((copy, index) => {
+      const condition = normalizeConditionCode(copy.condition, DEFAULT_CONDITION_CODE);
+      if (condition !== copy.condition) migratedRatings += 1;
+      return normalizeCopy({
+        ...copy,
+        issueId: comic.id,
+        condition,
+        displayOrder: index + 1
+      }, { issueId: comic.id, position: index + 1 });
+    });
+    const primary = copies[0];
+    const secondary = copies[1] || null;
+    const copiesChanged = copies.some((copy, index) => copy.condition !== originalCopies[index]?.condition);
     const versionChanged = Number(comic.dataFormatVersion) !== APP_CONFIG.dataFormatVersion;
+    const modelChanged = !Array.isArray(comic.copies) || Number(comic.copyCount) !== copies.length;
 
-    if (!primaryChanged && !duplicateChanged && !versionChanged) return comic;
-
-    if (primaryChanged) migratedRatings += 1;
-    if (duplicateChanged) migratedRatings += 1;
+    if (!copiesChanged && !versionChanged && !modelChanged) return comic;
     migratedComics += 1;
-
     return {
       ...comic,
       dataFormatVersion: APP_CONFIG.dataFormatVersion,
-      condition: normalizedPrimary,
-      duplicateCondition: comic.isDuplicate ? normalizedDuplicate : null
+      copies,
+      copyCount: copies.length,
+      condition: primary.condition,
+      duplicateCondition: secondary?.condition || null,
+      isRead: primary.isRead,
+      isSealed: primary.isSealed,
+      isDuplicate: copies.length > 1
     };
   });
 
@@ -1774,57 +2128,94 @@ async function saveFleaMarketFinds() {
 
   try {
     const now = new Date().toISOString();
-    const comics = [];
+    const records = [];
     const nextDetails = { ...(state.settings.missingBandDetails || {}) };
     const nextSessionItems = { ...sessionItems };
+    let newIssues = 0;
+    let additionalCopies = 0;
 
     for (const entry of selected) {
       const { candidate, session, key } = entry;
-      const alreadyExists = state.comics.some(
-        (comic) => comic.series === candidate.series && comic.numericBandNumber === candidate.bandNumber
-      );
-      if (alreadyExists) {
-        delete nextSessionItems[key];
-        continue;
+      const condition = APP_CONFIG.conditions.some((item) => item.code === session.condition)
+        ? session.condition
+        : DEFAULT_CONDITION_CODE;
+      const existing = state.comics.find((comic) => (
+        normalizeSeriesLookup(comic.series) === normalizeSeriesLookup(candidate.series)
+        && comic.numericBandNumber === candidate.bandNumber
+      ));
+
+      if (existing) {
+        const existingCopies = getComicCopies(existing);
+        const copies = [
+          ...existingCopies,
+          normalizeCopy({
+            id: createEntityId(`${existing.id}-copy`),
+            issueId: existing.id,
+            condition,
+            isRead: false,
+            isSealed: false,
+            notes: candidate.notes || "",
+            source: "flea-market",
+            createdAt: now,
+            updatedAt: now
+          }, { issueId: existing.id, position: existingCopies.length + 1, now })
+        ];
+        records.push({
+          ...existing,
+          copies,
+          copyCount: copies.length,
+          condition: copies[0].condition,
+          duplicateCondition: copies[1]?.condition || null,
+          isRead: copies[0].isRead,
+          isSealed: copies[0].isSealed,
+          isDuplicate: copies.length > 1,
+          dataFormatVersion: APP_CONFIG.dataFormatVersion,
+          updatedAt: now
+        });
+        additionalCopies += 1;
+      } else {
+        const metadata = await getMetadataCache(createMetadataCacheKey(candidate.series, candidate.bandNumber));
+        records.push({
+          id: createStableId(),
+          dataFormatVersion: APP_CONFIG.dataFormatVersion,
+          series: candidate.series,
+          volumeNumber: String(candidate.bandNumber),
+          numericBandNumber: candidate.bandNumber,
+          title: candidate.title || metadata?.title || "",
+          publicationYear: candidate.publicationYear || metadata?.publicationYear || null,
+          condition,
+          duplicateCondition: null,
+          isRead: false,
+          isDuplicate: false,
+          isSealed: false,
+          notes: candidate.notes || "",
+          duckipediaPageUrl: candidate.duckipediaUrl || metadata?.pageUrl || createConfiguredDuckipediaUrl(candidate.series, candidate.bandNumber),
+          duckipediaCoverUrl: metadata?.coverUrl || "",
+          metadataStatus: metadata?.found === true ? "found" : "",
+          metadataFetchedAt: metadata?.fetchedAt || null,
+          createdAt: now,
+          updatedAt: now
+        });
+        newIssues += 1;
       }
 
-      const metadata = await getMetadataCache(createMetadataCacheKey(candidate.series, candidate.bandNumber));
-      comics.push({
-        id: createStableId(),
-        dataFormatVersion: APP_CONFIG.dataFormatVersion,
-        series: candidate.series,
-        volumeNumber: String(candidate.bandNumber),
-        numericBandNumber: candidate.bandNumber,
-        title: candidate.title || metadata?.title || "",
-        publicationYear: candidate.publicationYear || metadata?.publicationYear || null,
-        condition: APP_CONFIG.conditions.some((condition) => condition.code === session.condition) ? session.condition : DEFAULT_CONDITION_CODE,
-        duplicateCondition: null,
-        isRead: false,
-        isDuplicate: false,
-        isSealed: false,
-        notes: candidate.notes || "",
-        duckipediaPageUrl: candidate.duckipediaUrl || metadata?.pageUrl || createConfiguredDuckipediaUrl(candidate.series, candidate.bandNumber),
-        duckipediaCoverUrl: metadata?.coverUrl || "",
-        metadataStatus: metadata?.found === true ? "found" : "",
-        metadataFetchedAt: metadata?.fetchedAt || null,
-        createdAt: now,
-        updatedAt: now
-      });
       delete nextDetails[key];
       delete nextSessionItems[key];
     }
 
-    if (comics.length > 0) await upsertComics(comics);
+    if (records.length > 0) await upsertComics(records);
     await saveMeaningfulSettings({
       missingBandDetails: nextDetails,
       fleaMarketSession: { items: nextSessionItems, updatedAt: new Date().toISOString() }
-    }, Math.max(1, comics.length));
+    }, Math.max(1, records.length));
     await refreshCollection();
+    await refreshArchiveCoreStatus({ showReport: false });
     renderFleaMarket();
-    showFleaMarketMessage(
-      comics.length === 1 ? "1 gefundener Band wurde in die Sammlung übernommen." : `${comics.length} gefundene Bände wurden in die Sammlung übernommen.`,
-      "success"
-    );
+
+    const parts = [];
+    if (newIssues) parts.push(`${newIssues} neue${newIssues === 1 ? "r Band" : " Bände"}`);
+    if (additionalCopies) parts.push(`${additionalCopies} weitere${additionalCopies === 1 ? "s Exemplar" : " Exemplare"}`);
+    showFleaMarketMessage(`${parts.join(" und ")} wurden in die Sammlung übernommen.`, "success");
   } catch (error) {
     console.error("Flohmarkt-Funde konnten nicht gespeichert werden:", error);
     showFleaMarketMessage(`Speichern fehlgeschlagen: ${error.message}`, "error");
@@ -2342,27 +2733,27 @@ function getFilteredAndSortedComics() {
       return false;
     }
 
+    const copies = getComicCopies(comic);
     if (
       selectedCondition !== "all" &&
-      comic.condition !== selectedCondition &&
-      comic.duplicateCondition !== selectedCondition
+      !copies.some((copy) => copy.condition === selectedCondition)
     ) {
       return false;
     }
 
-    if (readFilter === "read" && !comic.isRead) {
+    if (readFilter === "read" && !copies.some((copy) => copy.isRead)) {
       return false;
     }
 
-    if (readFilter === "unread" && comic.isRead) {
+    if (readFilter === "unread" && copies.some((copy) => copy.isRead)) {
       return false;
     }
 
-    if (onlySealed && !comic.isSealed) {
+    if (onlySealed && !copies.some((copy) => copy.isSealed)) {
       return false;
     }
 
-    if (onlyDuplicate && !comic.isDuplicate) {
+    if (onlyDuplicate && copies.length < 2) {
       return false;
     }
 
@@ -2501,12 +2892,18 @@ function createComicCard(comic) {
   const rightColumn = document.createElement("div");
   rightColumn.className = "card-right-column";
 
+  const comicCopies = getComicCopies(comic);
   const conditions = document.createElement("div");
   conditions.className = "condition-badge-list";
-  conditions.append(createConditionBadge(comic.condition, comic.isDuplicate ? "Exemplar 1" : "Zustand"));
-
-  if (comic.isDuplicate) {
-    conditions.append(createConditionBadge(comic.duplicateCondition || comic.condition, "Exemplar 2"));
+  comicCopies.slice(0, 3).forEach((copy, index) => {
+    conditions.append(createConditionBadge(copy.condition, comicCopies.length > 1 ? `Exemplar ${index + 1}` : "Zustand"));
+  });
+  if (comicCopies.length > 3) {
+    const more = document.createElement("span");
+    more.className = "condition-badge condition-more";
+    more.textContent = `+${comicCopies.length - 3}`;
+    more.title = `${comicCopies.length - 3} weitere Exemplare`;
+    conditions.append(more);
   }
 
   const menu = document.createElement("details");
@@ -2527,7 +2924,7 @@ function createComicCard(comic) {
   duplicateButton.type = "button";
   duplicateButton.className = "menu-action";
   duplicateButton.dataset.action = "duplicate";
-  duplicateButton.textContent = comic.isDuplicate ? "Zweites Exemplar verwalten" : "Zweites Exemplar hinzufügen";
+  duplicateButton.textContent = `Exemplare verwalten (${comicCopies.length})`;
 
   const enrichButton = document.createElement("button");
   enrichButton.type = "button";
@@ -2549,9 +2946,11 @@ function createComicCard(comic) {
 
   const tags = document.createElement("div");
   tags.className = "tag-list";
-  tags.append(createTag(comic.isRead ? "Gelesen" : "Ungelesen", comic.isRead));
-  if (comic.isSealed) tags.append(createTag("Foliert", true));
-  if (comic.isDuplicate) tags.append(createTag("Doppelt", true));
+  const anyRead = comicCopies.some((copy) => copy.isRead);
+  const anySealed = comicCopies.some((copy) => copy.isSealed);
+  tags.append(createTag(anyRead ? "Gelesen" : "Ungelesen", anyRead));
+  if (anySealed) tags.append(createTag("Foliert", true));
+  if (comicCopies.length > 1) tags.append(createTag(`${comicCopies.length} Exemplare`, true));
 
   const duckipediaLink = document.createElement("a");
   duckipediaLink.className = "duckipedia-link";
@@ -2658,11 +3057,11 @@ function createTag(label, active) {
 
 function renderStats() {
   const total = state.comics.length;
-  const read = state.comics.filter((comic) => comic.isRead).length;
-  const sealed = state.comics.filter((comic) => comic.isSealed).length;
-  const duplicate = state.comics.filter((comic) => comic.isDuplicate).length;
-  const physicalCopies = total + duplicate;
-  const seriesCount = new Set(state.comics.map((comic) => comic.series)).size;
+  const read = state.comics.filter((comic) => getComicCopies(comic).some((copy) => copy.isRead)).length;
+  const sealed = state.comics.filter((comic) => getComicCopies(comic).some((copy) => copy.isSealed)).length;
+  const duplicate = state.comics.filter((comic) => getComicCopies(comic).length > 1).length;
+  const physicalCopies = countPhysicalCopies(state.comics);
+  const seriesCount = new Set(state.comics.map((comic) => comic.seriesId || comic.series)).size;
   const missingCount = countMissingBands(state.missingGroups);
 
   elements.statTotal.textContent = total;
@@ -2679,7 +3078,7 @@ function renderStats() {
     read: ["Gelesen", read],
     unread: ["Ungelesen", total - read],
     sealed: ["Foliert", sealed],
-    duplicate: ["Doppelt", duplicate],
+    duplicate: ["Mehrfach vorhanden", duplicate],
     missing: ["Fehlende Bände", missingCount]
   };
   elements.dashboardStats.querySelectorAll("[data-dashboard-action]").forEach((button) => {
@@ -2689,13 +3088,10 @@ function renderStats() {
 
   elements.conditionStatsTotal.textContent = physicalCopies === 1 ? "1 Exemplar" : `${physicalCopies} Exemplare`;
 
+  const allCopies = state.comics.flatMap((comic) => getComicCopies(comic));
   elements.conditionStats.replaceChildren();
   APP_CONFIG.conditions.forEach((condition) => {
-    const primaryCount = state.comics.filter((comic) => comic.condition === condition.code).length;
-    const duplicateCount = state.comics.filter(
-      (comic) => comic.isDuplicate && (comic.duplicateCondition || comic.condition) === condition.code
-    ).length;
-    const count = primaryCount + duplicateCount;
+    const count = allCopies.filter((copy) => copy.condition === condition.code).length;
     const percentage = physicalCopies > 0 ? (count / physicalCopies) * 100 : 0;
 
     const row = document.createElement("div");
@@ -2722,8 +3118,8 @@ function renderStats() {
 
 function renderStatistics() {
   if (!elements.statisticsHighlights) return;
-  const physicalCopies = state.comics.reduce((sum, comic) => sum + (comic.isDuplicate ? 2 : 1), 0);
-  const readCount = state.comics.filter((comic) => comic.isRead).length;
+  const physicalCopies = countPhysicalCopies(state.comics);
+  const readCount = state.comics.filter((comic) => getComicCopies(comic).some((copy) => copy.isRead)).length;
   const readRate = state.comics.length ? Math.round((readCount / state.comics.length) * 100) : 0;
   const progressData = getSeriesProgressData();
   const completeSeries = progressData.filter((entry) => entry.percentage >= 100).length;
@@ -2734,17 +3130,16 @@ function renderStatistics() {
   const seriesQuality = new Map();
   const conditions = new Map();
   state.comics.forEach((comic) => {
-    const copies = [comic.condition];
-    if (comic.isDuplicate) copies.push(comic.duplicateCondition || comic.condition);
+    const copies = getComicCopies(comic);
     const count = copies.length;
     if (Number.isInteger(comic.publicationYear)) years.set(comic.publicationYear, (years.get(comic.publicationYear) || 0) + count);
     seriesCounts.set(comic.series, (seriesCounts.get(comic.series) || 0) + count);
     if (!seriesQuality.has(comic.series)) seriesQuality.set(comic.series, { good: 0, total: 0 });
     const quality = seriesQuality.get(comic.series);
-    copies.forEach((condition) => {
-      conditions.set(condition, (conditions.get(condition) || 0) + 1);
+    copies.forEach((copy) => {
+      conditions.set(copy.condition, (conditions.get(copy.condition) || 0) + 1);
       quality.total += 1;
-      if (getConditionRank(condition) <= getConditionRank("1-2")) quality.good += 1;
+      if (getConditionRank(copy.condition) <= getConditionRank("1-2")) quality.good += 1;
     });
   });
 
@@ -2941,82 +3336,220 @@ async function handleCardAction(event) {
 }
 
 function openDuplicateModal(comic) {
-  state.selectedDuplicateComicId = comic.id;
+  state.selectedCopyComicId = comic.id;
+  state.copyManagerDraft = getComicCopies(comic).map((copy, index) => normalizeCopy({ ...copy }, {
+    issueId: comic.id,
+    position: index + 1,
+    createdAt: comic.createdAt,
+    updatedAt: comic.updatedAt
+  }));
+  if (state.copyManagerDraft.length === 0) {
+    state.copyManagerDraft = [normalizeCopy({
+      id: createEntityId(`${comic.id}-copy`),
+      issueId: comic.id,
+      condition: comic.condition || DEFAULT_CONDITION_CODE,
+      isRead: comic.isRead,
+      isSealed: comic.isSealed
+    }, { issueId: comic.id, position: 1 })];
+  }
   elements.duplicateContext.textContent = `${comic.series} · Band ${comic.volumeNumber}${comic.title ? ` · ${comic.title}` : ""}`;
-  elements.duplicateModalCondition.value = comic.duplicateCondition || comic.condition || DEFAULT_CONDITION_CODE;
-  elements.duplicateSave.textContent = comic.isDuplicate ? "Zustand speichern" : "Zweites Exemplar hinzufügen";
-  elements.duplicateRemove.classList.toggle("hidden", !comic.isDuplicate);
-  elements.duplicateMessage.textContent = comic.isDuplicate
-    ? "Der Band bleibt ein einzelner Sammlungsdatensatz. Nur das zweite physische Exemplar wird verwaltet."
-    : "Das zweite Exemplar wird im bestehenden Band gespeichert. Es entsteht kein doppelter Sammlungsdatensatz.";
-  elements.duplicateMessage.dataset.type = "info";
+  elements.duplicateMessage.textContent = "";
+  renderCopyManager();
   elements.duplicateModal.classList.remove("hidden");
   document.body.classList.add("modal-open");
-  window.setTimeout(() => elements.duplicateModalCondition.focus(), 0);
+  window.setTimeout(() => elements.copyManagerList.querySelector("select")?.focus(), 0);
 }
 
 function closeDuplicateModal() {
   elements.duplicateModal.classList.add("hidden");
-  state.selectedDuplicateComicId = null;
+  state.selectedCopyComicId = null;
+  state.copyManagerDraft = [];
+  elements.copyManagerList.replaceChildren();
   elements.duplicateMessage.textContent = "";
   restoreBodyModalState();
 }
 
-async function handleSaveDuplicateCopy(event) {
-  event.preventDefault();
-  const comic = state.comics.find((entry) => entry.id === state.selectedDuplicateComicId);
+function renderCopyManager() {
+  elements.copyManagerList.replaceChildren();
+  state.copyManagerDraft.forEach((copy, index) => {
+    const card = document.createElement("article");
+    card.className = "copy-manager-item";
+    card.dataset.copyIndex = String(index);
+
+    const heading = document.createElement("div");
+    heading.className = "copy-manager-heading";
+    const title = document.createElement("div");
+    const label = document.createElement("strong");
+    label.textContent = `Exemplar ${index + 1}`;
+    const subtitle = document.createElement("small");
+    subtitle.textContent = index === 0 ? "Hauptexemplar für Karten und Schnellfilter" : "Weiteres physisches Exemplar";
+    title.append(label, subtitle);
+    heading.append(title);
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "text-button danger-text compact-button";
+    removeButton.dataset.removeCopy = String(index);
+    removeButton.textContent = "Entfernen";
+    removeButton.disabled = state.copyManagerDraft.length <= 1;
+    heading.append(removeButton);
+
+    const fields = document.createElement("div");
+    fields.className = "copy-manager-fields";
+
+    const conditionField = document.createElement("label");
+    conditionField.className = "field";
+    const conditionLabel = document.createElement("span");
+    conditionLabel.textContent = "Zustand";
+    const conditionSelect = document.createElement("select");
+    conditionSelect.dataset.copyIndex = String(index);
+    conditionSelect.dataset.copyField = "condition";
+    APP_CONFIG.conditions.forEach((condition) => {
+      conditionSelect.append(createOption(condition.code, `Zustand ${condition.code} – ${condition.label}`));
+    });
+    conditionSelect.value = normalizeConditionCode(copy.condition, DEFAULT_CONDITION_CODE);
+    conditionField.append(conditionLabel, conditionSelect);
+
+    const flags = document.createElement("fieldset");
+    flags.className = "copy-manager-flags";
+    const legend = document.createElement("legend");
+    legend.textContent = "Eigenschaften";
+    flags.append(legend);
+    flags.append(
+      createCopyManagerCheckbox(index, "isRead", "Gelesen", copy.isRead),
+      createCopyManagerCheckbox(index, "isSealed", "Foliert", copy.isSealed)
+    );
+
+    const notesField = document.createElement("label");
+    notesField.className = "field field-full";
+    const notesLabel = document.createElement("span");
+    notesLabel.textContent = "Notiz zu diesem Exemplar";
+    const notes = document.createElement("textarea");
+    notes.rows = 2;
+    notes.maxLength = 1200;
+    notes.placeholder = "Optional, z. B. Stempel, Lochung oder Tauschbestand";
+    notes.dataset.copyIndex = String(index);
+    notes.dataset.copyField = "notes";
+    notes.value = copy.notes || "";
+    notesField.append(notesLabel, notes);
+
+    fields.append(conditionField, flags, notesField);
+    card.append(heading, fields);
+    elements.copyManagerList.append(card);
+  });
+
+  const count = state.copyManagerDraft.length;
+  elements.duplicateSave.textContent = count === 1 ? "Exemplar speichern" : `${count} Exemplare speichern`;
+}
+
+function createCopyManagerCheckbox(index, field, labelText, checked) {
+  const label = document.createElement("label");
+  label.className = "check-row";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = Boolean(checked);
+  input.dataset.copyIndex = String(index);
+  input.dataset.copyField = field;
+  const text = document.createElement("span");
+  text.textContent = labelText;
+  label.append(input, text);
+  return label;
+}
+
+function addCopyManagerCopy() {
+  const comic = state.comics.find((entry) => entry.id === state.selectedCopyComicId);
   if (!comic) return;
-  const condition = elements.duplicateModalCondition.value;
-  if (!APP_CONFIG.conditions.some((entry) => entry.code === condition)) {
-    elements.duplicateMessage.textContent = "Bitte wähle einen gültigen Zustand aus.";
+  const now = new Date().toISOString();
+  const reference = state.copyManagerDraft[0];
+  state.copyManagerDraft.push(normalizeCopy({
+    id: createEntityId(`${comic.id}-copy`),
+    issueId: comic.id,
+    condition: reference?.condition || DEFAULT_CONDITION_CODE,
+    isRead: false,
+    isSealed: false,
+    notes: "",
+    createdAt: now,
+    updatedAt: now
+  }, { issueId: comic.id, position: state.copyManagerDraft.length + 1 }));
+  renderCopyManager();
+  window.setTimeout(() => elements.copyManagerList.lastElementChild?.querySelector("select")?.focus(), 0);
+}
+
+function handleCopyManagerInput(event) {
+  const control = event.target.closest("[data-copy-index][data-copy-field]");
+  if (!control) return;
+  const index = Number(control.dataset.copyIndex);
+  const field = control.dataset.copyField;
+  const copy = state.copyManagerDraft[index];
+  if (!copy || !["condition", "isRead", "isSealed", "notes"].includes(field)) return;
+  copy[field] = control.type === "checkbox" ? control.checked : control.value;
+  copy.updatedAt = new Date().toISOString();
+}
+
+function handleCopyManagerClick(event) {
+  const button = event.target.closest("button[data-remove-copy]");
+  if (!button) return;
+  const index = Number(button.dataset.removeCopy);
+  if (!Number.isSafeInteger(index) || !state.copyManagerDraft[index]) return;
+  if (state.copyManagerDraft.length <= 1) {
+    elements.duplicateMessage.textContent = "Mindestens ein Exemplar muss erhalten bleiben.";
+    elements.duplicateMessage.dataset.type = "error";
+    return;
+  }
+  state.copyManagerDraft.splice(index, 1);
+  renderCopyManager();
+}
+
+async function handleSaveCopyManager(event) {
+  event.preventDefault();
+  const comic = state.comics.find((entry) => entry.id === state.selectedCopyComicId);
+  if (!comic) return;
+  if (state.copyManagerDraft.length === 0) {
+    elements.duplicateMessage.textContent = "Mindestens ein Exemplar ist erforderlich.";
+    elements.duplicateMessage.dataset.type = "error";
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const copies = state.copyManagerDraft.map((copy, index) => normalizeCopy({
+    ...copy,
+    issueId: comic.id,
+    updatedAt: now
+  }, { issueId: comic.id, position: index + 1, createdAt: comic.createdAt }));
+  if (copies.some((copy) => !APP_CONFIG.conditions.some((entry) => entry.code === copy.condition))) {
+    elements.duplicateMessage.textContent = "Bitte prüfe die Zustände aller Exemplare.";
     elements.duplicateMessage.dataset.type = "error";
     return;
   }
 
   elements.duplicateSave.disabled = true;
+  elements.copyManagerAdd.disabled = true;
   try {
+    const primary = copies[0];
+    const second = copies[1] || null;
     await saveComic({
       ...comic,
-      isDuplicate: true,
-      duplicateCondition: condition,
+      copies,
+      copyCount: copies.length,
+      condition: primary.condition,
+      duplicateCondition: second?.condition || null,
+      isRead: primary.isRead,
+      isSealed: primary.isSealed,
+      isDuplicate: copies.length > 1,
       dataFormatVersion: APP_CONFIG.dataFormatVersion,
-      updatedAt: new Date().toISOString()
+      updatedAt: now
     });
     await recordDataChange(1);
     closeDuplicateModal();
     await refreshCollection();
-    showToast(comic.isDuplicate ? "Zustand des zweiten Exemplars aktualisiert." : "Zweites Exemplar hinzugefügt.", "success");
+    await refreshArchiveCoreStatus({ showReport: false });
+    showToast(copies.length === 1 ? "Exemplar gespeichert." : `${copies.length} Exemplare gespeichert.`, "success");
   } catch (error) {
-    elements.duplicateMessage.textContent = `Zweites Exemplar konnte nicht gespeichert werden: ${error.message}`;
+    elements.duplicateMessage.textContent = `Exemplare konnten nicht gespeichert werden: ${error.message}`;
     elements.duplicateMessage.dataset.type = "error";
   } finally {
     elements.duplicateSave.disabled = false;
-  }
-}
-
-async function handleRemoveDuplicateCopy() {
-  const comic = state.comics.find((entry) => entry.id === state.selectedDuplicateComicId);
-  if (!comic?.isDuplicate) return;
-  if (!window.confirm("Das zweite Exemplar dieses Bands entfernen? Der ursprüngliche Band bleibt erhalten.")) return;
-
-  elements.duplicateRemove.disabled = true;
-  try {
-    await saveComic({
-      ...comic,
-      isDuplicate: false,
-      duplicateCondition: null,
-      dataFormatVersion: APP_CONFIG.dataFormatVersion,
-      updatedAt: new Date().toISOString()
-    });
-    await recordDataChange(1);
-    closeDuplicateModal();
-    await refreshCollection();
-    showToast("Zweites Exemplar entfernt.", "success");
-  } catch (error) {
-    elements.duplicateMessage.textContent = `Zweites Exemplar konnte nicht entfernt werden: ${error.message}`;
-    elements.duplicateMessage.dataset.type = "error";
-  } finally {
-    elements.duplicateRemove.disabled = false;
+    elements.copyManagerAdd.disabled = false;
   }
 }
 
@@ -3130,6 +3663,7 @@ async function confirmAndDelete(comic) {
     }
 
     await refreshCollection();
+    await refreshArchiveCoreStatus({ showReport: false });
     if (hadCover) await refreshMediaStatus();
     showToast("Comic gelöscht.");
   } catch (error) {
@@ -3446,15 +3980,17 @@ function handleScannerDetected(payload) {
   elements.scannerResult.classList.remove("hidden");
   setScannerStatus(`Band ${payload.bandNumber} wurde erkannt. Prüfe die Angaben und speichere den Band.` , "success");
 
-  const existingCount = state.comics.filter((comic) => (
-    comic.series === series && comic.numericBandNumber === payload.bandNumber
-  )).length;
-  elements.scannerExistingWarning.classList.toggle("hidden", existingCount === 0);
-  elements.scannerExistingWarning.textContent = existingCount === 0
+  const existingIssue = state.comics.find((comic) => (
+    normalizeSeriesLookup(comic.series) === normalizeSeriesLookup(series)
+    && comic.numericBandNumber === payload.bandNumber
+  ));
+  const existingCopyCount = existingIssue ? getComicCopies(existingIssue).length : 0;
+  elements.scannerExistingWarning.classList.toggle("hidden", existingCopyCount === 0);
+  elements.scannerExistingWarning.textContent = existingCopyCount === 0
     ? ""
-    : existingCount === 1
-      ? "Dieser Band ist bereits einmal in deiner Sammlung eingetragen."
-      : `Dieser Band ist bereits ${existingCount}-mal in deiner Sammlung eingetragen.`;
+    : existingCopyCount === 1
+      ? "Dieser Band ist bereits mit einem Exemplar vorhanden."
+      : `Dieser Band ist bereits mit ${existingCopyCount} Exemplaren vorhanden.`;
 
   lookupScannerMetadata(token);
 }
@@ -3530,7 +4066,8 @@ async function handleScannerSave() {
     }
 
     const existingComic = state.comics.find((entry) => (
-      entry.series === comic.series && entry.numericBandNumber === comic.numericBandNumber
+      normalizeSeriesLookup(entry.series) === normalizeSeriesLookup(comic.series)
+      && entry.numericBandNumber === comic.numericBandNumber
     ));
 
     state.scannerQueue.push({
@@ -3539,7 +4076,7 @@ async function handleScannerSave() {
       extension: state.scannerResult.extension,
       pageUrl: state.scannerResult.pageUrl,
       existingComicId: existingComic?.id || null,
-      action: existingComic ? "skip" : "add"
+      action: existingComic ? "additional-copy" : "add"
     });
 
     renderScannerQueue();
@@ -3607,20 +4144,17 @@ function renderScannerQueue() {
       actionSelect.dataset.queueField = "action";
       actionSelect.append(
         createOption("skip", "Überspringen"),
-        createOption("second-copy", "Als zweites Exemplar übernehmen")
+        createOption("additional-copy", "Als weiteres Exemplar übernehmen")
       );
+      actionSelect.value = item.action === "second-copy" ? "additional-copy" : item.action;
       const existing = state.comics.find((comic) => comic.id === item.existingComicId);
-      if (existing?.isDuplicate) {
-        actionSelect.value = "skip";
-        actionSelect.disabled = true;
-        const hint = document.createElement("small");
-        hint.className = "field-help";
-        hint.textContent = "Dieser Band ist bereits als doppelt markiert.";
-        actionField.append(actionLabel, actionSelect, hint);
-      } else {
-        actionSelect.value = item.action;
-        actionField.append(actionLabel, actionSelect);
-      }
+      const hint = document.createElement("small");
+      hint.className = "field-help";
+      const count = existing ? getComicCopies(existing).length : 0;
+      hint.textContent = count === 1
+        ? "Aktuell ist ein Exemplar gespeichert."
+        : `Aktuell sind ${count} Exemplare gespeichert.`;
+      actionField.append(actionLabel, actionSelect, hint);
       grid.append(actionField);
     }
 
@@ -3776,21 +4310,40 @@ async function saveScannerQueue() {
         return;
       }
 
-      if (item.action === "second-copy" && item.existingComicId) {
+      if (["additional-copy", "second-copy"].includes(item.action) && item.existingComicId) {
         const existing = state.comics.find((comic) => comic.id === item.existingComicId);
-        if (!existing || existing.isDuplicate) {
+        if (!existing) {
           skipped += 1;
           return;
         }
+        const now = new Date().toISOString();
+        const copies = [
+          ...getComicCopies(existing),
+          normalizeCopy({
+            id: createEntityId("copy"),
+            issueId: existing.id,
+            condition: item.condition,
+            isRead: item.isRead,
+            isSealed: item.isSealed,
+            notes: "",
+            source: "scanner",
+            createdAt: now,
+            updatedAt: now
+          }, { issueId: existing.id, position: getComicCopies(existing).length + 1, now })
+        ].map((copy, index) => ({ ...copy, issueId: existing.id, displayOrder: index + 1 }));
+        const primary = copies[0];
         records.push({
           ...existing,
           title: existing.title || item.title,
           publicationYear: existing.publicationYear || item.publicationYear,
-          isRead: existing.isRead || item.isRead,
-          isSealed: existing.isSealed || item.isSealed,
-          isDuplicate: true,
-          duplicateCondition: item.condition,
-          updatedAt: new Date().toISOString()
+          copies,
+          copyCount: copies.length,
+          condition: primary.condition,
+          duplicateCondition: copies[1]?.condition || null,
+          isRead: primary.isRead,
+          isSealed: primary.isSealed,
+          isDuplicate: copies.length > 1,
+          updatedAt: now
         });
         return;
       }
@@ -3821,6 +4374,7 @@ async function saveScannerQueue() {
     state.scannerQueue = [];
     renderScannerQueue();
     await refreshCollection();
+    await refreshArchiveCoreStatus({ showReport: false });
     elements.scannerQueueMessage.textContent = `${records.length} Bände gespeichert${skipped ? `, ${skipped} übersprungen` : ""}.`;
     elements.scannerQueueMessage.dataset.type = "success";
     showToast(`${records.length} Bände aus der Warteschlange gespeichert.`);
@@ -4077,7 +4631,20 @@ async function handleSaveCustomSeries(event) {
     const currentConfigs = Array.isArray(state.settings.customSeriesConfigs)
       ? [...state.settings.customSeriesConfigs]
       : [];
-    const nextConfig = { name, duckipediaPattern: pattern };
+    const previousConfig = originalName
+      ? currentConfigs.find((entry) => entry.name === originalName)
+      : null;
+    const nextConfig = {
+      ...(previousConfig || {}),
+      id: previousConfig?.id || createCustomSeriesId(name),
+      name,
+      duckipediaPattern: pattern,
+      category: ["main", "special", "other"].includes(previousConfig?.category)
+        ? previousConfig.category
+        : "special",
+      aliases: Array.isArray(previousConfig?.aliases) ? [...previousConfig.aliases] : [],
+      isArchived: false
+    };
     let nextConfigs;
     let nextHighest = { ...(state.settings.knownHighestBandBySeries || {}) };
     let nextDetails = { ...(state.settings.missingBandDetails || {}) };
@@ -4126,6 +4693,7 @@ async function handleSaveCustomSeries(event) {
         return changed
           ? {
               ...comic,
+              seriesId: nextConfig.id,
               series: name,
               duckipediaPageUrl: pageUrl,
               dataFormatVersion: APP_CONFIG.dataFormatVersion,
@@ -4135,7 +4703,6 @@ async function handleSaveCustomSeries(event) {
       })
       .filter(Boolean);
 
-    if (configuredComics.length > 0) await upsertComics(configuredComics);
     await saveMeaningfulSettings({
       customSeries: nextConfigs.map((entry) => entry.name),
       customSeriesConfigs: nextConfigs,
@@ -4146,9 +4713,14 @@ async function handleSaveCustomSeries(event) {
         updatedAt: state.settings.fleaMarketSession?.updatedAt || null
       }
     }, Math.max(1, configuredComics.length));
+    await saveSeriesDefinition(nextConfig);
+    if (configuredComics.length > 0) await upsertComics(configuredComics);
 
     if (configuredComics.length > 0) await refreshCollection();
-    else populateConfiguration();
+    else {
+      populateConfiguration();
+      await refreshArchiveCoreStatus({ showReport: false });
+    }
     elements.series.value = name;
     elements.seriesMessage.textContent = originalName ? `„${name}“ wurde aktualisiert.` : `„${name}“ wurde hinzugefügt.`;
     elements.seriesMessage.dataset.type = "success";
@@ -4250,6 +4822,7 @@ async function handleRemoveCustomSeries(seriesName) {
   if (!window.confirm(prompt)) return;
 
   try {
+    const removedConfig = (state.settings.customSeriesConfigs || []).find((entry) => entry.name === seriesName) || null;
     const nextConfigs = (state.settings.customSeriesConfigs || []).filter((entry) => entry.name !== seriesName);
 
     const nextHighest = { ...(state.settings.knownHighestBandBySeries || {}) };
@@ -4282,6 +4855,7 @@ async function handleRemoveCustomSeries(seriesName) {
         updatedAt: state.settings.fleaMarketSession?.updatedAt || null
       }
     });
+    await removeSeriesDefinition(removedConfig?.id || createCustomSeriesId(seriesName));
 
     state.openMissingSeries.delete(seriesName);
     state.missingGroups = calculateMissingBands(state.comics, nextHighest);
@@ -4295,6 +4869,7 @@ async function handleRemoveCustomSeries(seriesName) {
     renderFleaMarketHubStatus();
     if (!elements.fleaMarketPage.classList.contains("hidden")) renderFleaMarket();
     await refreshMediaStatus();
+    await refreshArchiveCoreStatus({ showReport: false });
 
     if (state.editingCustomSeriesName === seriesName) resetCustomSeriesForm();
     elements.seriesMessage.textContent = isUsed
@@ -4505,6 +5080,7 @@ async function handleMarkMissingBandOwned() {
     state.openMissingSeries.add(selected.series);
     closeMissingDetailModal();
     await refreshCollection();
+    await refreshArchiveCoreStatus({ showReport: false });
     showToast(`${selected.series} Band ${selected.bandNumber} wurde als vorhanden eingetragen.`);
   } catch (error) {
     console.error(error);
@@ -4565,6 +5141,7 @@ async function runDiagnostics() {
     const report = await collectDiagnosticReport({
       appVersion: APP_CONFIG.appVersion,
       dataFormatVersion: APP_CONFIG.dataFormatVersion,
+      archiveModelVersion: APP_CONFIG.archiveModelVersion,
       optionalAssets: getOptionalAssetStatus()
     });
     state.latestDiagnosticReport = report;
@@ -4591,7 +5168,8 @@ async function runDiagnostics() {
 function renderDiagnosticReport(report) {
   elements.diagnosticsOverview.replaceChildren();
 
-  const comicCount = report.database?.stores?.comics?.count;
+  const comicCount = report.database?.archiveGraph?.counts?.issues ?? report.database?.stores?.comics?.count;
+  const physicalCopyCount = report.database?.archiveGraph?.counts?.copies;
   const coverCount = report.database?.stores?.coverMedia?.count;
   const metadataCount = report.database?.stores?.metadataCache?.count;
   const storageLabel = report.storage?.usage === null
@@ -4602,8 +5180,8 @@ function renderDiagnosticReport(report) {
     : "Noch nicht aktiv";
 
   [
-    ["App", `v${report.appVersion}`, `${report.environment?.testMode ? "Testmodus · " : ""}Datenformat ${report.dataFormatVersion}`],
-    ["Lokale Sammlung", Number.isFinite(comicCount) ? `${comicCount} Einträge` : "Nicht lesbar", Number.isFinite(coverCount) ? `${coverCount} eigene Cover` : ""],
+    ["App", `v${report.appVersion}`, `${report.environment?.testMode ? "Testmodus · " : ""}Datenformat ${report.dataFormatVersion} · Archivmodell ${report.archiveModelVersion ?? "?"}`],
+    ["Lokale Sammlung", Number.isFinite(comicCount) ? `${comicCount} Ausgaben` : "Nicht lesbar", Number.isFinite(physicalCopyCount) ? `${physicalCopyCount} physische Exemplare` : (Number.isFinite(coverCount) ? `${coverCount} eigene Cover` : "")],
     ["Lokaler Speicher", storageLabel, report.storage?.quota === null ? "Kontingent unbekannt" : `${formatDiagnosticBytes(report.storage.quota)} gemeldet`],
     ["Offline-Modus", offlineLabel, Number.isFinite(metadataCount) ? `${metadataCount} Metadatensätze` : ""]
   ].forEach(([label, value, detail]) => {
@@ -4701,8 +5279,17 @@ function formatDiagnosticDate(value) {
 }
 
 function restoreBodyModalState() {
-  const anyModalOpen = [elements.conditionGuideModal, elements.diagnosticsModal, elements.importModal, elements.seriesModal, elements.missingDetailModal, elements.duplicateModal, elements.scannerModal]
-    .some((modal) => !modal.classList.contains("hidden"));
+  const anyModalOpen = [
+    elements.conditionGuideModal,
+    elements.diagnosticsModal,
+    elements.importModal,
+    elements.seriesModal,
+    elements.missingDetailModal,
+    elements.duplicateModal,
+    elements.scannerModal,
+    elements.calendarEventModal,
+    elements.archiveMigrationModal
+  ].filter(Boolean).some((modal) => !modal.classList.contains("hidden"));
   document.body.classList.toggle("modal-open", anyModalOpen);
 }
 
@@ -4920,13 +5507,16 @@ function renderImportSummary(backup, filename) {
     : "Backup-Typ: Sammlungsdaten ohne eigene Coverfotos";
 
   const countLine = document.createElement("p");
-  countLine.textContent = `Enthaltene Comics: ${backup.comics.length}`;
+  const physicalCopyCount = backup.comics.reduce((sum, comic) => sum + getComicCopies(comic).length, 0);
+  countLine.textContent = `${backup.comics.length} Ausgaben · ${physicalCopyCount} physische Exemplare`;
 
   const cacheLine = document.createElement("p");
   cacheLine.textContent = `Duckipedia-Cache: ${backup.metadataCache.length} Einträge`;
 
   const versionLine = document.createElement("p");
-  versionLine.textContent = `Datenformat: Version ${backup.dataFormatVersion}`;
+  versionLine.textContent = backup.hasArchiveCore
+    ? `Datenformat ${backup.dataFormatVersion} · Archivmodell ${backup.archiveModelVersion}`
+    : `Datenformat ${backup.dataFormatVersion} · wird beim Import auf den Archivkern übertragen`;
 
   const dateLine = document.createElement("p");
   dateLine.textContent = backup.exportedAt
@@ -4972,15 +5562,18 @@ async function handleImportSubmit() {
   try {
     let resultMessage;
     let importedChangeAmount = 0;
+    let mergeResult = null;
 
     if (mode === "replace") {
       await replaceAllComics(state.importBackup.comics);
       resultMessage = `${state.importBackup.comics.length} Einträge wurden wiederhergestellt.`;
     } else {
-      const mergeResult = mergeCollections(state.comics, state.importBackup.comics);
+      mergeResult = mergeCollections(state.comics, state.importBackup.comics);
       await replaceAllComics(mergeResult.comics);
       importedChangeAmount = mergeResult.added + mergeResult.updated;
-      resultMessage = `${mergeResult.added} hinzugefügt, ${mergeResult.updated} aktualisiert, ${mergeResult.skipped} übersprungen.`;
+      resultMessage = `${mergeResult.added} Ausgaben hinzugefügt, ${mergeResult.updated} aktualisiert`
+        + (mergeResult.copiesAdded ? `, ${mergeResult.copiesAdded} zusätzliche Exemplare übernommen` : "")
+        + `, ${mergeResult.skipped} übersprungen.`;
     }
 
     if (state.importBackup.hasMetadataCache) {
@@ -4991,15 +5584,26 @@ async function handleImportSubmit() {
       }
     }
 
+    const storedComicsAfterImport = (mode === "replace" || state.importBackup.hasMedia)
+      ? await getAllComics()
+      : null;
+
     if (mode === "replace" && !state.importBackup.hasMedia) {
-      const validComicIds = new Set(state.importBackup.comics.map((comic) => comic.id));
+      const validComicIds = new Set((storedComicsAfterImport || []).map((comic) => comic.id));
       const existingCovers = await getAllCoverMedia();
       await replaceAllCoverMedia(existingCovers.filter((cover) => validComicIds.has(cover.comicId)));
     }
 
     if (state.importBackup.hasMedia) {
-      const importedComicIds = new Set((mode === "replace" ? state.importBackup.comics : (await getAllComics())).map((comic) => comic.id));
+      const importedComicIds = new Set((storedComicsAfterImport || await getAllComics()).map((comic) => comic.id));
+      const coverIdMap = mode === "merge"
+        ? (mergeResult?.idMap || {})
+        : createImportedIssueIdMap(state.importBackup.comics, storedComicsAfterImport || []);
       const coverRecords = state.importBackup.covers
+        .map((cover) => ({
+          ...cover,
+          comicId: coverIdMap[cover.comicId] || cover.comicId
+        }))
         .filter((cover) => importedComicIds.has(cover.comicId))
         .map((cover) => {
           const blob = dataUrlToBlob(cover.dataUrl);
@@ -5030,6 +5634,7 @@ async function handleImportSubmit() {
     resetFilters();
     resetForm();
     await refreshCollection();
+    await refreshArchiveCoreStatus({ showReport: false });
     renderBackupStatus();
     await refreshMediaStatus();
 
@@ -5044,6 +5649,23 @@ async function handleImportSubmit() {
     importInProgress = false;
     setImportControlsBusy(false);
   }
+}
+
+function createImportedIssueIdMap(importedComics, storedComics) {
+  const targetsById = new Map((storedComics || []).map((comic) => [String(comic.id), comic]));
+  const targetsByIdentity = new Map((storedComics || []).map((comic) => [createImportIssueIdentity(comic), comic]));
+  return Object.fromEntries((importedComics || []).map((comic) => {
+    const direct = targetsById.get(String(comic.id));
+    const target = direct || targetsByIdentity.get(createImportIssueIdentity(comic));
+    return [String(comic.id), target?.id || String(comic.id)];
+  }));
+}
+
+function createImportIssueIdentity(comic) {
+  const seriesId = comic?.seriesId
+    || resolveConfiguredSeriesId(comic?.series)
+    || createCustomSeriesId(comic?.series || "Sonstige");
+  return createIssueIdentityKey(seriesId, comic?.volumeNumber);
 }
 
 function mergeImportedSettings(mode, backup, importedChangeAmount = 0) {

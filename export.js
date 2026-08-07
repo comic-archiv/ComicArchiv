@@ -8,6 +8,21 @@ import {
   normalizeDuckipediaPattern
 } from "./config.js";
 import { blobToDataUrl } from "./media.js";
+import {
+  buildSeriesCatalog,
+  createCustomSeriesId,
+  createIssueIdentityKey,
+  createSeriesDefinition,
+  getComicCopies,
+  materializeLegacyComics,
+  mergeCopyLists,
+  migrateLegacyComicsToArchive,
+  normalizeCopy,
+  normalizeCopyRecord,
+  normalizeIssueRecord,
+  normalizeSeriesLookup,
+  validateArchiveGraph
+} from "./archive-model.js";
 import { normalizeCalendarEvent } from "./calendar.js";
 
 const CSV_SEPARATOR = ";";
@@ -24,34 +39,36 @@ export class BackupValidationError extends Error {
 }
 
 export function createCollectionCsv(comics, settings = {}) {
-  const rows = [
-    [
-      "Reihe",
-      "Bandnummer",
-      "Titel",
-      "Erscheinungsjahr",
-      "Zustand Exemplar 1",
-      "Zustand Exemplar 2",
-      "Gelesen",
-      "Foliert",
-      "Doppelt",
-      "Notizen",
-      "Duckipedia"
-    ],
-    ...comics.map((comic) => [
-      comic.series,
-      comic.volumeNumber,
-      comic.title || "",
-      comic.publicationYear ?? "",
-      comic.condition,
-      comic.isDuplicate ? (comic.duplicateCondition || comic.condition) : "",
-      comic.isRead ? "Ja" : "Nein",
-      comic.isSealed ? "Ja" : "Nein",
-      comic.isDuplicate ? "Ja" : "Nein",
-      comic.notes || "",
-      comic.duckipediaPageUrl || createDuckipediaSearchUrl(comic.series, comic.volumeNumber, comic.title || "", settings)
-    ])
-  ];
+  const rows = [[
+    "Reihe",
+    "Bandnummer",
+    "Titel",
+    "Erscheinungsjahr",
+    "Exemplar",
+    "Zustand",
+    "Gelesen",
+    "Foliert",
+    "Exemplar-Notiz",
+    "Duckipedia"
+  ]];
+
+  (Array.isArray(comics) ? comics : []).forEach((comic) => {
+    const copies = getComicCopies(comic);
+    copies.forEach((copy, index) => {
+      rows.push([
+        comic.series,
+        comic.volumeNumber,
+        comic.title || "",
+        comic.publicationYear ?? "",
+        index + 1,
+        copy.condition,
+        copy.isRead ? "Ja" : "Nein",
+        copy.isSealed ? "Ja" : "Nein",
+        copy.notes || "",
+        comic.duckipediaPageUrl || createDuckipediaSearchUrl(comic.series, comic.volumeNumber, comic.title || "", settings)
+      ]);
+    });
+  });
 
   return UTF8_BOM + rows.map(createCsvRow).join("\r\n");
 }
@@ -398,23 +415,46 @@ export async function createMediaBackup(comics, settings, metadataCache = [], co
 }
 
 function createBackupObject({ backupType, comics, settings, metadataCache, covers }) {
+  const safeComics = Array.isArray(comics) ? comics : [];
+  const safeSettings = serializeSettings(settings);
+  const catalog = buildSeriesCatalog({ legacyComics: safeComics, settings: safeSettings });
+  const archiveCore = migrateLegacyComicsToArchive(safeComics, catalog.series, {
+    dataFormatVersion: APP_CONFIG.dataFormatVersion
+  });
+  const archiveValidation = validateArchiveGraph(archiveCore);
+
+  if (archiveCore.report.skippedCount > 0 || !archiveValidation.valid) {
+    const reason = archiveCore.report.warnings?.[0] || archiveValidation.problems?.[0] || "Unbekannter Validierungsfehler";
+    throw new Error(`Das Backup wurde vorsorglich nicht erstellt: ${reason}`);
+  }
+
   const backup = {
     app: APP_CONFIG.storageName,
     appVersion: APP_CONFIG.appVersion,
     backupType,
     dataFormatVersion: APP_CONFIG.dataFormatVersion,
+    archiveModelVersion: APP_CONFIG.archiveModelVersion,
     mediaFormatVersion: backupType === "media" ? 1 : null,
     exportedAt: new Date().toISOString(),
     sourceOrigin: typeof window !== "undefined" ? window.location.origin : "",
-    comics,
-    settings: serializeSettings(settings),
+    // Die kompatible Projektion bleibt enthalten, damit ältere Entenarchiv-Versionen
+    // und normale JSON-Werkzeuge die Sammlung weiterhin lesen können.
+    comics: safeComics,
+    archiveCore: {
+      modelVersion: APP_CONFIG.archiveModelVersion,
+      series: archiveCore.series,
+      issues: archiveCore.issues,
+      copies: archiveCore.copies,
+      report: archiveCore.report
+    },
+    settings: safeSettings,
     metadataCache: Array.isArray(metadataCache) ? metadataCache : [],
     seriesConfiguration: {
       defaultSeries: [...APP_CONFIG.series],
-      customSeries: Array.isArray(settings.customSeries) ? settings.customSeries : [],
-      customSeriesConfigs: Array.isArray(settings.customSeriesConfigs) ? settings.customSeriesConfigs : [],
-      knownHighestBandBySeries: settings.knownHighestBandBySeries || {},
-      missingBandDetails: settings.missingBandDetails || {}
+      customSeries: safeSettings.customSeries,
+      customSeriesConfigs: safeSettings.customSeriesConfigs,
+      knownHighestBandBySeries: safeSettings.knownHighestBandBySeries,
+      missingBandDetails: safeSettings.missingBandDetails
     }
   };
 
@@ -449,7 +489,8 @@ function serializeSettings(settings = {}) {
     calendarAutoSync: settings.calendarAutoSync !== false,
     calendarSelectedYear: Number(settings.calendarSelectedYear) || new Date().getFullYear(),
     calendarSelectedMonth: Number.isInteger(Number(settings.calendarSelectedMonth)) ? Number(settings.calendarSelectedMonth) : new Date().getMonth(),
-    calendarReminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(settings.calendarReminderTime || "")) ? settings.calendarReminderTime : "09:00"
+    calendarReminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(settings.calendarReminderTime || "")) ? settings.calendarReminderTime : "09:00",
+    archiveMigrationAcknowledgedAt: isValidDateString(settings.archiveMigrationAcknowledgedAt) ? settings.archiveMigrationAcknowledgedAt : null
   };
 }
 
@@ -482,6 +523,10 @@ export function parseAndValidateBackup(text) {
   const issues = [];
   const version = Number(parsedBackup.dataFormatVersion);
   const backupType = parsedBackup.backupType === "media" ? "media" : "data";
+  const hasArchiveCore = isPlainObject(parsedBackup.archiveCore);
+  const archiveModelVersion = Number(
+    parsedBackup.archiveCore?.modelVersion ?? parsedBackup.archiveModelVersion ?? 0
+  );
 
   if (!Number.isInteger(version)) {
     issues.push("Die Versionsnummer des Datenformats fehlt oder ist ungültig.");
@@ -491,7 +536,16 @@ export function parseAndValidateBackup(text) {
     issues.push(`Datenformat-Version ${version} ist neuer als diese App-Version unterstützt. Bitte aktualisiere zuerst Entenarchiv.`);
   }
 
-  if (!Array.isArray(parsedBackup.comics)) {
+  if (hasArchiveCore) {
+    if (!Number.isInteger(archiveModelVersion) || archiveModelVersion < 1) {
+      issues.push("Die Versionsnummer des Archivmodells fehlt oder ist ungültig.");
+    } else if (archiveModelVersion > APP_CONFIG.archiveModelVersion) {
+      issues.push(`Archivmodell-Version ${archiveModelVersion} ist neuer als diese App unterstützt. Bitte aktualisiere zuerst Entenarchiv.`);
+    }
+    if (!Array.isArray(parsedBackup.archiveCore.series)) issues.push("Der Reihenkatalog des Archivkerns fehlt.");
+    if (!Array.isArray(parsedBackup.archiveCore.issues)) issues.push("Die Ausgabenliste des Archivkerns fehlt.");
+    if (!Array.isArray(parsedBackup.archiveCore.copies)) issues.push("Die Exemplarliste des Archivkerns fehlt.");
+  } else if (!Array.isArray(parsedBackup.comics)) {
     issues.push("Das Feld „comics“ fehlt oder ist keine Liste.");
   }
 
@@ -503,25 +557,82 @@ export function parseAndValidateBackup(text) {
     throw new BackupValidationError("Das Backup ist nicht kompatibel.", issues);
   }
 
-  const normalizedComics = [];
-  const seenIds = new Set();
+  let normalizedComics = [];
+  let normalizedArchiveCore = null;
 
-  parsedBackup.comics.forEach((comic, index) => {
+  if (hasArchiveCore) {
     try {
-      const normalizedComic = normalizeImportedComic(comic, index);
-      if (seenIds.has(normalizedComic.id)) {
-        issues.push(`Eintrag ${index + 1}: Die ID „${normalizedComic.id}“ kommt mehrfach vor.`);
-      } else {
-        seenIds.add(normalizedComic.id);
-        normalizedComics.push(normalizedComic);
+      const normalizedSeries = parsedBackup.archiveCore.series.map((entry) => createSeriesDefinition(entry));
+      const normalizedIssues = parsedBackup.archiveCore.issues.map((entry) => normalizeIssueRecord(entry, {
+        dataFormatVersion: APP_CONFIG.dataFormatVersion
+      }));
+      const normalizedCopies = parsedBackup.archiveCore.copies.map((entry, copyIndex) => {
+        if (!isPlainObject(entry)) {
+          throw new Error(`Exemplar ${copyIndex + 1}: Der Eintrag ist kein Objekt.`);
+        }
+        ["isRead", "isSealed"].forEach((fieldName) => {
+          if (entry[fieldName] !== undefined && typeof entry[fieldName] !== "boolean") {
+            throw new Error(`Exemplar ${copyIndex + 1}: Das Feld „${fieldName}“ muss true oder false sein.`);
+          }
+        });
+        return normalizeCopyRecord(entry);
+      });
+      const graph = { series: normalizedSeries, issues: normalizedIssues, copies: normalizedCopies };
+      const validation = validateArchiveGraph(graph);
+      if (!validation.valid) {
+        throw new Error(validation.problems.slice(0, 10).join(" "));
       }
+      normalizedComics = materializeLegacyComics(normalizedIssues, normalizedCopies, normalizedSeries, {
+        dataFormatVersion: APP_CONFIG.dataFormatVersion
+      });
+      normalizedArchiveCore = {
+        modelVersion: archiveModelVersion,
+        series: normalizedSeries,
+        issues: normalizedIssues,
+        copies: normalizedCopies,
+        counts: validation.counts,
+        report: isPlainObject(parsedBackup.archiveCore.report) ? parsedBackup.archiveCore.report : null
+      };
     } catch (error) {
-      issues.push(error.message);
+      throw new BackupValidationError("Der Archivkern im Backup ist ungültig.", [error.message]);
     }
-  });
+  } else {
+    const seenLegacyIds = new Set();
+    parsedBackup.comics.forEach((comic, index) => {
+      try {
+        const normalizedComic = normalizeImportedComic(comic, index);
+        if (seenLegacyIds.has(normalizedComic.id)) {
+          issues.push(`Eintrag ${index + 1}: Die ID „${normalizedComic.id}“ kommt mehrfach vor.`);
+        } else {
+          seenLegacyIds.add(normalizedComic.id);
+          normalizedComics.push(normalizedComic);
+        }
+      } catch (error) {
+        issues.push(error.message);
+      }
+    });
+  }
 
   if (issues.length > 0) {
     throw new BackupValidationError("Das Backup enthält ungültige Comic-Einträge.", issues.slice(0, 20));
+  }
+
+  // Auch die kompatible Projektion eines neuen Backups wird geprüft. Sie ist nicht
+  // autoritativ, darf aber keine offensichtlich beschädigten IDs enthalten.
+  if (hasArchiveCore && Array.isArray(parsedBackup.comics)) {
+    const projectionIds = new Set();
+    parsedBackup.comics.forEach((comic, index) => {
+      try {
+        const normalized = normalizeImportedComic(comic, index);
+        if (projectionIds.has(normalized.id)) throw new Error(`Eintrag ${index + 1}: doppelte ID „${normalized.id}“.`);
+        projectionIds.add(normalized.id);
+      } catch (error) {
+        issues.push(error.message);
+      }
+    });
+    if (issues.length > 0) {
+      throw new BackupValidationError("Die kompatible Comic-Projektion im Backup ist beschädigt.", issues.slice(0, 20));
+    }
   }
 
   let normalizedSettings;
@@ -531,6 +642,7 @@ export function parseAndValidateBackup(text) {
     throw new BackupValidationError("Die App-Einstellungen im Backup sind ungültig.", [error.message]);
   }
 
+  const seenIds = new Set(normalizedComics.map((comic) => comic.id));
   const metadataCache = normalizeMetadataCache(parsedBackup.metadataCache, issues);
   const covers = backupType === "media" ? normalizeMediaCovers(parsedBackup.covers, seenIds, issues) : [];
 
@@ -541,6 +653,9 @@ export function parseAndValidateBackup(text) {
   return {
     backupType,
     dataFormatVersion: version,
+    archiveModelVersion: hasArchiveCore ? archiveModelVersion : Number(parsedBackup.archiveModelVersion) || null,
+    archiveCore: normalizedArchiveCore,
+    hasArchiveCore,
     exportedAt: isValidDateString(parsedBackup.exportedAt) ? parsedBackup.exportedAt : null,
     comics: normalizedComics,
     settings: normalizedSettings,
@@ -552,38 +667,118 @@ export function parseAndValidateBackup(text) {
 }
 
 export function mergeCollections(existingComics, importedComics) {
-  const mergedById = new Map(existingComics.map((comic) => [comic.id, comic]));
-  const fingerprints = new Set(existingComics.map(createComicFingerprint));
+  const merged = (Array.isArray(existingComics) ? existingComics : []).map((comic) => normalizeComicCopiesForMerge(comic));
+  const byId = new Map(merged.map((comic) => [comic.id, comic]));
+  const byIdentity = new Map(merged.map((comic) => [createIssueMergeKey(comic), comic]));
+  const idMap = {};
   let added = 0;
   let updated = 0;
   let skipped = 0;
+  let copiesAdded = 0;
 
-  importedComics.forEach((importedComic) => {
-    const existingWithSameId = mergedById.get(importedComic.id);
+  (Array.isArray(importedComics) ? importedComics : []).forEach((rawImported) => {
+    const imported = normalizeComicCopiesForMerge(rawImported);
+    const existing = byId.get(imported.id) || byIdentity.get(createIssueMergeKey(imported));
 
-    if (existingWithSameId) {
-      if (getTimestamp(importedComic.updatedAt) > getTimestamp(existingWithSameId.updatedAt)) {
-        mergedById.set(importedComic.id, importedComic);
-        fingerprints.add(createComicFingerprint(importedComic));
-        updated += 1;
-      } else {
-        skipped += 1;
-      }
+    if (!existing) {
+      merged.push(imported);
+      byId.set(imported.id, imported);
+      byIdentity.set(createIssueMergeKey(imported), imported);
+      idMap[imported.id] = imported.id;
+      added += 1;
       return;
     }
 
-    const fingerprint = createComicFingerprint(importedComic);
-    if (fingerprints.has(fingerprint)) {
+    idMap[imported.id] = existing.id;
+    const existingCopyIds = new Set(getComicCopies(existing).map((copy) => copy.id));
+    const combined = mergeIssueAndCopies(existing, imported);
+    const newlyAddedCopies = getComicCopies(combined).filter((copy) => !existingCopyIds.has(copy.id)).length;
+    const changed = createComicFingerprint(combined) !== createComicFingerprint(existing);
+    if (!changed) {
       skipped += 1;
       return;
     }
 
-    mergedById.set(importedComic.id, importedComic);
-    fingerprints.add(fingerprint);
-    added += 1;
+    const index = merged.findIndex((comic) => comic.id === existing.id);
+    if (index >= 0) merged[index] = combined;
+    byId.set(existing.id, combined);
+    byIdentity.set(createIssueMergeKey(combined), combined);
+    copiesAdded += newlyAddedCopies;
+    updated += 1;
   });
 
-  return { comics: [...mergedById.values()], added, updated, skipped };
+  return { comics: merged, added, updated, skipped, copiesAdded, idMap };
+}
+
+function normalizeComicCopiesForMerge(comic) {
+  const issueId = String(comic?.issueId || comic?.id || createEntityId("issue"));
+  const copies = getComicCopies(comic).map((copy, index) => normalizeCopy({
+    ...copy,
+    issueId,
+    displayOrder: index + 1
+  }, { issueId, position: index + 1 }));
+  const primary = copies[0];
+  const secondary = copies[1] || null;
+  return {
+    ...comic,
+    id: issueId,
+    issueId,
+    copies,
+    copyCount: copies.length,
+    condition: primary.condition,
+    duplicateCondition: secondary?.condition || null,
+    isRead: primary.isRead,
+    isSealed: primary.isSealed,
+    isDuplicate: copies.length > 1
+  };
+}
+
+function createIssueMergeKey(comic) {
+  const seriesKey = comic.seriesId || normalizeSeriesLookup(comic.series);
+  return createIssueIdentityKey(seriesKey, comic.volumeNumber);
+}
+
+function mergeIssueAndCopies(existing, imported) {
+  const existingCopies = getComicCopies(existing);
+  const importedCopies = getComicCopies(imported).map((copy) => ({ ...copy, issueId: existing.id }));
+  const copies = mergeCopyLists(existingCopies, importedCopies, { issueId: existing.id });
+  const importedIsNewer = getTimestamp(imported.updatedAt) > getTimestamp(existing.updatedAt);
+  const richer = (first, second) => String(first || "").trim() || String(second || "").trim();
+  const merged = {
+    ...existing,
+    seriesId: existing.seriesId || imported.seriesId || "",
+    title: importedIsNewer ? richer(imported.title, existing.title) : richer(existing.title, imported.title),
+    publicationYear: importedIsNewer ? (imported.publicationYear ?? existing.publicationYear) : (existing.publicationYear ?? imported.publicationYear),
+    duckipediaPageUrl: importedIsNewer ? richer(imported.duckipediaPageUrl, existing.duckipediaPageUrl) : richer(existing.duckipediaPageUrl, imported.duckipediaPageUrl),
+    duckipediaCoverUrl: importedIsNewer ? richer(imported.duckipediaCoverUrl, existing.duckipediaCoverUrl) : richer(existing.duckipediaCoverUrl, imported.duckipediaCoverUrl),
+    metadataStatus: importedIsNewer ? (imported.metadataStatus || existing.metadataStatus || "") : (existing.metadataStatus || imported.metadataStatus || ""),
+    metadataFetchedAt: getTimestamp(imported.metadataFetchedAt) > getTimestamp(existing.metadataFetchedAt) ? imported.metadataFetchedAt : existing.metadataFetchedAt,
+    copies: copies.map((copy, index) => ({ ...copy, issueId: existing.id, displayOrder: index + 1 })),
+    updatedAt: getTimestamp(imported.updatedAt) > getTimestamp(existing.updatedAt) ? imported.updatedAt : existing.updatedAt
+  };
+  const primary = merged.copies[0];
+  const secondary = merged.copies[1] || null;
+  return {
+    ...merged,
+    copyCount: merged.copies.length,
+    condition: primary.condition,
+    duplicateCondition: secondary?.condition || null,
+    isRead: primary.isRead,
+    isSealed: primary.isSealed,
+    isDuplicate: merged.copies.length > 1
+  };
+}
+
+function createCopyFingerprint(copy) {
+  return JSON.stringify([
+    String(copy.id || ""),
+    normalizeConditionCode(copy.condition, DEFAULT_CONDITION_CODE),
+    Boolean(copy.isRead),
+    Boolean(copy.isSealed),
+    normalizeForComparison(copy.notes),
+    copy.createdAt || null,
+    copy.updatedAt || null
+  ]);
 }
 
 export async function shareOrDownloadText({ content, filename, mimeType, title, text }) {
@@ -650,7 +845,9 @@ function normalizeImportedComic(comic, index) {
   const label = `Eintrag ${index + 1}`;
   if (!isPlainObject(comic)) throw new Error(`${label}: Der Eintrag ist kein Objekt.`);
 
-  const id = normalizeRequiredString(comic.id, 200, `${label}: ID`);
+  const id = normalizeRequiredString(comic.id || comic.issueId, 200, `${label}: ID`);
+  const issueId = normalizeOptionalString(comic.issueId, 200, `${label}: Ausgaben-ID`) || id;
+  const seriesId = normalizeOptionalString(comic.seriesId, 120, `${label}: Reihen-ID`);
   const series = normalizeRequiredString(comic.series, 100, `${label}: Reihe`);
   const volumeNumber = normalizeRequiredString(comic.volumeNumber, 30, `${label}: Bandnummer`);
   const numericBandNumber = parseStrictPositiveInteger(volumeNumber);
@@ -660,50 +857,103 @@ function normalizeImportedComic(comic, index) {
   }
 
   const title = normalizeOptionalString(comic.title, 200, `${label}: Titel`);
-  const notes = normalizeOptionalString(comic.notes, 2000, `${label}: Notizen`);
   const publicationYear = normalizePublicationYear(comic.publicationYear, label);
-  const rawCondition = normalizeRequiredString(comic.condition, 10, `${label}: Zustand`);
-  const condition = normalizeConditionCode(rawCondition);
-
-  if (!condition) {
-    throw new Error(`${label}: Der Zustand „${rawCondition}“ ist unbekannt.`);
-  }
-
-  ["isRead", "isDuplicate", "isSealed"].forEach((fieldName) => {
-    if (typeof comic[fieldName] !== "boolean") {
-      throw new Error(`${label}: Das Feld „${fieldName}“ muss true oder false sein.`);
-    }
-  });
-
-  let duplicateCondition = null;
-  if (comic.isDuplicate) {
-    const rawDuplicateCondition = typeof comic.duplicateCondition === "string" && comic.duplicateCondition
-      ? comic.duplicateCondition
-      : condition;
-    duplicateCondition = normalizeConditionCode(rawDuplicateCondition);
-    if (!duplicateCondition) {
-      throw new Error(`${label}: Der Zustand des zweiten Exemplars ist unbekannt.`);
-    }
-  }
-
   const now = new Date().toISOString();
   const createdAt = isValidDateString(comic.createdAt) ? comic.createdAt : now;
   const updatedAt = isValidDateString(comic.updatedAt) ? comic.updatedAt : createdAt;
+  const explicitCopies = Array.isArray(comic.copies) && comic.copies.length > 0;
+  let copies = [];
 
+  if (explicitCopies) {
+    if (comic.copies.length > MAX_MEDIA_ITEMS) throw new Error(`${label}: Zu viele Exemplare.`);
+    const seenCopyIds = new Set();
+    copies = comic.copies.map((copy, copyIndex) => {
+      if (!isPlainObject(copy)) throw new Error(`${label}, Exemplar ${copyIndex + 1}: Der Eintrag ist ungültig.`);
+      const rawCondition = normalizeRequiredString(copy.condition, 10, `${label}, Exemplar ${copyIndex + 1}: Zustand`);
+      const condition = normalizeConditionCode(rawCondition);
+      if (!condition) throw new Error(`${label}, Exemplar ${copyIndex + 1}: Der Zustand „${rawCondition}“ ist unbekannt.`);
+      const copyId = normalizeOptionalString(copy.id, 220, `${label}, Exemplar ${copyIndex + 1}: ID`) || `${issueId}:copy:${copyIndex + 1}`;
+      if (seenCopyIds.has(copyId)) throw new Error(`${label}: Die Exemplar-ID „${copyId}“ kommt mehrfach vor.`);
+      seenCopyIds.add(copyId);
+      ["isRead", "isSealed"].forEach((fieldName) => {
+        if (copy[fieldName] !== undefined && typeof copy[fieldName] !== "boolean") {
+          throw new Error(`${label}, Exemplar ${copyIndex + 1}: Das Feld „${fieldName}“ muss true oder false sein.`);
+        }
+      });
+      return normalizeCopy({
+        id: copyId,
+        issueId,
+        condition,
+        isRead: copy.isRead === true,
+        isSealed: copy.isSealed === true,
+        notes: normalizeOptionalString(copy.notes, 2000, `${label}, Exemplar ${copyIndex + 1}: Notizen`),
+        displayOrder: copyIndex + 1,
+        source: normalizeOptionalString(copy.source, 40, `${label}, Exemplar ${copyIndex + 1}: Quelle`) || "backup",
+        createdAt: isValidDateString(copy.createdAt) ? copy.createdAt : createdAt,
+        updatedAt: isValidDateString(copy.updatedAt) ? copy.updatedAt : updatedAt
+      }, { issueId, position: copyIndex + 1, now });
+    });
+  } else {
+    ["isRead", "isDuplicate", "isSealed"].forEach((fieldName) => {
+      if (typeof comic[fieldName] !== "boolean") {
+        throw new Error(`${label}: Das Feld „${fieldName}“ muss true oder false sein.`);
+      }
+    });
+    const rawCondition = normalizeRequiredString(comic.condition, 10, `${label}: Zustand`);
+    const condition = normalizeConditionCode(rawCondition);
+    if (!condition) throw new Error(`${label}: Der Zustand „${rawCondition}“ ist unbekannt.`);
+    copies.push(normalizeCopy({
+      id: `${issueId}:copy:1`,
+      issueId,
+      condition,
+      isRead: comic.isRead,
+      isSealed: comic.isSealed,
+      notes: normalizeOptionalString(comic.notes, 2000, `${label}: Notizen`),
+      displayOrder: 1,
+      source: "legacy-backup",
+      createdAt,
+      updatedAt
+    }, { issueId, position: 1, now }));
+    if (comic.isDuplicate) {
+      const rawDuplicate = typeof comic.duplicateCondition === "string" && comic.duplicateCondition ? comic.duplicateCondition : condition;
+      const duplicateCondition = normalizeConditionCode(rawDuplicate);
+      if (!duplicateCondition) throw new Error(`${label}: Der Zustand des zweiten Exemplars ist unbekannt.`);
+      copies.push(normalizeCopy({
+        id: `${issueId}:copy:2`,
+        issueId,
+        condition: duplicateCondition,
+        isRead: false,
+        isSealed: false,
+        notes: "",
+        displayOrder: 2,
+        source: "legacy-backup-duplicate",
+        createdAt,
+        updatedAt
+      }, { issueId, position: 2, now }));
+    }
+  }
+
+  const primary = copies[0];
+  const secondary = copies[1] || null;
   return {
     id,
+    issueId,
+    seriesId,
+    archiveModelVersion: Number(comic.archiveModelVersion) || APP_CONFIG.archiveModelVersion || 1,
     dataFormatVersion: APP_CONFIG.dataFormatVersion,
     series,
     volumeNumber,
     numericBandNumber,
     title,
     publicationYear,
-    condition,
-    duplicateCondition,
-    isRead: comic.isRead,
-    isDuplicate: comic.isDuplicate,
-    isSealed: comic.isSealed,
-    notes,
+    condition: primary.condition,
+    duplicateCondition: secondary?.condition || null,
+    isRead: primary.isRead,
+    isDuplicate: copies.length > 1,
+    isSealed: primary.isSealed,
+    notes: primary.notes || "",
+    copies,
+    copyCount: copies.length,
     duckipediaPageUrl: normalizeOptionalHttpUrl(comic.duckipediaPageUrl),
     duckipediaCoverUrl: normalizeOptionalHttpUrl(comic.duckipediaCoverUrl),
     metadataStatus: ["found", "not-found", "manual", ""].includes(comic.metadataStatus) ? comic.metadataStatus : "",
@@ -820,13 +1070,21 @@ function normalizeImportedCustomSeriesConfigs(value, legacySeries = []) {
       if (!isPlainObject(entry)) return;
       const name = normalizeOptionalString(entry.name, 100, "Reihenname");
       if (!name) return;
-      const duckipediaPattern = normalizeDuckipediaPattern(normalizeOptionalString(entry.duckipediaPattern, 200, "Duckipedia-Pfad"));
-      normalized.push({ name, duckipediaPattern });
+      normalized.push({
+        id: normalizeOptionalString(entry.id, 120, "Reihen-ID") || "",
+        name,
+        duckipediaPattern: normalizeDuckipediaPattern(normalizeOptionalString(entry.duckipediaPattern, 200, "Duckipedia-Pfad")),
+        category: ["main", "special", "other"].includes(entry.category) ? entry.category : "special",
+        aliases: Array.isArray(entry.aliases)
+          ? [...new Set(entry.aliases.filter((alias) => typeof alias === "string" && alias.trim()).map((alias) => alias.trim().slice(0, 100)))]
+          : [],
+        isArchived: entry.isArchived === true
+      });
     });
   }
   legacySeries.forEach((name) => {
     if (!normalized.some((entry) => entry.name.localeCompare(name, "de", { sensitivity: "base" }) === 0)) {
-      normalized.push({ name, duckipediaPattern: "" });
+      normalized.push({ id: "", name, duckipediaPattern: "", category: "special", aliases: [], isArchived: false });
     }
   });
   return normalized.filter((entry, index, list) =>
@@ -968,18 +1226,13 @@ function parseStrictPositiveInteger(value) {
 }
 
 function createComicFingerprint(comic) {
+  const copies = getComicCopies(comic).map(createCopyFingerprint).sort();
   return JSON.stringify([
-    normalizeForComparison(comic.series),
-    normalizeForComparison(comic.volumeNumber),
+    createIssueMergeKey(comic),
     normalizeForComparison(comic.title),
     comic.publicationYear ?? null,
-    comic.condition,
-    comic.duplicateCondition || null,
-    Boolean(comic.isRead),
-    Boolean(comic.isDuplicate),
-    Boolean(comic.isSealed),
-    normalizeForComparison(comic.notes),
-    comic.createdAt || null
+    normalizeForComparison(comic.duckipediaPageUrl),
+    copies
   ]);
 }
 

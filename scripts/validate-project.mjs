@@ -12,6 +12,7 @@ const requiredFiles = [
   "index.html",
   "style.css",
   "app.js",
+  "archive-model.js",
   "config.js",
   "storage.js",
   "missing.js",
@@ -40,10 +41,14 @@ for (const file of requiredFiles) {
   if (!existsSync(join(root, file))) errors.push(`Pflichtdatei fehlt: ${file}`);
 }
 
-const [html, appSource, configSource, serviceWorkerSource, styleSource, packageJson, versionJson, manifest] = await Promise.all([
+const [html, appSource, configSource, storageSource, archiveModelSource, exportSource, recoverySource, serviceWorkerSource, styleSource, packageJson, versionJson, manifest] = await Promise.all([
   readText("index.html"),
   readText("app.js"),
   readText("config.js"),
+  readText("storage.js"),
+  readText("archive-model.js"),
+  readText("export.js"),
+  readText("recovery.js"),
   readText("service-worker.js"),
   readText("style.css"),
   readJson("package.json"),
@@ -53,6 +58,7 @@ const [html, appSource, configSource, serviceWorkerSource, styleSource, packageJ
 
 const configVersion = matchOne(configSource, /appVersion:\s*"([^"]+)"/, "App-Version in config.js");
 const configDataVersion = Number(matchOne(configSource, /dataFormatVersion:\s*(\d+)/, "Datenformat in config.js"));
+const configArchiveModelVersion = Number(matchOne(configSource, /export const ARCHIVE_MODEL_VERSION = (\d+)/, "Archivmodell-Version in config.js"));
 const swVersion = matchOne(serviceWorkerSource, /const APP_VERSION = "([^"]+)"/, "App-Version im Service Worker");
 const htmlVersion = matchOne(html, /id="app-version">v([^<]+)</, "sichtbare Version in index.html");
 const versions = new Set([packageJson.version, versionJson.appVersion, configVersion, swVersion, htmlVersion]);
@@ -61,6 +67,15 @@ if (versions.size !== 1) {
 }
 if (Number(versionJson.dataFormatVersion) !== configDataVersion) {
   errors.push(`Datenformat ist uneinheitlich: version.json=${versionJson.dataFormatVersion}, config.js=${configDataVersion}`);
+}
+if (Number(versionJson.archiveModelVersion) !== configArchiveModelVersion) {
+  errors.push(`Archivmodell ist uneinheitlich: version.json=${versionJson.archiveModelVersion}, config.js=${configArchiveModelVersion}`);
+}
+const recoveryVersion = matchOne(recoverySource, /const APP_VERSION = "([^"]+)"/, "App-Version im sicheren Modus");
+const recoveryDataVersion = Number(matchOne(recoverySource, /const DATA_FORMAT_VERSION = (\d+)/, "Datenformat im sicheren Modus"));
+const recoveryArchiveVersion = Number(matchOne(recoverySource, /const ARCHIVE_MODEL_VERSION = (\d+)/, "Archivmodell im sicheren Modus"));
+if (recoveryVersion !== configVersion || recoveryDataVersion !== configDataVersion || recoveryArchiveVersion !== configArchiveModelVersion) {
+  errors.push("Versionen im sicheren Modus stimmen nicht mit config.js überein.");
 }
 
 const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
@@ -87,6 +102,20 @@ if (!html.includes('id="recovery-panel"') || !html.includes('id="diagnostics-mod
 }
 if (!html.includes('id="test-mode-banner"') || !appSource.includes("comicarchiv-db-test") && !styleSource.includes("test-mode-banner")) {
   errors.push("Der getrennte Testmodus ist nicht vollständig eingebunden.");
+}
+
+const archiveStores = ["seriesCatalog", "issues", "copies", "archiveMeta", "migrationSnapshots"];
+for (const store of archiveStores) {
+  if (!storageSource.includes(`"${store}"`)) errors.push(`Archivkern-Speicher fehlt in storage.js: ${store}`);
+}
+if (!html.includes('id="archive-migration-modal"') || !html.includes('id="copy-manager-list"')) {
+  errors.push("Migrationsbericht oder Exemplarmanager fehlt in index.html.");
+}
+if (!archiveModelSource.includes("migrateLegacyComicsToArchive") || !archiveModelSource.includes("validateArchiveGraph")) {
+  errors.push("Der modulare Archivkern ist unvollständig.");
+}
+if (!exportSource.includes("archiveCore")) {
+  errors.push("JSON-Backups enthalten keinen expliziten Archivkern.");
 }
 
 const shellAssets = [
@@ -133,6 +162,7 @@ if (errors.length) {
   console.log(`✓ ${syntaxFiles.length} JavaScript-Dateien syntaktisch geprüft`);
   console.log("✓ Scanner und PDF-Modul werden erst bei Bedarf geladen");
   console.log("✓ Diagnose, sicherer Modus und Testmodus sind eingebunden");
+  console.log("✓ Archivkern, Migrationsbericht und Version-4-Backupformat sind eingebunden");
   notes.forEach((entry) => console.log(`Hinweis: ${entry}`));
 }
 

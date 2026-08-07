@@ -32,3 +32,51 @@ test("Service Worker unterscheidet kritische und optionale Offline-Dateien", asy
   assert.match(source, /Promise\.allSettled/);
   assert.match(source, /GET_STATUS/);
 });
+
+test("Archivkern, Migrationsbericht und getrennte physische Exemplare sind eingebunden", async () => {
+  const [html, storage, archiveModel, exportSource, recovery] = await Promise.all([
+    read("index.html"),
+    read("storage.js"),
+    read("archive-model.js"),
+    read("export.js"),
+    read("recovery.js")
+  ]);
+  assert.match(html, /id="archive-migration-modal"/);
+  assert.match(html, /id="copy-manager-list"/);
+  for (const store of ["seriesCatalog", "issues", "copies", "archiveMeta", "migrationSnapshots"]) {
+    assert.match(storage, new RegExp(`"${store}"`));
+  }
+  assert.match(archiveModel, /migrateLegacyComicsToArchive/);
+  assert.match(archiveModel, /materializeLegacyComics/);
+  assert.match(exportSource, /archiveCore/);
+  assert.match(recovery, /backup\.archiveCore/);
+});
+
+
+test("Version 4, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet", async () => {
+  const [config, storage, recovery, version, serviceWorker] = await Promise.all([
+    read("config.js"),
+    read("storage.js"),
+    read("recovery.js"),
+    read("version.json"),
+    read("service-worker.js")
+  ]);
+  const versionData = JSON.parse(version);
+  assert.equal(versionData.appVersion, "4.0.0");
+  assert.equal(versionData.dataFormatVersion, 9);
+  assert.equal(versionData.archiveModelVersion, 1);
+  assert.match(config, /appVersion:\s*"4\.0\.0"/);
+  assert.match(config, /dataFormatVersion:\s*9/);
+  assert.match(storage, /const DATABASE_VERSION = 5/);
+  assert.match(recovery, /const APP_VERSION = "4\.0\.0"/);
+  assert.match(recovery, /const DATA_FORMAT_VERSION = 9/);
+  assert.match(serviceWorker, /const APP_VERSION = "4\.0\.0"/);
+});
+
+test("Service Worker hält den Archivkern im kritischen Offline-Paket", async () => {
+  const source = await read("service-worker.js");
+  const coreBlock = source.match(/const CORE_SHELL = Object\.freeze\(\[([\s\S]*?)\]\);/)?.[1] || "";
+  assert.match(coreBlock, /\.\/archive-model\.js/);
+  assert.match(coreBlock, /\.\/storage\.js/);
+  assert.match(coreBlock, /\.\/export\.js/);
+});

@@ -1,5 +1,39 @@
 export const DEFAULT_CONDITION_CODE = "2";
 
+
+export const ARCHIVE_MODEL_VERSION = 1;
+
+export const STANDARD_SERIES_DEFINITIONS = Object.freeze([
+  Object.freeze({ id: "ltb-main", name: "Lustiges Taschenbuch", category: "main", duckipediaPattern: "LTB_{band}", aliases: Object.freeze(["LTB"]) }),
+  Object.freeze({ id: "ltb-spezial", name: "LTB Spezial", category: "special", duckipediaPattern: "LTB_Spezial_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-premium", name: "LTB Premium", category: "special", duckipediaPattern: "LTB_Premium_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-enten-edition", name: "LTB Enten-Edition", category: "special", duckipediaPattern: "LTB_Enten-Edition_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-maus-edition", name: "LTB Maus-Edition", category: "special", duckipediaPattern: "LTB_Maus-Edition_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-ultimate", name: "LTB Ultimate Phantomias", category: "special", duckipediaPattern: "LTB_Ultimate_{band}", aliases: Object.freeze(["LTB Ultimate"]) }),
+  Object.freeze({ id: "ltb-collection", name: "LTB Collection", category: "special", duckipediaPattern: "LTB_Collection_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-fantasy", name: "LTB Fantasy", category: "special", duckipediaPattern: "LTB_Fantasy_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-crime", name: "LTB Crime", category: "special", duckipediaPattern: "LTB_Crime_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-royal", name: "LTB Royal", category: "special", duckipediaPattern: "LTB_Royal_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-history", name: "LTB History", category: "special", duckipediaPattern: "LTB_History_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-weihnachten", name: "LTB Weihnachten", category: "special", duckipediaPattern: "LTB_Weihnachten_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-ostern", name: "LTB Ostern", category: "special", duckipediaPattern: "LTB_Ostern_{band}", aliases: Object.freeze(["LTB Frohe Ostern"]) }),
+  Object.freeze({ id: "ltb-halloween", name: "LTB Halloween", category: "special", duckipediaPattern: "LTB_Halloween_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-sommer", name: "LTB Sommer", category: "special", duckipediaPattern: "LTB_Sommer_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-abenteuer", name: "LTB Abenteuer", category: "special", duckipediaPattern: "LTB_Abenteuer_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-young-comics", name: "LTB Young Comics", category: "special", duckipediaPattern: "LTB_Young_Comics_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-galaxy", name: "LTB Galaxy", category: "special", duckipediaPattern: "LTB_Galaxy_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-weltreise", name: "LTB Weltreise", category: "special", duckipediaPattern: "LTB_Weltreise_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-fantasy-entenhausen", name: "LTB Fantasy Entenhausen", category: "special", duckipediaPattern: "LTB_Fantasy_Entenhausen_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-space", name: "LTB Space", category: "special", duckipediaPattern: "LTB_Space_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-phantomias-collection", name: "LTB Phantomias Collection", category: "special", duckipediaPattern: "LTB_Phantomias_Collection_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-europareise", name: "LTB Europareise", category: "special", duckipediaPattern: "LTB_Europareise_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-mystery", name: "LTB Mystery", category: "special", duckipediaPattern: "LTB_Mystery_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-extra", name: "LTB Extra", category: "special", duckipediaPattern: "LTB_Extra_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-sommerspiele", name: "LTB Sommerspiele", category: "special", duckipediaPattern: "LTB_Sommerspiele_{band}", aliases: Object.freeze([]) }),
+  Object.freeze({ id: "ltb-praesentiert", name: "LTB präsentiert", category: "special", duckipediaPattern: "LTB_präsentiert_{band}", aliases: Object.freeze(["Lustiges Taschenbuch präsentiert", "LTB praesentiert"]) }),
+  Object.freeze({ id: "other", name: "Sonstige", category: "other", duckipediaPattern: "", aliases: Object.freeze([]) })
+]);
+
 export const LEGACY_CONDITION_MAP = Object.freeze({
   N: "0-1",
   NM: "1",
@@ -12,8 +46,9 @@ export const LEGACY_CONDITION_MAP = Object.freeze({
 });
 
 export const APP_CONFIG = Object.freeze({
-  appVersion: "3.9.0",
-  dataFormatVersion: 8,
+  appVersion: "4.0.0",
+  dataFormatVersion: 9,
+  archiveModelVersion: ARCHIVE_MODEL_VERSION,
   minimumSupportedBackupVersion: 1,
   storageName: "ComicArchiv",
   displayName: "Entenarchiv",
@@ -21,36 +56,8 @@ export const APP_CONFIG = Object.freeze({
   metadataCacheMaximumAgeDays: 90,
   duckipediaBase: "https://de.duckipedia.org/",
   duckipediaSearchBase: "https://de.duckipedia.org/index.php?title=Spezial%3ASuche&fulltext=1&search=",
-  series: Object.freeze([
-    "Lustiges Taschenbuch",
-    "LTB Spezial",
-    "LTB Premium",
-    "LTB Enten-Edition",
-    "LTB Maus-Edition",
-    "LTB Ultimate Phantomias",
-    "LTB Collection",
-    "LTB Fantasy",
-    "LTB Crime",
-    "LTB Royal",
-    "LTB History",
-    "LTB Weihnachten",
-    "LTB Ostern",
-    "LTB Halloween",
-    "LTB Sommer",
-    "LTB Abenteuer",
-    "LTB Young Comics",
-    "LTB Galaxy",
-    "LTB Weltreise",
-    "LTB Fantasy Entenhausen",
-    "LTB Space",
-    "LTB Phantomias Collection",
-    "LTB Europareise",
-    "LTB Mystery",
-    "LTB Extra",
-    "LTB Sommerspiele",
-    "LTB präsentiert",
-    "Sonstige"
-  ]),
+  series: Object.freeze(STANDARD_SERIES_DEFINITIONS.map((entry) => entry.name)),
+
   conditions: Object.freeze([
     {
       code: "0",
@@ -116,36 +123,11 @@ export const APP_CONFIG = Object.freeze({
   knownHighestBandBySeries: Object.freeze({})
 });
 
-export const STANDARD_DUCKIPEDIA_PATTERNS = Object.freeze({
-  "Lustiges Taschenbuch": "LTB_{band}",
-  "LTB Spezial": "LTB_Spezial_{band}",
-  "LTB Premium": "LTB_Premium_{band}",
-  "LTB Enten-Edition": "LTB_Enten-Edition_{band}",
-  "LTB Maus-Edition": "LTB_Maus-Edition_{band}",
-  "LTB Ultimate Phantomias": "LTB_Ultimate_{band}",
-  "LTB Collection": "LTB_Collection_{band}",
-  "LTB Fantasy": "LTB_Fantasy_{band}",
-  "LTB Crime": "LTB_Crime_{band}",
-  "LTB Royal": "LTB_Royal_{band}",
-  "LTB History": "LTB_History_{band}",
-  "LTB Weihnachten": "LTB_Weihnachten_{band}",
-  "LTB Ostern": "LTB_Ostern_{band}",
-  "LTB Halloween": "LTB_Halloween_{band}",
-  "LTB Sommer": "LTB_Sommer_{band}",
-  "LTB Abenteuer": "LTB_Abenteuer_{band}",
-  "LTB Young Comics": "LTB_Young_Comics_{band}",
-  "LTB Galaxy": "LTB_Galaxy_{band}",
-  "LTB Weltreise": "LTB_Weltreise_{band}",
-  "LTB Fantasy Entenhausen": "LTB_Fantasy_Entenhausen_{band}",
-  "LTB Space": "LTB_Space_{band}",
-  "LTB Phantomias Collection": "LTB_Phantomias_Collection_{band}",
-  "LTB Europareise": "LTB_Europareise_{band}",
-  "LTB Mystery": "LTB_Mystery_{band}",
-  "LTB Extra": "LTB_Extra_{band}",
-  "LTB Sommerspiele": "LTB_Sommerspiele_{band}",
-  "LTB präsentiert": "LTB_präsentiert_{band}",
-  "Lustiges Taschenbuch präsentiert": "LTB_präsentiert_{band}"
-});
+export const STANDARD_DUCKIPEDIA_PATTERNS = Object.freeze(Object.fromEntries(
+  STANDARD_SERIES_DEFINITIONS
+    .filter((entry) => entry.duckipediaPattern)
+    .map((entry) => [entry.name, entry.duckipediaPattern])
+));
 
 export const DEFAULT_SETTINGS = Object.freeze({
   theme: "dark",
@@ -170,7 +152,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   calendarAutoSync: true,
   calendarSelectedYear: new Date().getFullYear(),
   calendarSelectedMonth: new Date().getMonth(),
-  calendarReminderTime: "09:00"
+  calendarReminderTime: "09:00",
+  archiveMigrationAcknowledgedAt: null
 });
 
 export function normalizeConditionCode(code, fallback = "") {

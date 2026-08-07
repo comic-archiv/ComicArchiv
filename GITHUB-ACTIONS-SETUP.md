@@ -1,36 +1,49 @@
-# Einmalige Einrichtung der geprüften GitHub-Pages-Veröffentlichung
+# GitHub Pages mit Entenarchiv 4
 
-Die App funktioniert weiterhin auch mit der bisherigen Pages-Einstellung `Deploy from a branch`. Für die sicherere Veröffentlichung sollte GitHub Pages einmalig auf `GitHub Actions` umgestellt werden.
+Entenarchiv wird über den vorhandenen benutzerdefinierten GitHub-Actions-Workflow geprüft und veröffentlicht.
 
-## Vor dem Upload
+## Keine erneute Pages-Umstellung erforderlich
 
-1. In Entenarchiv ein aktuelles JSON-Backup erstellen.
+Wenn unter **Settings → Pages → Source** bereits **GitHub Actions** ausgewählt ist und Version 3.9 erfolgreich veröffentlicht wurde, muss dort für Version 4 nichts geändert werden.
+
+Die beiden vorgeschlagenen Vorlagen **GitHub Pages Jekyll** und **Static HTML** dürfen nicht zusätzlich konfiguriert werden.
+
+## Vorhandene Workflow-Datei
+
+```text
+.github/workflows/deploy-pages.yml
+```
+
+Der Workflow führt bei jedem Commit auf `main` aus:
+
+1. Projekt laden,
+2. Node.js bereitstellen,
+3. `npm run check`,
+4. `npm run build`,
+5. das geprüfte Verzeichnis `dist/` als Pages-Artefakt hochladen,
+6. GitHub Pages veröffentlichen.
+
+## Update auf 4.0.0
+
+1. JSON-Backup erstellen.
 2. Bei eigenen Coverbildern zusätzlich ein Medien-Backup erstellen.
-3. Das Update-ZIP entpacken.
-4. Im Finder mit `Cmd + Shift + .` versteckte Dateien einblenden. Dadurch wird der Ordner `.github` sichtbar.
+3. ZIP entpacken.
+4. Den vollständigen sichtbaren Projektinhalt in das bestehende Repository hochladen.
+5. Vorhandene Dateien ersetzen.
+6. Darauf achten, dass insbesondere `archive-model.js`, `scripts`, `tests`, `package.json` und `version.json` vorhanden sind.
+7. Mit beispielsweise `Entenarchiv Version 4.0.0` committen.
+8. Unter **Actions** den Lauf **Entenarchiv prüfen und veröffentlichen** öffnen.
+9. Erst nach einem vollständig grünen Workflow die App auf dem iPhone neu öffnen.
 
-## GitHub Pages umstellen
+Der versteckte Ordner `.github` muss nicht erneut hochgeladen werden, wenn der Workflow bereits aus Version 3.9 im Repository vorhanden ist. Die neue ZIP enthält ihn trotzdem vollständig für neue Installationen oder eine spätere Wiederherstellung.
 
-1. Das Repository `Entenarchiv` beziehungsweise `ComicArchiv` auf GitHub öffnen.
-2. `Settings` öffnen.
-3. Links `Pages` auswählen.
-4. Unter `Build and deployment` bei `Source` den Eintrag `GitHub Actions` wählen.
+## Woran eine erfolgreiche Veröffentlichung erkennbar ist
 
-Die bisher veröffentlichte Seite bleibt normalerweise erreichbar, bis der neue Workflow eine geprüfte Version bereitstellt.
+Im Workflow müssen beide Jobs grün sein:
 
-## Update hochladen
+```text
+Qualitätsprüfung
+GitHub Pages veröffentlichen
+```
 
-1. Im Repository `Add file → Upload files` wählen.
-2. Den vollständigen Inhalt des entpackten Ordners hochladen.
-3. Darauf achten, dass auch `.github/workflows/deploy-pages.yml`, `scripts`, `tests`, `package.json` und `version.json` enthalten sind.
-4. Mit `Entenarchiv Version 3.9.0` committen.
-5. Den Reiter `Actions` öffnen.
-6. Der Lauf `Entenarchiv prüfen und veröffentlichen` muss vollständig grün werden.
-
-Erst nach erfolgreicher Qualitätsprüfung wird das Produktionspaket veröffentlicht.
-
-## Falls der Workflow nicht startet
-
-- Prüfen, ob der Ordner `.github/workflows` wirklich im Repository vorhanden ist.
-- Unter `Actions` kann der Workflow zusätzlich über `Run workflow` manuell gestartet werden.
-- Die App kann notfalls weiterhin über die bisherige Branch-Veröffentlichung betrieben werden; die Sicherheitsfunktionen in Version 3.9.0 sind davon unabhängig.
+Erst danach wird die neue Version über die bestehende GitHub-Pages-Adresse ausgeliefert.

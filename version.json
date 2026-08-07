@@ -1,7 +1,8 @@
 {
-  "appVersion": "3.9.0",
-  "dataFormatVersion": 8,
+  "appVersion": "4.0.0",
+  "dataFormatVersion": 9,
   "releaseChannel": "stable",
   "releasedAt": "2026-08-07",
-  "minimumBackupVersion": 1
+  "minimumBackupVersion": 1,
+  "archiveModelVersion": 1
 }

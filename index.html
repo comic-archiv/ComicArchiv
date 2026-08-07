@@ -112,7 +112,7 @@
 <div class="backup-status-card"><span class="stat-label">Backup-Status</span><strong id="backup-health">Wird geprüft …</strong><small class="muted-copy" id="backup-change-count">0 Änderungen seit Backup</small></div>
 <div class="backup-status-card"><span class="stat-label">Letztes JSON-Backup</span><strong id="last-backup">Noch keines</strong></div>
 
-</div><details class="backup-technical-details"><summary>Technische Speicherdetails</summary><div class="backup-technical-content"><div class="backup-status-card"><span class="stat-label">Speichermodus</span><strong id="storage-persistence">Wird geprüft …</strong><small class="muted-copy" id="storage-usage"></small></div><button class="text-button storage-button" id="request-persistence" type="button">Speicherschutz anfragen</button><button class="text-button storage-button" id="open-diagnostics" type="button">Diagnose &amp; Sicherheit</button></div></details>
+</div><details class="backup-technical-details"><summary>Technische Speicherdetails</summary><div class="backup-technical-content"><div class="backup-status-card"><span class="stat-label">Speichermodus</span><strong id="storage-persistence">Wird geprüft …</strong><small class="muted-copy" id="storage-usage"></small></div><div class="backup-status-card"><span class="stat-label">Archivkern</span><strong id="archive-core-summary">Wird geprüft …</strong><small class="muted-copy">Reihen, Ausgaben und Exemplare sind getrennt gespeichert.</small></div><button class="text-button storage-button" id="request-persistence" type="button">Speicherschutz anfragen</button><button class="text-button storage-button" id="open-diagnostics" type="button">Diagnose &amp; Sicherheit</button><button class="text-button storage-button hidden" id="open-archive-migration" type="button">Migrationsbericht öffnen</button></div></details>
 <div class="backup-actions">
 <button class="primary-button" id="export-json" type="button">JSON-Backup erstellen</button>
 <button class="secondary-button" id="export-csv" type="button">Sammlung als CSV</button>
@@ -124,7 +124,7 @@
 </div>
 <p aria-live="polite" class="form-message" id="export-message" role="status"></p>
 <p class="backup-help">JSON sichert deine Daten. Eigene Coverbilder sicherst du separat unter „Medien &amp; Metadaten“.</p>
-<p class="app-version-footer">Entenarchiv <span id="app-version">v3.9.0</span></p></section>
+<p class="app-version-footer">Entenarchiv <span id="app-version">v4.0.0</span></p></section>
 </main>
 <nav aria-label="Hauptnavigation" class="bottom-nav"><button class="bottom-nav-item" id="nav-calendar" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 8.5h15M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path></svg><span>Kalender</span></button><button class="bottom-nav-item bottom-nav-primary" id="nav-add" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg><span>Hinzufügen</span></button><button class="bottom-nav-item" id="nav-statistics" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"></path></svg><span>Statistiken</span></button></nav><section aria-hidden="true" aria-labelledby="add-page-title" class="app-page hidden" id="add-page">
 <header class="app-page-header">
@@ -596,14 +596,15 @@
 </div>
 <div aria-labelledby="duplicate-modal-title" aria-modal="true" class="modal hidden" id="duplicate-modal" role="dialog">
 <div class="modal-backdrop" data-close-duplicate=""></div>
-<section class="modal-card">
-<div class="section-heading"><div><p class="eyebrow">Exemplare verwalten</p><h2 id="duplicate-modal-title">Zweites Exemplar</h2></div><button aria-label="Exemplarverwaltung schließen" class="icon-button small-icon-button" id="close-duplicate" type="button">×</button></div>
+<section class="modal-card copy-manager-card">
+<div class="section-heading"><div><p class="eyebrow">Exemplare verwalten</p><h2 id="duplicate-modal-title">Physische Exemplare</h2></div><button aria-label="Exemplarverwaltung schließen" class="icon-button small-icon-button" id="close-duplicate" type="button">×</button></div>
 <p class="modal-context" id="duplicate-context"></p>
+<p class="section-intro compact-intro">Jedes physische Buch erhält einen eigenen Zustand. Gelesen, foliert und Notizen lassen sich ebenfalls je Exemplar pflegen.</p>
 <form id="duplicate-form" novalidate="">
-<div class="field field-full"><div class="field-label-row"><label for="duplicate-modal-condition">Zustand des zweiten Exemplars</label><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Hilfe</button></div><select id="duplicate-modal-condition"></select></div>
+<div class="copy-manager-list" id="copy-manager-list"></div>
+<button class="secondary-button copy-add-button" id="copy-manager-add" type="button">Weiteres Exemplar hinzufügen</button>
 <div class="modal-actions duplicate-actions">
-<button class="primary-button" id="duplicate-save" type="submit">Zweites Exemplar hinzufügen</button>
-<button class="danger-button hidden" id="duplicate-remove" type="button">Zweites Exemplar entfernen</button>
+<button class="primary-button" id="duplicate-save" type="submit">Exemplare speichern</button>
 <button class="secondary-button" data-close-duplicate="" type="button">Abbrechen</button>
 </div>
 <p aria-live="polite" class="form-message" id="duplicate-message" role="status"></p>
@@ -655,6 +656,20 @@
 <fieldset class="import-mode"><legend>Importart</legend><label class="check-row"><input checked="" id="import-mode-merge" name="importMode" type="radio" value="merge"/><span><strong>Zusammenführen</strong><small>Vorhandene Einträge bleiben erhalten.</small></span></label><label class="check-row"><input id="import-mode-replace" name="importMode" type="radio" value="replace"/><span><strong>Ersetzen</strong><small>Die aktuelle Sammlung wird vollständig ersetzt.</small></span></label></fieldset>
 <div class="modal-actions"><button class="primary-button" disabled="" id="import-submit" type="button">Import starten</button><button class="secondary-button" data-close-import="" type="button">Abbrechen</button></div>
 <p aria-live="polite" class="form-message" id="import-message" role="status"></p>
+</section>
+</div>
+<div aria-labelledby="archive-migration-title" aria-modal="true" class="modal hidden" id="archive-migration-modal" role="dialog">
+<div class="modal-backdrop" data-close-archive-migration=""></div>
+<section class="modal-card archive-migration-card">
+<div class="section-heading"><div><p class="eyebrow">Entenarchiv 4</p><h2 id="archive-migration-title">Archivkern erfolgreich eingerichtet</h2></div><button aria-label="Migrationsbericht schließen" class="icon-button small-icon-button" id="close-archive-migration" type="button">×</button></div>
+<p class="section-intro">Deine bisherigen Einträge wurden in Reihen, Ausgaben und physische Exemplare aufgeteilt. Der vorherige Datenstand bleibt lokal als Rückfallpunkt erhalten.</p>
+<div class="archive-migration-summary" id="archive-migration-summary"></div>
+<div class="modal-actions">
+<button class="primary-button" id="archive-migration-confirm" type="button">Verstanden</button>
+<button class="secondary-button" id="archive-migration-export" type="button">Bericht exportieren</button>
+<button class="text-button danger-text" id="archive-migration-restore" type="button">Vorherigen Datenstand wiederherstellen</button>
+</div>
+<p aria-live="polite" class="form-message" id="archive-migration-message" role="status"></p>
 </section>
 </div>
 <div aria-labelledby="diagnostics-title" aria-modal="true" class="modal hidden" id="diagnostics-modal" role="dialog">

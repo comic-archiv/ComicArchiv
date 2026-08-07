@@ -1,128 +1,168 @@
-# Entenarchiv 3.9.0
+# Entenarchiv 4.0.0
 
 Entenarchiv ist eine private, mobile und offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderbänden.
 
-Version 3.9.0 ist bewusst kein großes Funktionspaket. Sie schafft das Sicherheits- und Qualitätsfundament für Entenarchiv 4, ohne die vorhandene Sammlung oder das Datenformat zu verändern.
+Version 4.0.0 führt den neuen **Archivkern** ein. Reihen, Ausgaben und physische Exemplare werden intern nicht mehr als ein einziger Datensatz behandelt, sondern sauber voneinander getrennt. Die gewohnte Oberfläche bleibt dabei erhalten.
 
-## Neu in 3.9.0
+## Das neue Archivmodell
 
-### Sicherer Modus
+### Reihen
 
-`recovery.js` wird vor der eigentlichen App geladen. Scheitert der Start oder ist er nach 30 Sekunden nicht abgeschlossen, bleibt ein unabhängiger Notfallzugang verfügbar.
+Jede Reihe besitzt eine dauerhafte interne ID. Der sichtbare Name kann geändert werden, ohne dass Verknüpfungen zu Ausgaben verloren gehen.
 
-Der sichere Modus kann:
+Beispiel:
 
-- ein JSON-Notfall-Backup direkt aus IndexedDB erstellen,
-- ein vollständiges Notfall-Backup einschließlich eigener Coverbilder erstellen,
-- ungültige Kalenderdaten und beschädigte technische Einstellungen normalisieren,
-- Service Worker und Offline-App-Dateien erneuern, ohne die Sammlung zu löschen,
-- einen technischen Diagnosebericht exportieren,
-- die App kontrolliert neu starten.
+```text
+Reihen-ID: ltb-main
+Name: Lustiges Taschenbuch
+Duckipedia-Muster: LTB_{band}
+```
 
-Ein einzelner beschädigter Termin oder eine fehlerhafte Einstellung soll dadurch nicht mehr den Zugriff auf die Sicherungsfunktionen verhindern.
+Eigene Reihen erhalten ebenfalls eine stabile ID. Aliase und frühere Schreibweisen können dem gleichen Reiheneintrag zugeordnet werden.
 
-### Diagnose & Sicherheit
+### Ausgaben
 
-Unter `Export & Backup → Technische Speicherdetails → Diagnose & Sicherheit` prüft Entenarchiv unter anderem:
+Eine Ausgabe beschreibt den eigentlichen Band:
 
-- App- und Datenformat-Version,
-- vorhandene IndexedDB-Speicherbereiche,
-- Anzahl der Comics, Cover und Metadatensätze,
-- Gültigkeit der Kalenderwerte,
-- Speicherbelegung und gemeldetes Kontingent,
-- Service-Worker- und Offline-Status,
-- Ladezustand der optionalen Scanner- und PDF-Module,
-- die letzten technischen Fehlermeldungen.
+- Reihe
+- Bandnummer
+- Titel
+- Erscheinungsjahr
+- Duckipedia-Daten
+- Coververknüpfung
 
-Der Diagnosebericht nimmt keine Comic-Titel, Notizen oder Bildinhalte als reguläre Berichtsdaten auf.
+Die Kombination aus Reihen-ID und Bandnummer ist eindeutig. Schreibweisen wie `1`, `01` und `001` werden bei rein numerischen Bandnummern als dieselbe Ausgabe erkannt.
 
-### Getrennter Testmodus
+### Physische Exemplare
 
-Im Diagnosebereich lässt sich ein separater Testmodus öffnen. Er verwendet die eigene Datenbank `comicarchiv-db-test` und berührt die echte Sammlung in `comicarchiv-db` nicht.
+Zustand, gelesen, foliert und exemplarbezogene Notizen liegen jetzt am jeweiligen physischen Exemplar. Eine Ausgabe kann beliebig viele Exemplare besitzen.
 
-Damit lassen sich beispielsweise folgende Vorgänge gefahrlos ausprobieren:
+```text
+LTB 239
+├── Exemplar 1 · Zustand 1 · gelesen
+├── Exemplar 2 · Zustand 2 · foliert
+└── Exemplar 3 · Zustand 3 · Tauschbestand
+```
 
-- Backup importieren,
-- Reihen umbenennen oder löschen,
-- viele Testbände scannen,
-- Flohmarktfunde übernehmen,
-- Kalenderdaten aktualisieren.
+Fehlbandberechnung, Reihenfortschritt und Ausgabenzähler zählen den Band weiterhin nur einmal. Statistiken zu physischen Büchern können dagegen alle Exemplare berücksichtigen.
 
-Ein gut sichtbarer gelber Hinweis kennzeichnet den Testmodus. Über `Echte Sammlung öffnen` gelangt man zurück.
+## Verlustfreie Umstellung
 
-### Schnellere Starts durch bedarfsgeladene Module
+Beim ersten Start nach dem Update:
 
-Die großen Drittanbieter-Bibliotheken werden nicht mehr bei jedem App-Start ausgeführt:
+1. wird der bisherige Datenstand gelesen,
+2. wird lokal ein Rückfall-Schnappschuss angelegt,
+3. erhalten Reihen stabile IDs,
+4. werden doppelte Datensätze derselben Ausgabe zusammengeführt,
+5. werden vorhandene Doppelstücke in einzelne Exemplare überführt,
+6. werden eigene Cover auf die neue Ausgaben-ID umgehängt,
+7. wird der neue Archivgraph validiert,
+8. wird die kompatible Projektion für die bisherige Oberfläche erstellt.
 
-- Quagga2 wird erst beim Öffnen des Serien-Scanners geladen.
-- jsPDF wird erst beim Erzeugen einer Flohmarkt-PDF geladen.
+Kann auch nur ein Eintrag nicht sicher zugeordnet werden, wird die Umstellung abgebrochen. Die bisherige Sammlung bleibt dann im Legacy-Speicher verfügbar und kann über den sicheren Modus exportiert werden.
 
-Bereits vorhandene Offline-Kopien werden bei einem Update übernommen. Bei einer vollständigen Neuinstallation werden die Module nach der ersten Verwendung lokal zwischengespeichert.
+Nach erfolgreicher Umstellung zeigt Entenarchiv einmalig einen Migrationsbericht. Er kann später unter **Export & Backup → Technische Speicherdetails** erneut geöffnet werden und enthält:
 
-### Fehlertoleranter Service Worker
+- bisherigen Einträgen,
+- eindeutigen Ausgaben,
+- physischen Exemplaren,
+- verwendeten Reihen,
+- zusammengeführten Altdubletten,
+- übernommenen zusätzlichen Exemplaren.
 
-Der Service Worker unterscheidet jetzt:
+## Exemplare verwalten
 
-- kritische App-Dateien,
-- kleine optionale Kalenderdateien,
-- große Module, die nur bei Bedarf gebraucht werden.
+Über das Einstellungsmenü einer Comic-Karte steht **Exemplare verwalten** zur Verfügung. Dort lassen sich:
 
-Fehlt eine kritische Datei während der Installation, wird die bisher aktive Version nicht durch eine unvollständige Offline-Version ersetzt. Fehler bei optionalen Dateien werden protokolliert, blockieren die Kern-App aber nicht.
+- beliebig viele Exemplare hinzufügen,
+- Zustand pro Exemplar pflegen,
+- gelesen und foliert pro Exemplar setzen,
+- exemplarbezogene Notizen hinterlegen,
+- zusätzliche Exemplare wieder entfernen.
 
-### Automatische Qualitätsprüfung
+Mindestens ein Exemplar bleibt immer erhalten.
 
-Das Projekt enthält 19 automatisierte Tests für:
+## Schutz vor doppelten Ausgaben
 
-- Versionen und Datenformat,
-- Migration des Zustandssystems,
-- Duckipedia-Pfade und Umlaute,
-- Fehlbandberechnung,
-- Barcode-Zusatzcodes,
-- Kalenderimport und Jahr-0-Schutz,
-- CSV-Escaping,
-- Backup-Erzeugung und -Validierung,
-- eindeutige HTML-IDs,
-- vorhandene JavaScript-Ziele,
-- Offline-Dateien,
-- Lazy Loading,
-- Diagnose, sicheren Modus und Testmodus.
+Scanner, manuelle Erfassung, Flohmarkt-Modus und Backup-Import verwenden dieselbe Ausgabenidentität. Wird ein bereits vorhandener Band erneut erfasst, entsteht keine zweite Ausgabe. Stattdessen kann ein weiteres physisches Exemplar an die vorhandene Ausgabe angehängt werden.
 
-Zusätzlich prüft `scripts/validate-project.mjs` alle eigenen JavaScript-Dateien syntaktisch und kontrolliert die Projektstruktur.
+## Backups in Version 4
 
-## Geprüfte Veröffentlichung über GitHub Actions
+JSON- und Medien-Backups enthalten nun zwei Darstellungen:
 
-Unter `.github/workflows/deploy-pages.yml` liegt ein optionaler Veröffentlichungsworkflow. Bei Verwendung von `GitHub Actions` als Pages-Quelle passiert Folgendes:
+1. eine kompatible Comic-Liste für ältere Entenarchiv-Versionen und normale JSON-Werkzeuge,
+2. den validierten Archivkern mit Reihen, Ausgaben und Exemplaren.
 
-1. Projektstruktur und JavaScript werden geprüft.
-2. Alle 19 Tests müssen erfolgreich sein.
-3. Ein sauberes Produktionspaket wird in `dist/` erzeugt.
-4. Nur dieses geprüfte Paket wird auf GitHub Pages veröffentlicht.
+Beim Import ist der Archivkern die maßgebliche Darstellung. Backups aus älteren Versionen ohne Archivkern bleiben kompatibel und werden beim Import automatisch übertragen.
 
-Schlägt die Qualitätsprüfung fehl, findet keine neue Actions-Veröffentlichung statt.
+Medien-Backups enthalten weiterhin zusätzlich die eigenen Coverbilder.
 
-## Datenspeicherung und Kompatibilität
+## Diagnose und sicherer Modus
 
-- Produktive Datenbank: `comicarchiv-db`
+Die Sicherheitsfunktionen aus Version 3.9 bleiben vollständig enthalten. Die Diagnose zeigt jetzt getrennt:
+
+- Anzahl Reihen,
+- Anzahl Ausgaben,
+- Anzahl physischer Exemplare,
+- Zustand des Archivkerns,
+- Archivmodell-Version,
+- mögliche verwaiste oder doppelte Datensätze.
+
+Der sichere Modus kann Version-4-Notfall-Backups direkt aus den neuen IndexedDB-Speichern erzeugen.
+
+## Technische Daten
+
+- App-Version: `4.0.0`
+- Datenformat: `9`
+- Archivmodell: `1`
+- IndexedDB-Schema: `5`
+- produktive Datenbank: `comicarchiv-db`
 - Testdatenbank: `comicarchiv-db-test`
-- IndexedDB-Schema: unverändert, Version 4
-- Datenformat: unverändert, Version 8
-- bestehende Comics, Cover, Reihen, Ziele, Kalendertermine und Flohmarktmarkierungen bleiben erhalten
-- Backups aus früheren Versionen bleiben kompatibel
 
-Vor jedem Update bleibt ein aktuelles JSON-Backup empfohlen. Eigene Coverbilder benötigen zusätzlich das Medien-Backup.
+Neue IndexedDB-Speicher:
 
-## Projektprüfung
+```text
+seriesCatalog
+issues
+copies
+archiveMeta
+migrationSnapshots
+```
 
-Die Qualitätsprüfung läuft in GitHub automatisch. Mit einer vorhandenen Node.js-Umgebung kann sie zusätzlich lokal ausgeführt werden:
+Der bisherige Speicher `comics` bleibt als kompatible Projektion bestehen. Das reduziert das Risiko bei der Umstellung und erlaubt der bestehenden Oberfläche einen kontrollierten Übergang zur neuen Architektur.
+
+## Projektstruktur
+
+```text
+Entenarchiv/
+├── archive-model.js       # reines Datenmodell, Migration und Validierung
+├── storage.js             # IndexedDB und kompatible Projektion
+├── app.js                 # bestehende Oberfläche und Funktionssteuerung
+├── export.js              # CSV, PDF, JSON und Archivkern-Backups
+├── recovery.js            # sicherer Modus und Notfall-Backups
+├── tests/                 # automatisierte Logik- und Strukturtests
+└── .github/workflows/     # geprüfte GitHub-Pages-Veröffentlichung
+```
+
+## Qualitätsprüfung
 
 ```text
 npm run check
 ```
 
-Ein sauberes Pages-Paket wird erzeugt mit:
+prüft Struktur, Syntax, Datenmodell, Migration, Backup-Kompatibilität, Scannerlogik, Kalender und Offline-Dateien. Version 4.0.0 umfasst 40 automatisierte Logiktests. Zusätzlich wurde die vollständige Migration einer alten IndexedDB sowie der normale App-Start in einem realen Chromium-Browser geprüft.
 
 ```text
 npm run build
 ```
 
-Für die normale Nutzung und Bearbeitung der App ist keine lokale Node.js-Installation erforderlich.
+erzeugt das bereinigte GitHub-Pages-Paket in `dist/`.
+
+Für die normale Nutzung und Bearbeitung im GitHub-Browsereditor ist keine lokale Node.js-Installation erforderlich.
+
+
+Ausführliche Informationen:
+
+- `MIGRATION-V4.md` – Ablauf, Übertragungsregeln, Bericht und Wiederherstellung
+- `QUALITY-REPORT.md` – automatisierte und reale Browserprüfungen
+- `GITHUB-ACTIONS-SETUP.md` – geprüfte Veröffentlichung über GitHub Pages

@@ -9,6 +9,7 @@ const runtimeEntries = [
   "index.html",
   "style.css",
   "app.js",
+  "archive-model.js",
   "asset-loader.js",
   "calendar.js",
   "config.js",

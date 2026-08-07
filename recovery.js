@@ -1,8 +1,9 @@
 (function initializeEntenarchivRecovery() {
   "use strict";
 
-  const APP_VERSION = "3.9.0";
-  const DATA_FORMAT_VERSION = 8;
+  const APP_VERSION = "4.0.0";
+  const DATA_FORMAT_VERSION = 9;
+  const ARCHIVE_MODEL_VERSION = 1;
   const IS_TEST_MODE = new URLSearchParams(window.location.search).get("testmode") === "1";
   const DATABASE_NAME = IS_TEST_MODE ? "comicarchiv-db-test" : "comicarchiv-db";
   const SETTINGS_KEY = "app";
@@ -190,6 +191,7 @@
       appVersion: APP_VERSION,
       backupType: includeMedia ? "media" : "data",
       dataFormatVersion: DATA_FORMAT_VERSION,
+      archiveModelVersion: ARCHIVE_MODEL_VERSION,
       mediaFormatVersion: includeMedia ? 1 : null,
       exportedAt: new Date().toISOString(),
       sourceOrigin: location.origin,
@@ -207,10 +209,29 @@
       },
       recoveryDiagnostics: {
         databaseVersion: snapshot.databaseVersion,
+        archiveStatus: snapshot.archiveMeta?.status || "unknown",
+        archiveModelVersion: Number(snapshot.archiveMeta?.archiveModelVersion) || null,
+        issueCount: snapshot.issues?.length || 0,
+        copyCount: snapshot.copies?.length || 0,
         createdInSafeMode: true,
         recentErrors: readDiagnosticLog()
       }
     };
+
+    if (
+      snapshot.archiveMeta?.status === "complete" &&
+      Array.isArray(snapshot.series) &&
+      Array.isArray(snapshot.issues) &&
+      Array.isArray(snapshot.copies)
+    ) {
+      backup.archiveCore = {
+        modelVersion: Number(snapshot.archiveMeta.archiveModelVersion) || ARCHIVE_MODEL_VERSION,
+        series: snapshot.series,
+        issues: snapshot.issues,
+        copies: snapshot.copies,
+        report: snapshot.archiveMeta.report || null
+      };
+    }
 
     if (includeMedia) {
       backup.covers = [];
@@ -246,10 +267,28 @@
       const covers = includeMedia && database.objectStoreNames.contains("coverMedia")
         ? await readAllFromStore(database, "coverMedia")
         : [];
+      const series = database.objectStoreNames.contains("seriesCatalog")
+        ? await readAllFromStore(database, "seriesCatalog")
+        : [];
+      const issues = database.objectStoreNames.contains("issues")
+        ? await readAllFromStore(database, "issues")
+        : [];
+      const copies = database.objectStoreNames.contains("copies")
+        ? await readAllFromStore(database, "copies")
+        : [];
+      const archiveMeta = database.objectStoreNames.contains("archiveMeta")
+        ? await readOneFromStore(database, "archiveMeta", "archive-core")
+        : null;
 
       return {
         databaseVersion: database.version,
         comics,
+        series,
+        issues,
+        copies,
+        archiveMeta,
+        issueCount: issues.length,
+        copyCount: copies.length,
         settings: settingsRecord?.value || {},
         metadataCache,
         covers
@@ -374,7 +413,9 @@
         const snapshot = await readDatabaseSnapshot(false);
         databaseSummary = {
           version: snapshot.databaseVersion,
-          comics: snapshot.comics.length,
+          issues: snapshot.issueCount || snapshot.comics.length,
+          physicalCopies: snapshot.copyCount || snapshot.comics.reduce((total, comic) => total + (Array.isArray(comic?.copies) && comic.copies.length ? comic.copies.length : (comic?.isDuplicate ? 2 : 1)), 0),
+          legacyMirrorEntries: snapshot.comics.length,
           metadataCache: snapshot.metadataCache.length,
           calendarEvents: Array.isArray(snapshot.settings.calendarEvents) ? snapshot.settings.calendarEvents.length : 0,
           customSeries: Array.isArray(snapshot.settings.customSeriesConfigs)
@@ -390,6 +431,7 @@
         generatedAt: new Date().toISOString(),
         appVersion: APP_VERSION,
         dataFormatVersion: DATA_FORMAT_VERSION,
+        archiveModelVersion: ARCHIVE_MODEL_VERSION,
         testMode: IS_TEST_MODE,
         databaseName: DATABASE_NAME,
         environment: {

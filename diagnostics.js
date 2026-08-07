@@ -2,7 +2,17 @@ const IS_TEST_MODE = resolveTestMode();
 const DIAGNOSTIC_STORAGE_KEY = IS_TEST_MODE ? "entenarchiv-diagnostics-v1-test" : "entenarchiv-diagnostics-v1";
 const MAX_DIAGNOSTIC_ENTRIES = 30;
 const DATABASE_NAME = IS_TEST_MODE ? "comicarchiv-db-test" : "comicarchiv-db";
-const EXPECTED_STORES = Object.freeze(["comics", "settings", "coverMedia", "metadataCache"]);
+const EXPECTED_STORES = Object.freeze([
+  "comics",
+  "settings",
+  "coverMedia",
+  "metadataCache",
+  "seriesCatalog",
+  "issues",
+  "copies",
+  "archiveMeta",
+  "migrationSnapshots"
+]);
 
 export function recordDiagnosticError(error, context = "Unbekannter Bereich", level = "error") {
   const entry = createDiagnosticEntry(error, context, level);
@@ -33,7 +43,7 @@ export function clearDiagnosticLog() {
   }
 }
 
-export async function collectDiagnosticReport({ appVersion = "", dataFormatVersion = null, optionalAssets = {} } = {}) {
+export async function collectDiagnosticReport({ appVersion = "", dataFormatVersion = null, archiveModelVersion = null, optionalAssets = {} } = {}) {
   const [database, storage, serviceWorker] = await Promise.all([
     collectDatabaseSummary(),
     collectStorageSummary(),
@@ -46,6 +56,7 @@ export async function collectDiagnosticReport({ appVersion = "", dataFormatVersi
     generatedAt: new Date().toISOString(),
     appVersion,
     dataFormatVersion,
+    archiveModelVersion,
     environment: collectEnvironmentSummary(),
     database,
     storage,
@@ -167,13 +178,29 @@ async function collectDatabaseSummary() {
     const settingsRecord = database.objectStoreNames.contains("settings")
       ? await readSettingsRecord(database)
       : null;
+    const archiveCore = database.objectStoreNames.contains("archiveMeta")
+      ? await readArchiveCoreRecord(database)
+      : null;
+    const archiveGraph = await inspectArchiveGraph(database, stores);
+    const allStoresAvailable = EXPECTED_STORES.every((storeName) => stores[storeName]?.available);
+    const archiveReady = archiveCore?.status === "complete" && archiveGraph.ok;
 
     return {
       available: true,
-      ok: EXPECTED_STORES.every((storeName) => stores[storeName]?.available),
-      error: "",
+      ok: allStoresAvailable && archiveReady,
+      error: archiveCore?.status === "failed"
+        ? archiveCore.error || "Archivkern-Migration fehlgeschlagen."
+        : (!archiveGraph.ok ? archiveGraph.summary : ""),
       version: database.version,
       stores,
+      archiveCore: archiveCore ? {
+        status: archiveCore.status || "unknown",
+        archiveModelVersion: Number(archiveCore.archiveModelVersion) || null,
+        completedAt: archiveCore.completedAt || null,
+        counts: archiveCore.counts || null,
+        error: archiveCore.error || ""
+      } : null,
+      archiveGraph,
       settingsHealth: inspectSettingsHealth(settingsRecord?.value)
     };
   } catch (error) {
@@ -231,6 +258,112 @@ function readSettingsRecord(database) {
     const request = transaction.objectStore("settings").get("app");
     request.onsuccess = () => resolve(request.result || null);
     request.onerror = () => reject(request.error || new Error("Einstellungen konnten nicht geprüft werden."));
+  });
+}
+
+function readArchiveCoreRecord(database) {
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction("archiveMeta", "readonly");
+    const request = transaction.objectStore("archiveMeta").get("archive-core");
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error || new Error("Archivkern konnte nicht geprüft werden."));
+  });
+}
+
+async function inspectArchiveGraph(database, stores) {
+  const required = ["seriesCatalog", "issues", "copies"];
+  if (!required.every((storeName) => stores[storeName]?.available)) {
+    return {
+      available: false,
+      ok: false,
+      counts: { series: 0, issues: 0, copies: 0 },
+      problems: [{ code: "stores-missing", count: required.filter((storeName) => !stores[storeName]?.available).length }],
+      summary: "Mindestens ein Speicherbereich des Archivkerns fehlt."
+    };
+  }
+
+  try {
+    const [series, issues, copies] = await Promise.all(required.map((storeName) => readAllStore(database, storeName)));
+    const seriesIds = new Set(series.map((entry) => String(entry?.id || "")).filter(Boolean));
+    const issueIds = new Set(issues.map((entry) => String(entry?.id || "")).filter(Boolean));
+    const issueKeys = new Set();
+    const copyIds = new Set();
+    const copiesByIssue = new Map();
+    const problems = [];
+
+    const duplicateIssueIds = issues.length - issueIds.size;
+    const duplicateSeriesIds = series.length - seriesIds.size;
+    let duplicateIssueKeys = 0;
+    let issuesWithUnknownSeries = 0;
+    let copiesWithUnknownIssue = 0;
+    let duplicateCopyIds = 0;
+
+    issues.forEach((issue) => {
+      const key = String(issue?.seriesVolumeKey || "");
+      if (key) {
+        if (issueKeys.has(key)) duplicateIssueKeys += 1;
+        issueKeys.add(key);
+      }
+      if (!seriesIds.has(String(issue?.seriesId || ""))) issuesWithUnknownSeries += 1;
+    });
+
+    copies.forEach((copy) => {
+      const copyId = String(copy?.id || "");
+      if (copyId) {
+        if (copyIds.has(copyId)) duplicateCopyIds += 1;
+        copyIds.add(copyId);
+      }
+      const issueId = String(copy?.issueId || "");
+      copiesByIssue.set(issueId, (copiesByIssue.get(issueId) || 0) + 1);
+      if (!issueIds.has(issueId)) copiesWithUnknownIssue += 1;
+    });
+
+    const issuesWithoutCopies = issues.reduce(
+      (total, issue) => total + (copiesByIssue.has(String(issue?.id || "")) ? 0 : 1),
+      0
+    );
+    const legacyMirrorCount = Number(stores.comics?.count);
+    const mirrorDifference = Number.isFinite(legacyMirrorCount) ? Math.abs(legacyMirrorCount - issues.length) : 0;
+
+    [
+      ["duplicate-series-ids", duplicateSeriesIds],
+      ["duplicate-issue-ids", duplicateIssueIds],
+      ["duplicate-issue-identities", duplicateIssueKeys],
+      ["duplicate-copy-ids", duplicateCopyIds],
+      ["issues-with-unknown-series", issuesWithUnknownSeries],
+      ["copies-with-unknown-issue", copiesWithUnknownIssue],
+      ["issues-without-copies", issuesWithoutCopies],
+      ["legacy-mirror-mismatch", mirrorDifference]
+    ].forEach(([code, count]) => {
+      if (count > 0) problems.push({ code, count });
+    });
+
+    return {
+      available: true,
+      ok: problems.length === 0,
+      counts: { series: series.length, issues: issues.length, copies: copies.length },
+      problems,
+      summary: problems.length === 0
+        ? `${issues.length} Ausgaben und ${copies.length} Exemplare sind konsistent verknüpft.`
+        : `${problems.reduce((total, problem) => total + problem.count, 0)} Inkonsistenz${problems.length === 1 ? "" : "en"} im Archivkern erkannt.`
+    };
+  } catch (error) {
+    return {
+      available: true,
+      ok: false,
+      counts: { series: 0, issues: 0, copies: 0 },
+      problems: [{ code: "graph-read-failed", count: 1 }],
+      summary: normalizeError(error).message
+    };
+  }
+}
+
+function readAllStore(database, storeName) {
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(storeName, "readonly");
+    const request = transaction.objectStore(storeName).getAll();
+    request.onsuccess = () => resolve(Array.isArray(request.result) ? request.result : []);
+    request.onerror = () => reject(request.error || new Error(`${storeName} konnte nicht geprüft werden.`));
   });
 }
 
@@ -343,6 +476,12 @@ function buildHealthChecks({ database, storage, serviceWorker }) {
     "Lokale Datenbank",
     database.ok,
     database.ok ? "Alle erwarteten Speicherbereiche sind verfügbar." : database.error || "Ein Speicherbereich fehlt."
+  ));
+  checks.push(createCheck(
+    "archive-core",
+    "Archivkern",
+    Boolean(database.archiveCore?.status === "complete" && database.archiveGraph?.ok),
+    database.archiveGraph?.summary || database.archiveCore?.error || "Archivkern konnte nicht geprüft werden."
   ));
   checks.push(createCheck(
     "calendar",
