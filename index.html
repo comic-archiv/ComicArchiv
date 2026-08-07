@@ -17,6 +17,10 @@
 </head>
 <body>
 <a class="skip-link" href="#main-content">Zum Inhalt springen</a>
+<div aria-hidden="true" class="test-mode-banner hidden" id="test-mode-banner">
+<div><strong>Separater Testmodus</strong><span>Änderungen hier verwenden eine eigene Testdatenbank und berühren deine echte Sammlung nicht.</span></div>
+<button class="secondary-button compact-button" id="leave-test-mode" type="button">Echte Sammlung öffnen</button>
+</div>
 <header class="app-header">
 <div class="brand">
 <img alt="" aria-hidden="true" class="brand-mark brand-logo" src="./icons/icon-192.png"/>
@@ -108,7 +112,7 @@
 <div class="backup-status-card"><span class="stat-label">Backup-Status</span><strong id="backup-health">Wird geprüft …</strong><small class="muted-copy" id="backup-change-count">0 Änderungen seit Backup</small></div>
 <div class="backup-status-card"><span class="stat-label">Letztes JSON-Backup</span><strong id="last-backup">Noch keines</strong></div>
 
-</div><details class="backup-technical-details"><summary>Technische Speicherdetails</summary><div class="backup-technical-content"><div class="backup-status-card"><span class="stat-label">Speichermodus</span><strong id="storage-persistence">Wird geprüft …</strong><small class="muted-copy" id="storage-usage"></small></div><button class="text-button storage-button" id="request-persistence" type="button">Speicherschutz anfragen</button></div></details>
+</div><details class="backup-technical-details"><summary>Technische Speicherdetails</summary><div class="backup-technical-content"><div class="backup-status-card"><span class="stat-label">Speichermodus</span><strong id="storage-persistence">Wird geprüft …</strong><small class="muted-copy" id="storage-usage"></small></div><button class="text-button storage-button" id="request-persistence" type="button">Speicherschutz anfragen</button><button class="text-button storage-button" id="open-diagnostics" type="button">Diagnose &amp; Sicherheit</button></div></details>
 <div class="backup-actions">
 <button class="primary-button" id="export-json" type="button">JSON-Backup erstellen</button>
 <button class="secondary-button" id="export-csv" type="button">Sammlung als CSV</button>
@@ -120,7 +124,7 @@
 </div>
 <p aria-live="polite" class="form-message" id="export-message" role="status"></p>
 <p class="backup-help">JSON sichert deine Daten. Eigene Coverbilder sicherst du separat unter „Medien &amp; Metadaten“.</p>
-<p class="app-version-footer">Entenarchiv <span id="app-version">v3.8.0</span></p></section>
+<p class="app-version-footer">Entenarchiv <span id="app-version">v3.9.0</span></p></section>
 </main>
 <nav aria-label="Hauptnavigation" class="bottom-nav"><button class="bottom-nav-item" id="nav-calendar" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 8.5h15M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path></svg><span>Kalender</span></button><button class="bottom-nav-item bottom-nav-primary" id="nav-add" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg><span>Hinzufügen</span></button><button class="bottom-nav-item" id="nav-statistics" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"></path></svg><span>Statistiken</span></button></nav><section aria-hidden="true" aria-labelledby="add-page-title" class="app-page hidden" id="add-page">
 <header class="app-page-header">
@@ -653,9 +657,47 @@
 <p aria-live="polite" class="form-message" id="import-message" role="status"></p>
 </section>
 </div>
+<div aria-labelledby="diagnostics-title" aria-modal="true" class="modal hidden" id="diagnostics-modal" role="dialog">
+<div class="modal-backdrop" data-close-diagnostics=""></div>
+<section class="modal-card diagnostics-card">
+<div class="section-heading"><div><p class="eyebrow">Sicherheitsfundament</p><h2 id="diagnostics-title">Diagnose &amp; Sicherheit</h2></div><button aria-label="Diagnose schließen" class="icon-button small-icon-button" id="close-diagnostics" type="button">×</button></div>
+<p class="diagnostics-intro">Die Prüfung liest nur technische Zustände und Anzahlen. Titel, Notizen und Coverinhalte werden nicht in den Diagnosebericht aufgenommen.</p>
+<div aria-live="polite" class="diagnostics-overview" id="diagnostics-overview"><p>Prüfung wird vorbereitet …</p></div>
+<div class="diagnostics-check-list" id="diagnostics-check-list"></div>
+<details class="diagnostics-error-details"><summary>Letzte technische Meldungen</summary><div class="diagnostics-error-list" id="diagnostics-error-list"></div></details>
+<div class="modal-actions diagnostics-actions">
+<button class="primary-button" id="run-diagnostics" type="button">Prüfung erneut ausführen</button>
+<button class="secondary-button" id="export-diagnostics" type="button">Diagnosebericht exportieren</button>
+<button class="secondary-button" id="open-recovery" type="button">Sicheren Modus öffnen</button>
+<button class="secondary-button" id="open-test-mode" type="button">Separaten Testmodus öffnen</button>
+<button class="text-button" id="clear-diagnostics" type="button">Meldungen löschen</button>
+<button class="secondary-button" data-close-diagnostics="" type="button">Schließen</button>
+</div>
+<p aria-live="polite" class="form-message" id="diagnostics-message" role="status"></p>
+</section>
+</div>
+<div aria-hidden="true" class="recovery-panel" hidden id="recovery-panel" role="dialog" aria-modal="true" aria-labelledby="recovery-title">
+<section class="recovery-card">
+<div class="recovery-heading">
+<div><p class="eyebrow">Notfallzugang</p><h2 id="recovery-title">Sicherer Modus</h2></div>
+<button aria-label="Sicheren Modus schließen" class="icon-button small-icon-button" hidden id="recovery-close" type="button">×</button>
+</div>
+<p id="recovery-summary">Entenarchiv konnte nicht vollständig gestartet werden.</p>
+<p class="recovery-error" hidden id="recovery-detail"></p>
+<div class="recovery-note"><strong>Deine Sammlung wird nicht automatisch gelöscht.</strong><span>Erstelle vor Reparaturen zuerst ein Notfall-Backup.</span></div>
+<div class="recovery-actions">
+<button class="primary-button" id="recovery-data-backup" type="button">Notfall-Backup erstellen</button>
+<button class="secondary-button" id="recovery-media-backup" type="button">Mit Coverbildern sichern</button>
+<button class="secondary-button" id="recovery-repair-calendar" type="button">Kalender &amp; Einstellungen reparieren</button>
+<button class="secondary-button" id="recovery-refresh-cache" type="button">App-Dateien erneuern</button>
+<button class="secondary-button" id="recovery-export-diagnostics" type="button">Diagnose exportieren</button>
+<button class="secondary-button" id="recovery-reload" type="button">App neu starten</button>
+</div>
+<p aria-live="polite" class="form-message recovery-status" id="recovery-status" role="status"></p>
+</section>
+</div>
 <div aria-atomic="true" aria-live="polite" class="toast" id="toast" role="status"></div>
-<script src="./vendor/quagga.min.js"></script>
-<script src="./vendor/jspdf.umd.min.js"></script>
+<script src="./recovery.js"></script>
 <script src="./app.js" type="module"></script>
 </body>
 </html>

@@ -1,8 +1,14 @@
-const CACHE_NAME = "comicarchiv-shell-v3-8-0";
-const APP_SHELL = [
+const APP_VERSION = "3.9.0";
+const CACHE_PREFIX = "entenarchiv-shell-";
+const CACHE_NAME = `${CACHE_PREFIX}v3-9-0`;
+
+const CORE_SHELL = Object.freeze([
   "./",
   "./index.html",
   "./style.css",
+  "./recovery.js",
+  "./asset-loader.js",
+  "./diagnostics.js",
   "./config.js",
   "./storage.js",
   "./missing.js",
@@ -11,44 +17,51 @@ const APP_SHELL = [
   "./duckipedia.js",
   "./media.js",
   "./calendar.js",
-  "./data/kalender-index.json",
-  "./data/ltb-2026.ics",
   "./app.js",
-  "./vendor/quagga.min.js",
-  "./vendor/jspdf.umd.min.js",
   "./manifest.webmanifest",
+  "./version.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon-1024.png",
   "./icons/apple-touch-icon.png"
-];
+]);
+
+const OPTIONAL_SHELL = Object.freeze([
+  "./data/kalender-index.json",
+  "./data/ltb-2026.ics"
+]);
+
+// Diese großen Module werden erst angefordert, wenn Scanner oder PDF-Export
+// tatsächlich geöffnet werden. Vorhandene Cache-Kopien aus einer älteren
+// Version werden ohne erneuten Download übernommen.
+const ON_DEMAND_ASSETS = Object.freeze([
+  "./vendor/quagga.min.js",
+  "./vendor/jspdf.umd.min.js"
+]);
+
+let optionalPrecacheFailures = [];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE_NAME);
-      const results = await Promise.allSettled(
-        APP_SHELL.map(async (url) => {
-          const request = new Request(url, { cache: "reload" });
-          const response = await fetch(request);
 
-          if (!response.ok) {
-            throw new Error(`${url}: HTTP ${response.status}`);
-          }
+      // Kritische Dateien müssen vollständig vorliegen. Scheitert eine davon,
+      // bleibt der bisherige Service Worker aktiv und die letzte stabile Version erhalten.
+      await Promise.all(CORE_SHELL.map((url) => fetchAndCache(cache, url)));
 
-          await cache.put(request, response);
-        })
+      await reusePreviouslyCachedAssets(cache, ON_DEMAND_ASSETS);
+
+      const optionalResults = await Promise.allSettled(
+        OPTIONAL_SHELL.map((url) => fetchAndCache(cache, url))
       );
+      optionalPrecacheFailures = optionalResults
+        .map((result, index) => ({ result, url: OPTIONAL_SHELL[index] }))
+        .filter(({ result }) => result.status === "rejected")
+        .map(({ url, result }) => ({ url, message: String(result.reason?.message || result.reason || "Ladefehler") }));
 
-      const failedAssets = results
-        .map((result, index) => ({ result, url: APP_SHELL[index] }))
-        .filter(({ result }) => result.status === "rejected");
-
-      if (failedAssets.length) {
-        console.warn(
-          "Einige Offline-Dateien konnten nicht vorgeladen werden:",
-          failedAssets.map(({ url, result }) => `${url}: ${result.reason}`)
-        );
+      if (optionalPrecacheFailures.length) {
+        console.warn("Optionale Offline-Dateien konnten nicht vollständig vorgeladen werden:", optionalPrecacheFailures);
       }
 
       await self.skipWaiting();
@@ -62,7 +75,7 @@ self.addEventListener("activate", (event) => {
       const cacheNames = await caches.keys();
       await Promise.all(
         cacheNames
-          .filter((cacheName) => cacheName !== CACHE_NAME)
+          .filter((cacheName) => cacheName.startsWith(CACHE_PREFIX) && cacheName !== CACHE_NAME)
           .map((cacheName) => caches.delete(cacheName))
       );
       await self.clients.claim();
@@ -73,24 +86,45 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
+    return;
+  }
+
+  if (event.data?.type === "GET_STATUS") {
+    event.ports?.[0]?.postMessage({
+      appVersion: APP_VERSION,
+      cacheName: CACHE_NAME,
+      coreAssetCount: CORE_SHELL.length,
+      optionalAssetCount: OPTIONAL_SHELL.length,
+      onDemandAssetCount: ON_DEMAND_ASSETS.length,
+      optionalPrecacheFailures,
+      state: self.registration.active?.state || "active"
+    });
   }
 });
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
-
-  if (request.method !== "GET") {
-    return;
-  }
+  if (request.method !== "GET") return;
 
   const requestUrl = new URL(request.url);
-
-  if (requestUrl.origin !== self.location.origin) {
-    return;
-  }
+  if (requestUrl.origin !== self.location.origin) return;
 
   event.respondWith(networkFirst(request));
 });
+
+async function reusePreviouslyCachedAssets(targetCache, urls) {
+  await Promise.all(urls.map(async (url) => {
+    const cached = await caches.match(url);
+    if (cached) await targetCache.put(url, cached.clone());
+  }));
+}
+
+async function fetchAndCache(cache, url) {
+  const request = new Request(url, { cache: "reload" });
+  const response = await fetch(request);
+  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  await cache.put(request, response);
+}
 
 async function networkFirst(request) {
   try {
@@ -106,18 +140,12 @@ async function networkFirst(request) {
     return networkResponse;
   } catch (error) {
     const cachedResponse = await caches.match(request);
-
-    if (cachedResponse) {
-      return cachedResponse;
-    }
+    if (cachedResponse) return cachedResponse;
 
     if (request.mode === "navigate") {
       const fallbackUrl = new URL("./index.html", self.registration.scope).href;
       const fallbackResponse = await caches.match(fallbackUrl);
-
-      if (fallbackResponse) {
-        return fallbackResponse;
-      }
+      if (fallbackResponse) return fallbackResponse;
     }
 
     throw error;

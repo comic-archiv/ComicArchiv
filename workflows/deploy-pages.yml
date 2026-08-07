@@ -1,0 +1,51 @@
+name: Entenarchiv prüfen und veröffentlichen
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: entenarchiv-pages
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Qualitätsprüfung
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Projekt laden
+        uses: actions/checkout@v4
+      - name: Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Dateien und Datenlogik prüfen
+        run: npm run check
+      - name: Sauberes Produktionspaket erstellen
+        run: npm run build
+      - name: Pages-Paket bereitstellen
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy:
+    name: GitHub Pages veröffentlichen
+    if: github.event_name != 'pull_request'
+    needs: quality
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Geprüfte Version veröffentlichen
+        id: deployment
+        uses: actions/deploy-pages@v4

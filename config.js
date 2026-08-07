@@ -12,7 +12,7 @@ export const LEGACY_CONDITION_MAP = Object.freeze({
 });
 
 export const APP_CONFIG = Object.freeze({
-  appVersion: "3.8.0",
+  appVersion: "3.9.0",
   dataFormatVersion: 8,
   minimumSupportedBackupVersion: 1,
   storageName: "ComicArchiv",

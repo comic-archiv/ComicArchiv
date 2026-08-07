@@ -53,6 +53,15 @@ import {
   shareOrDownloadText
 } from "./export.js";
 import { dataUrlToBlob, prepareCoverImage } from "./media.js";
+import { ensurePdfLibrary, ensureScannerLibrary, getOptionalAssetStatus } from "./asset-loader.js";
+import {
+  clearDiagnosticLog,
+  collectDiagnosticReport,
+  downloadDiagnosticReport,
+  formatDiagnosticBytes,
+  getDiagnosticLog,
+  recordDiagnosticError
+} from "./diagnostics.js";
 import {
   CALENDAR_CATALOG_URL,
   buildCalendarIcs,
@@ -74,6 +83,7 @@ import {
 } from "./calendar.js";
 
 const THEME_STORAGE_KEY = "comicarchiv-theme";
+const IS_TEST_MODE = new URLSearchParams(window.location.search).get("testmode") === "1";
 
 const state = {
   comics: [],
@@ -118,7 +128,9 @@ const state = {
   calendarCatalogUpdatedAt: "",
   calendarCatalogLoading: false,
   calendarFilter: "all",
-  calendarSearch: ""
+  calendarSearch: "",
+  latestDiagnosticReport: null,
+  diagnosticsRunning: false
 };
 
 const elements = {
@@ -295,6 +307,20 @@ const elements = {
   storagePersistence: document.querySelector("#storage-persistence"),
   storageUsage: document.querySelector("#storage-usage"),
   requestPersistence: document.querySelector("#request-persistence"),
+  openDiagnostics: document.querySelector("#open-diagnostics"),
+  diagnosticsModal: document.querySelector("#diagnostics-modal"),
+  closeDiagnostics: document.querySelector("#close-diagnostics"),
+  diagnosticsOverview: document.querySelector("#diagnostics-overview"),
+  diagnosticsCheckList: document.querySelector("#diagnostics-check-list"),
+  diagnosticsErrorList: document.querySelector("#diagnostics-error-list"),
+  diagnosticsMessage: document.querySelector("#diagnostics-message"),
+  runDiagnostics: document.querySelector("#run-diagnostics"),
+  exportDiagnostics: document.querySelector("#export-diagnostics"),
+  clearDiagnostics: document.querySelector("#clear-diagnostics"),
+  openRecovery: document.querySelector("#open-recovery"),
+  openTestMode: document.querySelector("#open-test-mode"),
+  testModeBanner: document.querySelector("#test-mode-banner"),
+  leaveTestMode: document.querySelector("#leave-test-mode"),
   openMedia: document.querySelector("#open-media"),
   mediaPage: document.querySelector("#media-page"),
   closeMedia: document.querySelector("#close-media"),
@@ -408,12 +434,17 @@ let barcodeScanner;
 
 initializeApp().catch((error) => {
   console.error(error);
+  if (window.EntenarchivRecovery?.reportFatal) {
+    window.EntenarchivRecovery.reportFatal(error, "App-Start");
+  } else {
+    recordDiagnosticError(error, "App-Start", "fatal");
+  }
   showToast(`Entenarchiv konnte nicht gestartet werden: ${error.message}`, "error");
 });
 
 async function initializeApp() {
   applyStoredTheme();
-  barcodeScanner = new MagazineBarcodeScanner(elements.scannerCameraTarget);
+  configureTestMode();
   bindEvents();
   elements.appVersion.textContent = `v${APP_CONFIG.appVersion}`;
 
@@ -427,6 +458,7 @@ async function initializeApp() {
     persistThemeLocally(state.settings.theme);
   } catch (error) {
     console.warn("Einstellungen konnten nicht geladen werden:", error);
+    recordDiagnosticError(error, "Einstellungen laden", "warning");
   }
 
   renderConditionGuide();
@@ -436,10 +468,51 @@ async function initializeApp() {
   resetCoverEditorState();
   await refreshCollection();
   renderBackupStatus();
-  await refreshStorageStatus();
-  await refreshMediaStatus();
+  await Promise.allSettled([
+    runOptionalStartupTask("Speicherstatus", refreshStorageStatus),
+    runOptionalStartupTask("Medienstatus", refreshMediaStatus)
+  ]);
   renderCalendarOverview();
   registerServiceWorker();
+  window.EntenarchivRecovery?.markReady({
+    appVersion: APP_CONFIG.appVersion,
+    dataFormatVersion: APP_CONFIG.dataFormatVersion
+  });
+}
+
+async function runOptionalStartupTask(name, task) {
+  try {
+    await task();
+  } catch (error) {
+    console.warn(`${name} konnte beim Start nicht geladen werden:`, error);
+    recordDiagnosticError(error, name, "warning");
+  }
+}
+
+function configureTestMode() {
+  if (elements.testModeBanner) {
+    elements.testModeBanner.classList.toggle("hidden", !IS_TEST_MODE);
+    elements.testModeBanner.setAttribute("aria-hidden", String(!IS_TEST_MODE));
+  }
+  if (elements.openTestMode) {
+    elements.openTestMode.textContent = IS_TEST_MODE ? "Echte Sammlung öffnen" : "Separaten Testmodus öffnen";
+  }
+  document.documentElement.dataset.storageMode = IS_TEST_MODE ? "test" : "production";
+}
+
+function createAppFilename(prefix, extension) {
+  return createDatedFilename(IS_TEST_MODE ? `${prefix}-TEST` : prefix, extension);
+}
+
+function toggleTestMode() {
+  const url = new URL(window.location.href);
+  if (IS_TEST_MODE) {
+    url.searchParams.delete("testmode");
+  } else {
+    url.searchParams.set("testmode", "1");
+  }
+  url.searchParams.delete("apprefresh");
+  window.location.assign(url.href);
 }
 
 function populateConfiguration() {
@@ -652,6 +725,23 @@ function bindEvents() {
   elements.exportMissingCsv.addEventListener("click", handleMissingCsvExport);
   elements.exportMissingPdf.addEventListener("click", handleMissingPdfExport);
   elements.requestPersistence.addEventListener("click", handlePersistenceRequest);
+  elements.openDiagnostics.addEventListener("click", openDiagnosticsModal);
+  elements.closeDiagnostics.addEventListener("click", closeDiagnosticsModal);
+  elements.runDiagnostics.addEventListener("click", runDiagnostics);
+  elements.exportDiagnostics.addEventListener("click", handleDiagnosticExport);
+  elements.clearDiagnostics.addEventListener("click", handleClearDiagnostics);
+  elements.openRecovery.addEventListener("click", () => {
+    closeDiagnosticsModal();
+    window.EntenarchivRecovery?.open({
+      title: "Diagnose & sicherer Modus",
+      summary: "Erstelle hier unabhängige Notfall-Backups oder repariere beschädigte Kalenderdaten."
+    });
+  });
+  elements.diagnosticsModal.addEventListener("click", (event) => {
+    if (event.target.closest("[data-close-diagnostics]")) closeDiagnosticsModal();
+  });
+  elements.openTestMode?.addEventListener("click", toggleTestMode);
+  elements.leaveTestMode?.addEventListener("click", toggleTestMode);
   elements.openMedia.addEventListener("click", openMediaPage);
   elements.closeMedia.addEventListener("click", closeMediaPage);
   elements.showCovers.addEventListener("change", handleShowCoversChange);
@@ -702,6 +792,7 @@ function bindEvents() {
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     if (!elements.conditionGuideModal.classList.contains("hidden")) return closeConditionGuide();
+    if (!elements.diagnosticsModal.classList.contains("hidden")) return closeDiagnosticsModal();
     if (!elements.importModal.classList.contains("hidden")) return closeImportModal();
     if (!elements.seriesModal.classList.contains("hidden")) return closeSeriesModal();
     if (!elements.missingDetailModal.classList.contains("hidden")) return closeMissingDetailModal();
@@ -1917,7 +2008,7 @@ async function handleMediaBackupExport() {
     const content = await createMediaBackup(state.comics, nextSettings, metadataCache, covers);
     const result = await shareOrDownloadBlob({
       blob: new Blob([content], { type: "application/json;charset=utf-8" }),
-      filename: createDatedFilename("Entenarchiv-Medien-Backup", "json"),
+      filename: createAppFilename("Entenarchiv-Medien-Backup", "json"),
       mimeType: "application/json;charset=utf-8",
       title: "Entenarchiv – vollständiges Medien-Backup",
       text: "Vollständiges Entenarchiv-Backup inklusive eigener Coverfotos."
@@ -3171,6 +3262,13 @@ function setFormBusy(isBusy) {
   });
 }
 
+function getBarcodeScanner() {
+  if (!barcodeScanner) {
+    barcodeScanner = new MagazineBarcodeScanner(elements.scannerCameraTarget);
+  }
+  return barcodeScanner;
+}
+
 async function openScannerModal() {
   if (state.editingId) {
     showToast("Beende zuerst die Bearbeitung des geöffneten Eintrags.", "error");
@@ -3192,12 +3290,14 @@ async function openScannerModal() {
   renderScannerQueue();
   elements.scannerModal.classList.remove("hidden");
   document.body.classList.add("modal-open");
-  setScannerStatus("Kamera wird vorbereitet …");
+  setScannerStatus("Scanner-Modul wird geladen …");
 
   try {
     await startScannerCamera();
   } catch (error) {
     console.warn("Scanner konnte beim Öffnen nicht automatisch starten:", error);
+    recordDiagnosticError(error, "Scanner-Modul laden", "warning");
+    setScannerStatus(error.message, "error");
   }
 }
 
@@ -3218,7 +3318,17 @@ async function startScannerCamera() {
     return;
   }
 
-  if (!barcodeScanner?.isSupported()) {
+  try {
+    setScannerStatus("Scanner-Modul wird geladen …");
+    await ensureScannerLibrary();
+  } catch (error) {
+    recordDiagnosticError(error, "Scanner-Modul laden", "warning");
+    setScannerStatus(error.message, "error");
+    return;
+  }
+
+  const scanner = getBarcodeScanner();
+  if (!scanner.isSupported()) {
     setScannerStatus(
       "Live-Scan ist hier nicht verfügbar. Nutze den Foto-Fallback oder prüfe, ob die App über HTTPS geöffnet wurde.",
       "error"
@@ -3235,7 +3345,7 @@ async function startScannerCamera() {
   setScannerStatus("Kamera aktiv: Richte die gesamte weiße Barcodefläche waagerecht im Rahmen aus.");
 
   try {
-    await barcodeScanner.start({
+    await scanner.start({
       onDetected: handleScannerDetected,
       onInterim: ({ type }) => {
         if (type === "main-code-only") {
@@ -3282,10 +3392,12 @@ async function handleScannerPhoto() {
   elements.scannerStart.disabled = true;
 
   try {
-    const payload = await barcodeScanner.decodeImageFile(file);
+    await ensureScannerLibrary();
+    const payload = await getBarcodeScanner().decodeImageFile(file);
     handleScannerDetected(payload);
   } catch (error) {
     console.error("Barcodefoto konnte nicht ausgewertet werden:", error);
+    recordDiagnosticError(error, "Barcodefoto auswerten", "warning");
     setScannerStatus(error.message, "error");
   } finally {
     elements.scannerStart.disabled = false;
@@ -4429,8 +4541,167 @@ function normalizeHttpUrl(value) {
   }
 }
 
+async function openDiagnosticsModal() {
+  elements.diagnosticsModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+  elements.diagnosticsMessage.textContent = "";
+  window.setTimeout(() => elements.closeDiagnostics.focus(), 0);
+  await runDiagnostics();
+}
+
+function closeDiagnosticsModal() {
+  elements.diagnosticsModal.classList.add("hidden");
+  restoreBodyModalState();
+}
+
+async function runDiagnostics() {
+  if (state.diagnosticsRunning) return state.latestDiagnosticReport;
+  state.diagnosticsRunning = true;
+  setDiagnosticsBusy(true);
+  elements.diagnosticsMessage.textContent = "Technische Prüfung läuft …";
+  elements.diagnosticsMessage.dataset.type = "info";
+
+  try {
+    const report = await collectDiagnosticReport({
+      appVersion: APP_CONFIG.appVersion,
+      dataFormatVersion: APP_CONFIG.dataFormatVersion,
+      optionalAssets: getOptionalAssetStatus()
+    });
+    state.latestDiagnosticReport = report;
+    renderDiagnosticReport(report);
+    const warningCount = report.checks.filter((check) => check.status !== "ok").length;
+    elements.diagnosticsMessage.textContent = warningCount === 0
+      ? "Alle Kernprüfungen wurden ohne Warnung abgeschlossen."
+      : `${warningCount} Hinweis${warningCount === 1 ? "" : "e"} gefunden. Deine Sammlung wurde dabei nicht verändert.`;
+    elements.diagnosticsMessage.dataset.type = warningCount === 0 ? "success" : "warning";
+    return report;
+  } catch (error) {
+    console.error("Diagnose konnte nicht ausgeführt werden:", error);
+    recordDiagnosticError(error, "Diagnose ausführen", "error");
+    elements.diagnosticsMessage.textContent = `Diagnose fehlgeschlagen: ${error.message}`;
+    elements.diagnosticsMessage.dataset.type = "error";
+    renderDiagnosticErrorLog();
+    return null;
+  } finally {
+    state.diagnosticsRunning = false;
+    setDiagnosticsBusy(false);
+  }
+}
+
+function renderDiagnosticReport(report) {
+  elements.diagnosticsOverview.replaceChildren();
+
+  const comicCount = report.database?.stores?.comics?.count;
+  const coverCount = report.database?.stores?.coverMedia?.count;
+  const metadataCount = report.database?.stores?.metadataCache?.count;
+  const storageLabel = report.storage?.usage === null
+    ? "Nicht gemeldet"
+    : `${formatDiagnosticBytes(report.storage.usage)} belegt`;
+  const offlineLabel = report.serviceWorker?.controlled
+    ? `Aktiv${report.serviceWorker.workerStatus?.cacheName ? ` · ${report.serviceWorker.workerStatus.cacheName}` : ""}`
+    : "Noch nicht aktiv";
+
+  [
+    ["App", `v${report.appVersion}`, `${report.environment?.testMode ? "Testmodus · " : ""}Datenformat ${report.dataFormatVersion}`],
+    ["Lokale Sammlung", Number.isFinite(comicCount) ? `${comicCount} Einträge` : "Nicht lesbar", Number.isFinite(coverCount) ? `${coverCount} eigene Cover` : ""],
+    ["Lokaler Speicher", storageLabel, report.storage?.quota === null ? "Kontingent unbekannt" : `${formatDiagnosticBytes(report.storage.quota)} gemeldet`],
+    ["Offline-Modus", offlineLabel, Number.isFinite(metadataCount) ? `${metadataCount} Metadatensätze` : ""]
+  ].forEach(([label, value, detail]) => {
+    const card = document.createElement("div");
+    card.className = "diagnostics-summary-card";
+    const labelNode = document.createElement("span");
+    labelNode.textContent = label;
+    const valueNode = document.createElement("strong");
+    valueNode.textContent = value;
+    const detailNode = document.createElement("small");
+    detailNode.textContent = detail;
+    card.append(labelNode, valueNode, detailNode);
+    elements.diagnosticsOverview.append(card);
+  });
+
+  elements.diagnosticsCheckList.replaceChildren();
+  report.checks.forEach((check) => {
+    const row = document.createElement("div");
+    row.className = "diagnostics-check";
+    row.dataset.status = check.status;
+    const icon = document.createElement("span");
+    icon.className = "diagnostics-check-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = check.status === "ok" ? "✓" : "!";
+    const copy = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = check.label;
+    const detail = document.createElement("small");
+    detail.textContent = check.detail;
+    copy.append(title, detail);
+    row.append(icon, copy);
+    elements.diagnosticsCheckList.append(row);
+  });
+
+  renderDiagnosticErrorLog(report.recentErrors);
+}
+
+function renderDiagnosticErrorLog(entries = getDiagnosticLog()) {
+  elements.diagnosticsErrorList.replaceChildren();
+  if (!entries.length) {
+    const empty = document.createElement("p");
+    empty.className = "diagnostics-empty";
+    empty.textContent = "Keine technischen Fehlermeldungen gespeichert.";
+    elements.diagnosticsErrorList.append(empty);
+    return;
+  }
+
+  entries.slice(0, 12).forEach((entry) => {
+    const item = document.createElement("article");
+    item.className = "diagnostics-error-item";
+    const context = document.createElement("strong");
+    context.textContent = entry.context || "Technische Meldung";
+    const message = document.createElement("span");
+    message.textContent = entry.message || "Unbekannter Fehler";
+    const time = document.createElement("time");
+    time.dateTime = entry.timestamp || "";
+    time.textContent = formatDiagnosticDate(entry.timestamp);
+    item.append(context, message, time);
+    elements.diagnosticsErrorList.append(item);
+  });
+}
+
+async function handleDiagnosticExport() {
+  const report = state.latestDiagnosticReport || await runDiagnostics();
+  if (!report) return;
+  try {
+    downloadDiagnosticReport(report, createAppFilename("Entenarchiv-Diagnose", "json"));
+    elements.diagnosticsMessage.textContent = "Diagnosebericht wurde als JSON-Datei erstellt.";
+    elements.diagnosticsMessage.dataset.type = "success";
+  } catch (error) {
+    recordDiagnosticError(error, "Diagnose exportieren", "error");
+    elements.diagnosticsMessage.textContent = `Export fehlgeschlagen: ${error.message}`;
+    elements.diagnosticsMessage.dataset.type = "error";
+  }
+}
+
+function handleClearDiagnostics() {
+  clearDiagnosticLog();
+  if (state.latestDiagnosticReport) state.latestDiagnosticReport.recentErrors = [];
+  renderDiagnosticErrorLog([]);
+  elements.diagnosticsMessage.textContent = "Gespeicherte technische Meldungen wurden gelöscht.";
+  elements.diagnosticsMessage.dataset.type = "success";
+}
+
+function setDiagnosticsBusy(isBusy) {
+  [elements.runDiagnostics, elements.exportDiagnostics, elements.clearDiagnostics, elements.openRecovery]
+    .forEach((button) => { button.disabled = Boolean(isBusy); });
+}
+
+function formatDiagnosticDate(value) {
+  const date = new Date(value || "");
+  return Number.isNaN(date.getTime())
+    ? "Zeitpunkt unbekannt"
+    : new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(date);
+}
+
 function restoreBodyModalState() {
-  const anyModalOpen = [elements.conditionGuideModal, elements.importModal, elements.seriesModal, elements.missingDetailModal, elements.duplicateModal, elements.scannerModal]
+  const anyModalOpen = [elements.conditionGuideModal, elements.diagnosticsModal, elements.importModal, elements.seriesModal, elements.missingDetailModal, elements.duplicateModal, elements.scannerModal]
     .some((modal) => !modal.classList.contains("hidden"));
   document.body.classList.toggle("modal-open", anyModalOpen);
 }
@@ -4442,7 +4713,7 @@ async function handleCollectionCsvExport() {
   try {
     const result = await shareOrDownloadText({
       content: createCollectionCsv(state.comics, state.settings),
-      filename: createDatedFilename("Entenarchiv-Sammlung", "csv"),
+      filename: createAppFilename("Entenarchiv-Sammlung", "csv"),
       mimeType: "text/csv;charset=utf-8",
       title: "Entenarchiv – Sammlung",
       text: "Meine Entenarchiv-Sammlung als CSV-Datei."
@@ -4470,7 +4741,7 @@ async function handleMissingCsvExport() {
   try {
     const result = await shareOrDownloadText({
       content: createMissingCsv(state.missingGroups, state.settings),
-      filename: createDatedFilename("Entenarchiv-Fehlende-Baende", "csv"),
+      filename: createAppFilename("Entenarchiv-Fehlende-Baende", "csv"),
       mimeType: "text/csv;charset=utf-8",
       title: "Entenarchiv – Fehlende Bände",
       text: "Meine Such- und Wunschliste aus Entenarchiv."
@@ -4496,10 +4767,11 @@ async function handleMissingPdfExport() {
   showExportMessage("PDF wird gestaltet …");
 
   try {
+    await ensurePdfLibrary();
     const pdfBlob = createMissingPdfBlob(state.missingGroups, state.settings);
     const result = await shareOrDownloadBlob({
       blob: pdfBlob,
-      filename: createDatedFilename("Entenarchiv-Flohmarkt-Suchliste", "pdf"),
+      filename: createAppFilename("Entenarchiv-Flohmarkt-Suchliste", "pdf"),
       mimeType: "application/pdf",
       title: "Entenarchiv - Flohmarkt-Suchliste",
       text: "Meine übersichtliche Liste fehlender Bände für Flohmärkte und Comicbörsen."
@@ -4507,6 +4779,7 @@ async function handleMissingPdfExport() {
     reportExportResult(result, "Die Flohmarkt-Suchliste");
   } catch (error) {
     console.error(error);
+    recordDiagnosticError(error, "PDF-Export", "warning");
     showExportMessage(`PDF-Export fehlgeschlagen: ${error.message}`, "error");
   } finally {
     setExportButtonsBusy(false);
@@ -4528,7 +4801,7 @@ async function handleJsonExport() {
     const metadataCache = await getAllMetadataCache();
     const result = await shareOrDownloadText({
       content: createJsonBackup(state.comics, nextSettings, metadataCache),
-      filename: createDatedFilename("Entenarchiv-Backup", "json"),
+      filename: createAppFilename("Entenarchiv-Backup", "json"),
       mimeType: "application/json;charset=utf-8",
       title: "Entenarchiv – JSON-Backup",
       text: "Vollständiges Backup meiner Entenarchiv-Daten."
@@ -5061,6 +5334,7 @@ function registerServiceWorker() {
       await registration.update();
     } catch (error) {
       console.error("Service Worker konnte nicht registriert werden:", error);
+      recordDiagnosticError(error, "Service Worker registrieren", "warning");
     }
   });
 }

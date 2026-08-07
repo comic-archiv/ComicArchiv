@@ -1,6 +1,7 @@
 import { DEFAULT_CONDITION_CODE, DEFAULT_SETTINGS, normalizeConditionCode, normalizeDuckipediaPattern } from "./config.js";
 
-const DATABASE_NAME = "comicarchiv-db";
+const DATABASE_NAME = resolveDatabaseName();
+const STORAGE_MODE = DATABASE_NAME.endsWith("-test") ? "test" : "production";
 const DATABASE_VERSION = 4;
 const COMICS_STORE = "comics";
 const SETTINGS_STORE = "settings";
@@ -9,6 +10,25 @@ const METADATA_STORE = "metadataCache";
 const SETTINGS_KEY = "app";
 
 let databasePromise;
+
+export function getStorageMode() {
+  return STORAGE_MODE;
+}
+
+export function getDatabaseName() {
+  return DATABASE_NAME;
+}
+
+function resolveDatabaseName() {
+  try {
+    const search = globalThis.location?.search || "";
+    return new URLSearchParams(search).get("testmode") === "1"
+      ? "comicarchiv-db-test"
+      : "comicarchiv-db";
+  } catch {
+    return "comicarchiv-db";
+  }
+}
 
 function createDatabaseConnection() {
   return new Promise((resolve, reject) => {

@@ -1,0 +1,186 @@
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { readFile, readdir } from "node:fs/promises";
+import { dirname, extname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const errors = [];
+const notes = [];
+
+const requiredFiles = [
+  "index.html",
+  "style.css",
+  "app.js",
+  "config.js",
+  "storage.js",
+  "missing.js",
+  "export.js",
+  "scanner.js",
+  "duckipedia.js",
+  "media.js",
+  "calendar.js",
+  "asset-loader.js",
+  "diagnostics.js",
+  "recovery.js",
+  "service-worker.js",
+  "manifest.webmanifest",
+  "version.json",
+  "icons/icon-192.png",
+  "icons/icon-512.png",
+  "icons/icon-1024.png",
+  "icons/apple-touch-icon.png",
+  "vendor/quagga.min.js",
+  "vendor/jspdf.umd.min.js",
+  "data/kalender-index.json",
+  "data/ltb-2026.ics"
+];
+
+for (const file of requiredFiles) {
+  if (!existsSync(join(root, file))) errors.push(`Pflichtdatei fehlt: ${file}`);
+}
+
+const [html, appSource, configSource, serviceWorkerSource, styleSource, packageJson, versionJson, manifest] = await Promise.all([
+  readText("index.html"),
+  readText("app.js"),
+  readText("config.js"),
+  readText("service-worker.js"),
+  readText("style.css"),
+  readJson("package.json"),
+  readJson("version.json"),
+  readJson("manifest.webmanifest")
+]);
+
+const configVersion = matchOne(configSource, /appVersion:\s*"([^"]+)"/, "App-Version in config.js");
+const configDataVersion = Number(matchOne(configSource, /dataFormatVersion:\s*(\d+)/, "Datenformat in config.js"));
+const swVersion = matchOne(serviceWorkerSource, /const APP_VERSION = "([^"]+)"/, "App-Version im Service Worker");
+const htmlVersion = matchOne(html, /id="app-version">v([^<]+)</, "sichtbare Version in index.html");
+const versions = new Set([packageJson.version, versionJson.appVersion, configVersion, swVersion, htmlVersion]);
+if (versions.size !== 1) {
+  errors.push(`Versionsnummern sind uneinheitlich: ${[...versions].join(", ")}`);
+}
+if (Number(versionJson.dataFormatVersion) !== configDataVersion) {
+  errors.push(`Datenformat ist uneinheitlich: version.json=${versionJson.dataFormatVersion}, config.js=${configDataVersion}`);
+}
+
+const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
+if (duplicateIds.length) errors.push(`Doppelte HTML-IDs: ${[...new Set(duplicateIds)].join(", ")}`);
+const idSet = new Set(ids);
+const queriedIds = [...appSource.matchAll(/document\.querySelector\("#([A-Za-z0-9_-]+)"\)/g)].map((match) => match[1]);
+const missingIds = [...new Set(queriedIds.filter((id) => !idSet.has(id)))];
+if (missingIds.length) errors.push(`app.js referenziert fehlende HTML-IDs: ${missingIds.join(", ")}`);
+
+if (/vendor\/(?:quagga|jspdf)[^"']*\.js/.test(html)) {
+  errors.push("Scanner- oder PDF-Bibliothek wird noch direkt in index.html geladen. Sie soll nur bei Bedarf geladen werden.");
+}
+const recoveryIndex = html.indexOf('<script src="./recovery.js"></script>');
+const appIndex = html.indexOf('<script src="./app.js" type="module"></script>');
+if (recoveryIndex < 0 || appIndex < 0 || recoveryIndex > appIndex) {
+  errors.push("recovery.js muss vor app.js eingebunden werden.");
+}
+if (/\.innerHTML\s*=|insertAdjacentHTML\s*\(/.test(appSource)) {
+  errors.push("app.js verwendet eine unsichere HTML-Einfügung. Nutzereingaben müssen über textContent/DOM-Knoten ausgegeben werden.");
+}
+if (!html.includes('id="recovery-panel"') || !html.includes('id="diagnostics-modal"')) {
+  errors.push("Sicherer Modus oder Diagnoseoberfläche fehlt in index.html.");
+}
+if (!html.includes('id="test-mode-banner"') || !appSource.includes("comicarchiv-db-test") && !styleSource.includes("test-mode-banner")) {
+  errors.push("Der getrennte Testmodus ist nicht vollständig eingebunden.");
+}
+
+const shellAssets = [
+  ...extractArrayStrings(serviceWorkerSource, "CORE_SHELL"),
+  ...extractArrayStrings(serviceWorkerSource, "OPTIONAL_SHELL"),
+  ...extractArrayStrings(serviceWorkerSource, "ON_DEMAND_ASSETS")
+];
+for (const asset of shellAssets) {
+  if (!asset.startsWith("./") || asset === "./") continue;
+  const localPath = asset.slice(2).split(/[?#]/)[0];
+  if (!existsSync(join(root, localPath))) errors.push(`Service Worker referenziert fehlende Datei: ${asset}`);
+}
+
+for (const icon of manifest.icons || []) {
+  const src = String(icon.src || "").replace(/^\.\//, "");
+  if (!src || !existsSync(join(root, src))) errors.push(`Manifest-Icon fehlt: ${icon.src || "(leer)"}`);
+}
+if (!String(manifest.name || "").startsWith("Entenarchiv") || manifest.short_name !== "Entenarchiv") {
+  errors.push("Manifest-Name ist nicht vollständig auf Entenarchiv gesetzt.");
+}
+
+const sourceFiles = await walk(root);
+const syntaxFiles = sourceFiles.filter((file) => [".js", ".mjs"].includes(extname(file)) && !file.includes(`${join(root, "vendor")}`));
+for (const file of syntaxFiles) {
+  try {
+    execFileSync(process.execPath, ["--check", file], { stdio: "pipe" });
+  } catch (error) {
+    errors.push(`JavaScript-Syntaxfehler in ${relative(root, file)}: ${String(error.stderr || error.message).trim()}`);
+  }
+}
+
+if (appSource.length > 350_000) notes.push(`app.js ist mit ${Math.round(appSource.length / 1024)} KB groß und sollte in Version 4 modularisiert werden.`);
+if (styleSource.length > 180_000) notes.push(`style.css ist mit ${Math.round(styleSource.length / 1024)} KB groß und sollte in Version 4 aufgeteilt werden.`);
+
+if (errors.length) {
+  console.error("\nEntenarchiv-Validierung fehlgeschlagen:\n");
+  errors.forEach((entry) => console.error(`  ✗ ${entry}`));
+  process.exitCode = 1;
+} else {
+  console.log(`✓ ${requiredFiles.length} Pflichtdateien vorhanden`);
+  console.log(`✓ Version ${configVersion} und Datenformat ${configDataVersion} konsistent`);
+  console.log(`✓ ${ids.length} eindeutige HTML-IDs und ${queriedIds.length} statische App-Selektoren geprüft`);
+  console.log(`✓ ${shellAssets.length} Offline-Dateien geprüft`);
+  console.log(`✓ ${syntaxFiles.length} JavaScript-Dateien syntaktisch geprüft`);
+  console.log("✓ Scanner und PDF-Modul werden erst bei Bedarf geladen");
+  console.log("✓ Diagnose, sicherer Modus und Testmodus sind eingebunden");
+  notes.forEach((entry) => console.log(`Hinweis: ${entry}`));
+}
+
+async function readText(file) {
+  try {
+    return await readFile(join(root, file), "utf8");
+  } catch (error) {
+    errors.push(`${file} konnte nicht gelesen werden: ${error.message}`);
+    return "";
+  }
+}
+
+async function readJson(file) {
+  const text = await readText(file);
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    errors.push(`${file} enthält kein gültiges JSON: ${error.message}`);
+    return {};
+  }
+}
+
+function matchOne(text, expression, label) {
+  const match = text.match(expression);
+  if (!match) {
+    errors.push(`${label} wurde nicht gefunden.`);
+    return "";
+  }
+  return match[1];
+}
+
+function extractArrayStrings(source, name) {
+  const match = source.match(new RegExp(`const ${name} = Object\\.freeze\\(\\[([\\s\\S]*?)\\]\\);`));
+  if (!match) {
+    errors.push(`${name} wurde im Service Worker nicht gefunden.`);
+    return [];
+  }
+  return [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
+}
+
+async function walk(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    if ([".git", "node_modules"].includes(entry.name)) continue;
+    const fullPath = join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...await walk(fullPath));
+    else files.push(fullPath);
+  }
+  return files;
+}
