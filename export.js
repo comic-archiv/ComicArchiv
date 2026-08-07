@@ -751,6 +751,12 @@ function mergeIssueAndCopies(existing, imported) {
     publicationYear: importedIsNewer ? (imported.publicationYear ?? existing.publicationYear) : (existing.publicationYear ?? imported.publicationYear),
     duckipediaPageUrl: importedIsNewer ? richer(imported.duckipediaPageUrl, existing.duckipediaPageUrl) : richer(existing.duckipediaPageUrl, imported.duckipediaPageUrl),
     duckipediaCoverUrl: importedIsNewer ? richer(imported.duckipediaCoverUrl, existing.duckipediaCoverUrl) : richer(existing.duckipediaCoverUrl, imported.duckipediaCoverUrl),
+    duckipediaCoverFileName: importedIsNewer ? richer(imported.duckipediaCoverFileName, existing.duckipediaCoverFileName) : richer(existing.duckipediaCoverFileName, imported.duckipediaCoverFileName),
+    duckipediaCoverSource: importedIsNewer ? richer(imported.duckipediaCoverSource, existing.duckipediaCoverSource) : richer(existing.duckipediaCoverSource, imported.duckipediaCoverSource),
+    duckipediaCoverLookupVersion: Math.max(
+      Number(existing.duckipediaCoverLookupVersion || 0),
+      Number(imported.duckipediaCoverLookupVersion || 0)
+    ),
     metadataStatus: importedIsNewer ? (imported.metadataStatus || existing.metadataStatus || "") : (existing.metadataStatus || imported.metadataStatus || ""),
     metadataFetchedAt: getTimestamp(imported.metadataFetchedAt) > getTimestamp(existing.metadataFetchedAt) ? imported.metadataFetchedAt : existing.metadataFetchedAt,
     copies: copies.map((copy, index) => ({ ...copy, issueId: existing.id, displayOrder: index + 1 })),
@@ -956,6 +962,15 @@ function normalizeImportedComic(comic, index) {
     copyCount: copies.length,
     duckipediaPageUrl: normalizeOptionalHttpUrl(comic.duckipediaPageUrl),
     duckipediaCoverUrl: normalizeOptionalHttpUrl(comic.duckipediaCoverUrl),
+    duckipediaCoverFileName: String(comic.duckipediaCoverFileName || "").trim().slice(0, 300),
+    duckipediaCoverSource: ["infobox-wikitext", "infobox-html", ""].includes(comic.duckipediaCoverSource)
+      ? comic.duckipediaCoverSource
+      : "",
+    duckipediaCoverLookupVersion: Number.isSafeInteger(Number(comic.duckipediaCoverLookupVersion))
+      && Number(comic.duckipediaCoverLookupVersion) >= 0
+      && Number(comic.duckipediaCoverLookupVersion) <= 999
+      ? Number(comic.duckipediaCoverLookupVersion)
+      : 0,
     metadataStatus: ["found", "not-found", "manual", ""].includes(comic.metadataStatus) ? comic.metadataStatus : "",
     metadataFetchedAt: isValidDateString(comic.metadataFetchedAt) ? comic.metadataFetchedAt : null,
     createdAt,

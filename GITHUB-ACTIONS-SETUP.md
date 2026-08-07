@@ -31,7 +31,7 @@ Der Workflow führt bei jedem Commit auf `main` aus:
 4. Den vollständigen sichtbaren Projektinhalt in das bestehende Repository hochladen.
 5. Vorhandene Dateien ersetzen.
 6. Darauf achten, dass insbesondere `archive-model.js`, `scripts`, `tests`, `package.json` und `version.json` vorhanden sind.
-7. Mit beispielsweise `Entenarchiv Version 4.1.1` committen.
+7. Mit beispielsweise `Entenarchiv Version 4.1.2` committen.
 8. Unter **Actions** den Lauf **Entenarchiv prüfen und veröffentlichen** öffnen.
 9. Erst nach einem vollständig grünen Workflow die App auf dem iPhone neu öffnen.
 

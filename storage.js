@@ -486,6 +486,12 @@ export async function saveComic(comic) {
       publicationYear: records.issue.publicationYear ?? identityMatch.publicationYear ?? null,
       duckipediaPageUrl: records.issue.duckipediaPageUrl || identityMatch.duckipediaPageUrl || "",
       duckipediaCoverUrl: records.issue.duckipediaCoverUrl || identityMatch.duckipediaCoverUrl || "",
+      duckipediaCoverFileName: records.issue.duckipediaCoverFileName || identityMatch.duckipediaCoverFileName || "",
+      duckipediaCoverSource: records.issue.duckipediaCoverSource || identityMatch.duckipediaCoverSource || "",
+      duckipediaCoverLookupVersion: Math.max(
+        Number(records.issue.duckipediaCoverLookupVersion || 0),
+        Number(identityMatch.duckipediaCoverLookupVersion || 0)
+      ),
       legacyComicIds: [...new Set([
         ...(identityMatch.legacyComicIds || []),
         ...(records.issue.legacyComicIds || []),

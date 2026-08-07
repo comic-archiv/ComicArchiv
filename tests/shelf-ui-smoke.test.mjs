@@ -119,7 +119,7 @@ test("Reihenbibliothek und digitales Regal rendern mit echten Modulaufrufen", as
   const elements = new Map(ids.map((id) => [id, new FakeElement("div", id)]));
   const selectIds = ["library-sort", "series-filter", "series-bulk-condition"];
   selectIds.forEach((id) => { elements.set(id, new FakeElement("select", id)); });
-  const buttonIds = ids.filter((id) => /^(close-|library-all-list|series-select-mode|series-target-button|series-bulk-|issue-detail-)/.test(id));
+  const buttonIds = ids.filter((id) => /^(close-|library-all-list|series-select-mode|series-target-button|series-load-more|series-bulk-|issue-detail-)/.test(id));
   buttonIds.forEach((id) => {
     if (!["issue-detail-title", "issue-detail-series", "issue-detail-meta", "issue-detail-copies", "issue-detail-notes", "issue-detail-cover-image", "issue-detail-cover-fallback"].includes(id)) {
       elements.set(id, new FakeElement("button", id));
@@ -197,8 +197,15 @@ test("Reihenbibliothek und digitales Regal rendern mit echten Modulaufrufen", as
   snapshot.settings.knownHighestBandBySeries["Lustiges Taschenbuch"] = 80;
   snapshot.missingGroups[0].missingBands = [2, 4, 5, 6, 7, 8, 9, 10];
   ui.refresh(snapshot);
-  assert.equal(elements.get("series-shelf-grid").children.length, 80, "Das Regal muss alle Bandnummern kontinuierlich rendern");
   elements.get("series-search").value = "Titel 75";
   elements.get("series-search").dispatchEvent({ type: "input" });
-  assert.equal(elements.get("series-shelf-grid").children.length, 1, "Titelsuche muss das gesamte kontinuierliche Regal durchsuchen");
+  assert.equal(elements.get("series-shelf-grid").children.length, 1, "Titelsuche muss die vollständige Reihe durchsuchen");
+
+  elements.get("series-search").value = "";
+  elements.get("series-search").dispatchEvent({ type: "input" });
+  assert.equal(elements.get("series-shelf-grid").children.length, 60, "Die Reihe wird zunächst kompakt mit 60 Einträgen gerendert");
+  assert.equal(elements.get("series-load-more").classList.contains("hidden"), false, "Weitere Bände müssen ohne Bereichsauswahl nachladbar sein");
+  elements.get("series-load-more").dispatchEvent({ type: "click" });
+  assert.equal(elements.get("series-shelf-grid").children.length, 80, "Kontinuierliches Laden zeigt anschließend den Rest der Reihe");
+  assert.equal(elements.get("series-load-more").classList.contains("hidden"), true, "Nach dem letzten Eintrag verschwindet der Nachlade-Button");
 });

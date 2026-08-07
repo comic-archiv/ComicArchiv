@@ -1,17 +1,28 @@
 # Änderungsprotokoll
 
-## 4.1.1 – Regal- und Cover-Hotfix
+## 4.1.2 – Infobox-Cover und Vollbilddetails
+
+### Behoben
+
+- Duckipedia-Cover werden aus dem tatsächlichen Infoboxfeld `BILD` der Bandseite gelesen.
+- Das Feld `NEU-BILD`, Rezensionsthumbnails, Storybilder und Logos können das Originalcover nicht mehr verdrängen.
+- Als Fallback wird ausschließlich das große Bild der gerenderten rechten Band-Infobox ausgewertet.
+- ältere Coverzuordnungen werden über Lookup-Version 3 automatisch erneut geprüft und lokal ersetzt.
+- Galeriecover laden auf dem iPhone ohne vorheriges Öffnen eines Bands.
+- Cover verschwinden beim Wechsel zwischen Reihenbibliothek und Regal nicht mehr.
+- Bilder aus dem Browsercache werden auch dann sichtbar geschaltet, wenn sie bereits vor dem regulären Ladeereignis vollständig verfügbar sind.
+- die Banddetailansicht ist auf dem iPhone nicht mehr als gequetschter Teilhöhen-Dialog dargestellt.
 
 ### Verbessert
 
-- Reihenheader auf dem iPhone neu gegliedert, ohne Überlagerung von Cover-Collage, Titel und Fortschritt
-- nächste Neuerscheinung mit eigenem Kalender-Icon, klarer Titelzeile und kompakter Datumsdarstellung
-- Bandbereiche aus der Oberfläche entfernt; alle Bände und Lücken lassen sich kontinuierlich durchscrollen
-- Cover werden sichtbarkeitsnah geladen, damit lange Regale performant bleiben
-- Duckipedia-Abfrage berücksichtigt nicht freie PageImages und besitzt zusätzlich einen Dateilisten-Fallback
-- fehlende Duckipedia-Cover werden für sichtbare Ausgaben im Hintergrund nachgeladen
-- Banddetailansicht zeigt Jahr, Exemplare und Lesestatus direkt neben einem kompakten Cover
-- Detailfenster startet bei jedem Öffnen wieder am Anfang und hält alle Aktionen scrollbar erreichbar
+- getrennte Coverbeobachtung für die tatsächlich scrollende Bibliotheks- und Reihenseite
+- Vorladen der ersten sichtbaren Cover und weiterer Bilder in Scrollrichtung
+- höchstens zwei parallele Duckipedia-Coverabfragen
+- persistente Speicherung erfolgreicher Cover-URLs im Comicdatensatz und Metadaten-Cache
+- lokale Cover-Blob-URLs bleiben beim Wechsel zwischen Unterseiten erhalten
+- Vollbild-Banddetails mit zentriertem Cover, einspaltigem Inhalt und sicheren iPhone-Abständen
+- temporär fehlgeschlagene Bildauflösung wird nicht fälschlich als endgültig validiertes leeres Cover gespeichert
+- kontinuierliches Nachladen langer Reihen ohne sichtbare Bandbereich-Auswahl bleibt erhalten
 
 ### Kompatibilität
 

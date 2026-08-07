@@ -1,6 +1,8 @@
 import { APP_CONFIG, DEFAULT_CONDITION_CODE, getConditionLabel, getConditionRank } from "./config.js";
+import { DUCKIPEDIA_LOOKUP_VERSION } from "./duckipedia.js";
 import { getComicCopies, normalizeSeriesLookup } from "./archive-model.js";
 import {
+  SHELF_PAGE_SIZE,
   SMART_LIST_DEFINITIONS,
   applyBulkPatch,
   buildSeriesSummaries,
@@ -11,6 +13,9 @@ import {
   sortSeriesSummaries
 } from "./shelf.js";
 
+const REMOTE_COVER_CONCURRENCY = 2;
+const REMOTE_COVER_DELAY_MS = 120;
+
 export function createShelfUI({
   getSnapshot,
   getCoverMedia,
@@ -20,6 +25,7 @@ export function createShelfUI({
   onEditComic,
   onManageCopies,
   onEnrichComic,
+  onResolveCover,
   onBulkSave,
   onOpenProgress,
   onToast
@@ -38,22 +44,29 @@ export function createShelfUI({
     seriesView: "shelf",
     seriesFilter: "all",
     seriesSearch: "",
+    seriesVisibleLimit: SHELF_PAGE_SIZE,
     selectionMode: false,
     selectedIssueIds: new Set(),
     bulkUndo: null,
     coverObjectUrls: new Set(),
+    coverObjectUrlByComic: new Map(),
+    resolvedCoverUrls: new Map(),
+    remoteCoverQueue: [],
+    remoteCoverPromises: new Map(),
+    remoteCoverActive: 0,
+    seriesCoverObserver: null,
+    libraryCoverObserver: null,
+    coverObserverTargets: new Map(),
+    loadMoreObserver: null,
     issueDetailId: "",
     issueDetailObjectUrl: "",
     coverLoadSequence: 0,
-    coverObserver: null,
-    coverTasks: new WeakMap(),
-    coverRepairQueue: [],
-    coverRepairActive: 0,
-    coverRepairPromises: new Map(),
-    coverRepairAttempted: new Set()
+    coverScrollTimers: new Map()
   };
 
+  synchronizeResolvedCoverCache();
   populateConditionSelect(elements.seriesBulkCondition);
+  initializeObservers();
   bindEvents();
   rebuildSummaries();
   loadLocalCoverIds();
@@ -72,8 +85,13 @@ export function createShelfUI({
   });
 
   function refresh(snapshot = getSnapshot?.()) {
+    // Local Blob URLs may refer to a cover that has just been replaced or
+    // deleted. Refreshing the data model is the deliberate invalidation point;
+    // simply leaving and reopening a page no longer discards working covers.
+    clearCoverObjectUrls();
     state.snapshot = normalizeSnapshot(snapshot);
     if (state.snapshot.localCoverIds) state.localCoverIds = new Set(state.snapshot.localCoverIds);
+    synchronizeResolvedCoverCache();
     rebuildSummaries();
     state.selectedIssueIds = new Set(
       [...state.selectedIssueIds].filter((id) => state.snapshot.comics.some((comic) => comic.id === id))
@@ -108,6 +126,7 @@ export function createShelfUI({
       const nextIds = new Set((Array.isArray(keys) ? keys : []).map(String).filter(Boolean));
       if (setsEqual(nextIds, state.localCoverIds)) return;
       state.localCoverIds = nextIds;
+      clearCoverObjectUrls();
       rebuildSummaries();
       if (isVisible(elements.libraryPage)) renderLibrary();
       if (isVisible(elements.seriesPage)) renderSeries();
@@ -116,22 +135,214 @@ export function createShelfUI({
     }
   }
 
+  function initializeObservers() {
+    if (typeof globalThis.IntersectionObserver !== "function") return;
+
+    state.loadMoreObserver = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadMoreSeriesEntries();
+    }, { root: elements.seriesPage, rootMargin: "0px 0px 700px 0px", threshold: 0.01 });
+
+    const handleCoverEntries = (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        loadCoverTarget(entry.target);
+      });
+    };
+
+    // iOS Safari is much more reliable when an IntersectionObserver watches
+    // the actual internal scrolling page instead of the browser viewport.
+    state.seriesCoverObserver = new IntersectionObserver(handleCoverEntries, {
+      root: elements.seriesPage,
+      rootMargin: "780px 0px",
+      threshold: 0.01
+    });
+    state.libraryCoverObserver = new IntersectionObserver(handleCoverEntries, {
+      root: elements.libraryPage,
+      rootMargin: "780px 0px",
+      threshold: 0.01
+    });
+  }
+
+  function syncLoadMoreObserver() {
+    if (!state.loadMoreObserver) return;
+    state.loadMoreObserver.disconnect();
+    if (!elements.seriesLoadMore.classList.contains("hidden") && isVisible(elements.seriesPage)) {
+      state.loadMoreObserver.observe(elements.seriesLoadMore);
+    }
+  }
+
+  function getCoverObserver(container) {
+    if (isDescendantOf(container, elements.seriesPage)) return state.seriesCoverObserver;
+    if (isDescendantOf(container, elements.libraryPage)) return state.libraryCoverObserver;
+    return null;
+  }
+
+  function getCoverRoot(container) {
+    if (isDescendantOf(container, elements.seriesPage)) return elements.seriesPage;
+    if (isDescendantOf(container, elements.libraryPage)) return elements.libraryPage;
+    return null;
+  }
+
+  function observeRemoteCover(container, image, fallback, comic, displayedSource = "") {
+    const canResolve = typeof onResolveCover === "function" && Boolean(comic?.numericBandNumber);
+    if (!canResolve && !displayedSource) return;
+
+    const observer = getCoverObserver(container);
+    if (!observer || !container) {
+      if (displayedSource) setImageSource(image, fallback, displayedSource, comic);
+      if (canResolve) {
+        requestRemoteCover(comic).then((resolvedSource) => {
+          if (!resolvedSource || !image.isConnected || resolvedSource === displayedSource) return;
+          setImageSource(image, fallback, resolvedSource, comic);
+        });
+      }
+      return;
+    }
+
+    state.coverObserverTargets.set(container, {
+      image,
+      fallback,
+      comic,
+      displayedSource,
+      observer
+    });
+    container.dataset.coverPending = "true";
+    observer.observe(container);
+
+    // IntersectionObserver can miss the first notification on iOS when an
+    // internal scrolling page has only just become visible. Covers already in
+    // or near the viewport are therefore started immediately as a fallback.
+    const root = getCoverRoot(container);
+    if (root && isNearScrollViewport(container, root, 900)) {
+      globalThis.setTimeout(() => loadCoverTarget(container), 0);
+    }
+  }
+
+  function loadCoverTarget(container) {
+    const target = state.coverObserverTargets.get(container);
+    if (!target) return;
+    target.observer?.unobserve(container);
+    state.seriesCoverObserver?.unobserve(container);
+    state.libraryCoverObserver?.unobserve(container);
+    state.coverObserverTargets.delete(container);
+    delete container.dataset.coverPending;
+
+    if (target.displayedSource) {
+      setImageSource(target.image, target.fallback, target.displayedSource, target.comic);
+    }
+
+    if (typeof onResolveCover !== "function" || !target.comic?.numericBandNumber) return;
+    requestRemoteCover(target.comic).then((resolvedSource) => {
+      if (!resolvedSource || !target.image.isConnected || resolvedSource === target.displayedSource) return;
+      setImageSource(target.image, target.fallback, resolvedSource, target.comic);
+    });
+  }
+
+  function scheduleCoverPriming(root, limit = 12) {
+    // Run more than once: IndexedDB cover checks are asynchronous, so the
+    // pending remote targets may not exist during the first animation frame.
+    [0, 120, 420].forEach((delay) => {
+      globalThis.setTimeout(() => primePendingCovers(root, limit), delay);
+    });
+  }
+
+  function primePendingCovers(root, limit = 12) {
+    if (!isVisible(root)) return;
+    const targets = [...state.coverObserverTargets.entries()]
+      .filter(([container]) => isDescendantOf(container, root));
+    if (!targets.length) return;
+
+    const near = targets.filter(([container]) => isNearScrollViewport(container, root, 900));
+    const prioritized = [...near, ...targets.filter(([container]) => !near.some(([candidate]) => candidate === container))];
+    prioritized
+      .slice(0, Math.max(1, Number(limit) || 1))
+      .forEach(([container]) => loadCoverTarget(container));
+  }
+
+  function scheduleVisibleCoverPass(root) {
+    const key = root?.id || "cover-root";
+    if (state.coverScrollTimers.has(key)) return;
+    const timer = globalThis.setTimeout(() => {
+      state.coverScrollTimers.delete(key);
+      primePendingCovers(root, 18);
+    }, 70);
+    state.coverScrollTimers.set(key, timer);
+  }
+
+  function isNearScrollViewport(container, root, margin = 0) {
+    if (!container || !root
+      || typeof container.getBoundingClientRect !== "function"
+      || typeof root.getBoundingClientRect !== "function") return false;
+    const itemRect = container.getBoundingClientRect();
+    const rootRect = root.getBoundingClientRect();
+    return itemRect.bottom >= rootRect.top - margin
+      && itemRect.top <= rootRect.bottom + margin
+      && itemRect.right >= rootRect.left - margin
+      && itemRect.left <= rootRect.right + margin;
+  }
+
+  function requestRemoteCover(comic, { force = false } = {}) {
+    if (!comic?.id || typeof onResolveCover !== "function") return Promise.resolve("");
+    // Map.has is intentional: an empty result is cached for this session too,
+    // so pages without a usable infobox cover are not requested on every rerender.
+    if (!force && state.resolvedCoverUrls.has(comic.id)) {
+      return Promise.resolve(state.resolvedCoverUrls.get(comic.id) || "");
+    }
+    const pending = state.remoteCoverPromises.get(comic.id);
+    if (pending) return pending;
+
+    let resolveTask;
+    const promise = new Promise((resolve) => { resolveTask = resolve; });
+    state.remoteCoverPromises.set(comic.id, promise);
+    state.remoteCoverQueue.push({ comic, force, resolve: resolveTask });
+    pumpRemoteCoverQueue();
+    return promise;
+  }
+
+  function pumpRemoteCoverQueue() {
+    while (state.remoteCoverActive < REMOTE_COVER_CONCURRENCY && state.remoteCoverQueue.length) {
+      const task = state.remoteCoverQueue.shift();
+      state.remoteCoverActive += 1;
+      Promise.resolve(onResolveCover(task.comic, { force: task.force }))
+        .then((source) => {
+          const normalizedSource = typeof source === "string" ? source.trim() : "";
+          // Store both successful and authoritative empty results. The resolver
+          // persists the current metadata before this promise resolves.
+          state.resolvedCoverUrls.set(task.comic.id, normalizedSource);
+          const latestComic = state.snapshot.comics.find((entry) => entry.id === task.comic.id);
+          if (latestComic && latestComic !== task.comic) Object.assign(task.comic, latestComic);
+          task.resolve(normalizedSource);
+        })
+        .catch((error) => {
+          console.warn("Automatisches Coverladen fehlgeschlagen:", error);
+          // Do not cache transient failures; a later render may retry.
+          task.resolve(task.comic.duckipediaCoverUrl || "");
+        })
+        .finally(() => {
+          state.remoteCoverActive = Math.max(0, state.remoteCoverActive - 1);
+          state.remoteCoverPromises.delete(task.comic.id);
+          globalThis.setTimeout(pumpRemoteCoverQueue, REMOTE_COVER_DELAY_MS);
+        });
+    }
+  }
+
   function openLibrary(scope = "other") {
     state.libraryScope = scope === "all" ? "all" : "other";
     state.librarySearch = "";
     elements.librarySearch.value = "";
-    renderLibrary();
     elements.libraryPage.classList.remove("hidden");
     elements.libraryPage.setAttribute("aria-hidden", "false");
     document.body.classList.add("app-page-open");
     elements.libraryPage.scrollTop = 0;
+    renderLibrary();
+    scheduleCoverPriming(elements.libraryPage, 9);
     window.setTimeout(() => elements.closeLibrary.focus({ preventScroll: true }), 0);
   }
 
   function closeLibrary({ returnFocus = true } = {}) {
     elements.libraryPage.classList.add("hidden");
     elements.libraryPage.setAttribute("aria-hidden", "true");
-    clearCoverObjectUrls();
+    resetCoverObservation();
     syncBodyPageState();
     if (returnFocus) window.setTimeout(() => elements.openOtherCollection?.focus({ preventScroll: true }), 0);
   }
@@ -148,17 +359,20 @@ export function createShelfUI({
     state.seriesView = "shelf";
     state.seriesFilter = "all";
     state.seriesSearch = "";
+    state.seriesVisibleLimit = SHELF_PAGE_SIZE;
     state.selectionMode = false;
     state.selectedIssueIds.clear();
     state.bulkUndo = null;
     elements.seriesSearch.value = "";
     elements.seriesFilter.value = "all";
     setSeriesView("shelf", { render: false });
-    renderSeries();
     elements.seriesPage.classList.remove("hidden");
     elements.seriesPage.setAttribute("aria-hidden", "false");
     document.body.classList.add("app-page-open");
     elements.seriesPage.scrollTop = 0;
+    renderSeries();
+    syncLoadMoreObserver();
+    scheduleCoverPriming(elements.seriesPage, 15);
     window.setTimeout(() => elements.closeSeries.focus({ preventScroll: true }), 0);
   }
 
@@ -175,8 +389,12 @@ export function createShelfUI({
     state.selectionMode = false;
     state.selectedIssueIds.clear();
     hideBulkBar();
-    clearCoverObjectUrls();
-    if (state.seriesReturnTarget === "library" && isVisible(elements.libraryPage)) renderLibrary();
+    state.loadMoreObserver?.disconnect();
+    resetCoverObservation();
+    if (state.seriesReturnTarget === "library" && isVisible(elements.libraryPage)) {
+      renderLibrary();
+      scheduleCoverPriming(elements.libraryPage, 9);
+    }
     syncBodyPageState();
     if (!returnFocus) return;
     window.setTimeout(() => {
@@ -190,7 +408,7 @@ export function createShelfUI({
   }
 
   function renderLibrary() {
-    clearCoverObjectUrls();
+    resetCoverObservation();
     const isAll = state.libraryScope === "all";
     elements.libraryTitle.textContent = isAll ? "Alle Reihen" : "Sonderbände & weitere Reihen";
 
@@ -210,6 +428,7 @@ export function createShelfUI({
     elements.libraryEmpty.classList.toggle("hidden", summaries.length > 0);
 
     summaries.forEach((summary) => elements.seriesLibraryGrid.append(createSeriesLibraryCard(summary)));
+    if (isVisible(elements.libraryPage)) scheduleCoverPriming(elements.libraryPage, 9);
   }
 
   function renderSmartLists() {
@@ -300,7 +519,7 @@ export function createShelfUI({
   }
 
   function renderSeries() {
-    clearCoverObjectUrls();
+    resetCoverObservation();
     const summary = findSummary(state.selectedSeriesId);
     if (!summary) {
       closeSeries({ returnFocus: false });
@@ -323,6 +542,7 @@ export function createShelfUI({
     renderNextRelease(summary);
     renderSeriesContent(summary);
     renderBulkBar();
+    if (isVisible(elements.seriesPage)) scheduleCoverPriming(elements.seriesPage, 15);
   }
 
   function renderSeriesHeroCovers(summary) {
@@ -332,7 +552,7 @@ export function createShelfUI({
       const slot = document.createElement("span");
       slot.className = "series-hero-cover";
       const comic = candidates[index];
-      if (comic) appendCoverToSlot(slot, comic, summary.series, comic.volumeNumber, { eager: true });
+      if (comic) appendCoverToSlot(slot, comic, summary.series, comic.volumeNumber);
       else {
         slot.classList.add("is-fallback");
         slot.textContent = index === 0 ? getSeriesAbbreviation(summary.series) : "•";
@@ -371,19 +591,20 @@ export function createShelfUI({
     elements.seriesNextRelease.classList.toggle("hidden", !next);
     if (!next) return;
     elements.seriesNextReleaseTitle.textContent = next.title || "Neuerscheinung";
-    elements.seriesNextReleaseDate.textContent = formatReleaseDate(next.startDate);
+    elements.seriesNextReleaseDate.textContent = formatShortDate(next.startDate);
     elements.seriesNextReleaseDate.setAttribute("datetime", next.startDate);
   }
 
   function renderSeriesContent(summary) {
     const filter = state.seriesFilter === "multiple" ? "duplicates" : state.seriesFilter;
-    const normalizedSearch = normalizeText(state.seriesSearch.trim());
+    const rawSearch = state.seriesSearch.trim();
+    const normalizedSearch = normalizeText(rawSearch);
     const maximumBand = summary.target || summary.highestOwned;
-    const shelfContent = maximumBand > 0
+    const fullContent = maximumBand > 0
       ? buildShelfSlots(summary.comics, { target: maximumBand, startBand: 1, maximumBand })
       : { slots: [], nonNumericComics: summary.comics.filter((comic) => !comic.numericBandNumber) };
 
-    let visibleSlots = shelfContent.slots.filter((slot) => {
+    let visibleSlots = fullContent.slots.filter((slot) => {
       if (state.seriesFilter === "owned" && slot.type !== "owned") return false;
       if (state.seriesFilter === "missing" && slot.type !== "missing") return false;
       if (!["all", "owned", "missing"].includes(state.seriesFilter)) {
@@ -397,34 +618,63 @@ export function createShelfUI({
     });
 
     let visibleNonNumeric = filterSeriesComics(
-      shelfContent.nonNumericComics,
+      fullContent.nonNumericComics,
       ["all", "owned", "missing"].includes(state.seriesFilter) ? "all" : filter,
       state.localCoverIds
     ).filter((comic) => !normalizedSearch || comicMatchesSearch(comic, normalizedSearch));
     if (state.seriesFilter === "missing") visibleNonNumeric = [];
     visibleNonNumeric = sortSeriesComics(visibleNonNumeric, "volume-asc");
 
+    const allEntries = [
+      ...visibleSlots.map((slot) => ({ kind: "slot", slot })),
+      ...visibleNonNumeric.map((comic) => ({
+        kind: "nonnumeric",
+        slot: { type: "owned", comic, bandNumber: comic.volumeNumber }
+      }))
+    ];
+    const visibleEntries = allEntries.slice(0, state.seriesVisibleLimit);
+    const displayedSlots = visibleEntries.filter((entry) => entry.kind === "slot").map((entry) => entry.slot);
+    const displayedNonNumeric = visibleEntries.filter((entry) => entry.kind === "nonnumeric").map((entry) => entry.slot.comic);
+
     elements.seriesShelfGrid.replaceChildren();
     elements.seriesComicList.replaceChildren();
     elements.seriesNonnumeric.replaceChildren();
 
     if (state.seriesView === "shelf") {
-      visibleSlots.forEach((slot) => elements.seriesShelfGrid.append(createShelfTile(slot, summary)));
-      visibleNonNumeric.forEach((comic) => elements.seriesNonnumeric.append(createShelfTile({ type: "owned", comic, bandNumber: comic.volumeNumber }, summary)));
+      displayedSlots.forEach((slot) => elements.seriesShelfGrid.append(createShelfTile(slot, summary)));
+      displayedNonNumeric.forEach((comic) => elements.seriesNonnumeric.append(createShelfTile({ type: "owned", comic, bandNumber: comic.volumeNumber }, summary)));
     } else {
-      visibleSlots.forEach((slot) => elements.seriesComicList.append(createSeriesListCard(slot, summary)));
-      visibleNonNumeric.forEach((comic) => elements.seriesComicList.append(createSeriesListCard({ type: "owned", comic, bandNumber: comic.volumeNumber }, summary)));
+      visibleEntries.forEach((entry) => elements.seriesComicList.append(createSeriesListCard(entry.slot, summary)));
     }
 
-    const visibleCount = visibleSlots.length + visibleNonNumeric.length;
-    const totalCount = shelfContent.slots.length + shelfContent.nonNumericComics.length;
-    elements.seriesVisibleCount.textContent = normalizedSearch || state.seriesFilter !== "all"
-      ? `${visibleCount} von ${totalCount} Einträgen`
-      : `${visibleCount} ${visibleCount === 1 ? "Eintrag" : "Einträge"}`;
-    elements.seriesEmpty.classList.toggle("hidden", visibleCount > 0);
-    elements.seriesShelfView.classList.toggle("hidden", state.seriesView !== "shelf" || visibleCount === 0);
-    elements.seriesListView.classList.toggle("hidden", state.seriesView !== "list" || visibleCount === 0);
-    elements.seriesNonnumericSection.classList.toggle("hidden", state.seriesView !== "shelf" || visibleNonNumeric.length === 0);
+    const totalCount = allEntries.length;
+    const displayedCount = visibleEntries.length;
+    const remainingCount = Math.max(0, totalCount - displayedCount);
+    elements.seriesVisibleCount.textContent = remainingCount > 0
+      ? `${displayedCount} von ${totalCount} Einträgen geladen`
+      : `${totalCount} ${totalCount === 1 ? "Eintrag" : "Einträge"} sichtbar`;
+    elements.seriesEmpty.classList.toggle("hidden", totalCount > 0);
+    elements.seriesShelfView.classList.toggle("hidden", state.seriesView !== "shelf" || displayedCount === 0);
+    elements.seriesListView.classList.toggle("hidden", state.seriesView !== "list" || displayedCount === 0);
+    elements.seriesNonnumericSection.classList.toggle("hidden", state.seriesView !== "shelf" || displayedNonNumeric.length === 0);
+
+    elements.seriesLoadMore.classList.toggle("hidden", remainingCount <= 0);
+    elements.seriesLoadMore.disabled = remainingCount <= 0;
+    elements.seriesLoadMoreLabel.textContent = remainingCount > 0
+      ? `Weitere ${Math.min(SHELF_PAGE_SIZE, remainingCount)} Bände laden`
+      : "Alle Bände geladen";
+    elements.seriesLoadMoreCopy.textContent = remainingCount > 0
+      ? `Noch ${remainingCount} ${remainingCount === 1 ? "Eintrag" : "Einträge"}`
+      : "";
+    syncLoadMoreObserver();
+    if (isVisible(elements.seriesPage)) scheduleCoverPriming(elements.seriesPage, 15);
+  }
+
+  function loadMoreSeriesEntries() {
+    const summary = findSummary(state.selectedSeriesId);
+    if (!summary || elements.seriesLoadMore.classList.contains("hidden")) return;
+    state.seriesVisibleLimit += SHELF_PAGE_SIZE;
+    renderSeriesContent(summary);
   }
 
   function createShelfTile(slot, summary) {
@@ -552,6 +802,7 @@ export function createShelfUI({
 
   function setSeriesView(view, { render = true } = {}) {
     state.seriesView = view === "list" ? "list" : "shelf";
+    if (render) state.seriesVisibleLimit = SHELF_PAGE_SIZE;
     elements.seriesViewButtons.forEach((button) => {
       const active = button.dataset.seriesView === state.seriesView;
       button.classList.toggle("is-active", active);
@@ -664,7 +915,6 @@ export function createShelfUI({
     state.issueDetailId = issueId;
     revokeIssueDetailObjectUrl();
 
-    const copies = getComicCopies(comic);
     elements.issueDetailSeries.textContent = comic.series;
     elements.issueDetailTitle.textContent = comic.title || `Band ${comic.volumeNumber}`;
     elements.issueDetailMeta.textContent = `Band ${comic.volumeNumber}${comic.publicationYear ? ` · ${comic.publicationYear}` : ""}`;
@@ -674,15 +924,9 @@ export function createShelfUI({
     elements.issueDetailDuckipedia.classList.toggle("hidden", !hasDuckipediaLink);
     if (hasDuckipediaLink) elements.issueDetailDuckipedia.href = comic.duckipediaPageUrl;
     else elements.issueDetailDuckipedia.removeAttribute("href");
-
-    elements.issueDetailFacts.replaceChildren(
-      createDetailFact("Jahr", comic.publicationYear || "–"),
-      createDetailFact("Exemplare", copies.length),
-      createDetailFact("Gelesen", `${copies.filter((copy) => copy.isRead).length}/${copies.length}`)
-    );
     elements.issueDetailCopies.replaceChildren();
 
-    copies.forEach((copy, index) => {
+    getComicCopies(comic).forEach((copy, index) => {
       const card = document.createElement("article");
       card.className = "issue-detail-copy";
       const heading = document.createElement("div");
@@ -702,15 +946,16 @@ export function createShelfUI({
 
     elements.issueDetailCoverImage.classList.add("hidden");
     elements.issueDetailCoverImage.removeAttribute("src");
+    delete elements.issueDetailCoverImage.dataset.coverRetry;
     elements.issueDetailCoverFallback.classList.remove("hidden");
     const fallbackStrong = elements.issueDetailCoverFallback.querySelector("strong");
     if (fallbackStrong) fallbackStrong.textContent = String(comic.volumeNumber || "–");
+    hydrateDetailCover(comic);
 
-    elements.issueDetailCard.scrollTop = 0;
     elements.issueDetailModal.classList.remove("hidden");
     document.body.classList.add("modal-open");
-    window.requestAnimationFrame?.(() => { elements.issueDetailCard.scrollTop = 0; });
-    void hydrateDetailCover(comic);
+    const detailCard = elements.issueDetailModal.querySelector(".issue-detail-card");
+    if (detailCard) detailCard.scrollTop = 0;
     if (!preserveFocus) window.setTimeout(() => elements.closeIssueDetail.focus({ preventScroll: true }), 0);
   }
 
@@ -724,15 +969,22 @@ export function createShelfUI({
         showDetailCover(objectUrl, comic);
         return;
       }
-      if (comic.duckipediaCoverUrl) {
-        showDetailCover(comic.duckipediaCoverUrl, comic);
-        return;
-      }
-      if (!shouldRepairDuckipediaCover(comic)) return;
-      const result = await requestCoverRepair(comic);
+
+      const hasSessionResult = state.resolvedCoverUrls.has(comic.id);
+      const remoteSource = hasSessionResult
+        ? state.resolvedCoverUrls.get(comic.id) || ""
+        : comic.duckipediaCoverUrl || "";
+      if (remoteSource) showDetailCover(remoteSource, comic);
+
+      const resolved = await requestRemoteCover(comic);
       if (state.issueDetailId !== comic.id || !isVisible(elements.issueDetailModal)) return;
-      const repairedComic = result?.comic || comic;
-      if (repairedComic.duckipediaCoverUrl) showDetailCover(repairedComic.duckipediaCoverUrl, repairedComic);
+      if (resolved && resolved !== remoteSource) {
+        showDetailCover(resolved, comic);
+      } else if (!resolved && remoteSource) {
+        elements.issueDetailCoverImage.classList.add("hidden");
+        elements.issueDetailCoverImage.removeAttribute("src");
+        elements.issueDetailCoverFallback.classList.remove("hidden");
+      }
     } catch (error) {
       console.warn("Cover konnte im Detail nicht geladen werden:", error);
     }
@@ -740,16 +992,32 @@ export function createShelfUI({
 
   function showDetailCover(source, comic) {
     const image = elements.issueDetailCoverImage;
+    const normalizedSource = String(source || "").trim();
+    if (!normalizedSource) return;
+    const token = String((Number(image.dataset.coverToken || 0) + 1) % 1000000);
+    image.dataset.coverToken = token;
     image.alt = `Cover von ${comic.series}, Band ${comic.volumeNumber}`;
-    image.addEventListener("load", () => {
+    image.referrerPolicy = "no-referrer";
+    image.decoding = "async";
+    const reveal = () => {
+      if (image.dataset.coverToken !== token) return;
       image.classList.remove("hidden");
       elements.issueDetailCoverFallback.classList.add("hidden");
-    }, { once: true });
-    image.addEventListener("error", () => {
+    };
+    image.onload = reveal;
+    image.onerror = () => {
+      if (image.dataset.coverToken !== token) return;
       image.classList.add("hidden");
       elements.issueDetailCoverFallback.classList.remove("hidden");
-    }, { once: true });
-    image.src = source;
+      if (!/^https?:/i.test(normalizedSource) || image.dataset.coverRetry === "1") return;
+      image.dataset.coverRetry = "1";
+      requestRemoteCover(comic, { force: true }).then((replacement) => {
+        if (!replacement || replacement === normalizedSource || state.issueDetailId !== comic.id) return;
+        showDetailCover(replacement, comic);
+      });
+    };
+    image.src = normalizedSource;
+    if (image.complete && image.naturalWidth > 0) reveal();
   }
 
   function closeIssueDetail({ returnFocus = true } = {}) {
@@ -768,6 +1036,8 @@ export function createShelfUI({
   }
 
   function bindEvents() {
+    elements.libraryPage.addEventListener("scroll", () => scheduleVisibleCoverPass(elements.libraryPage), { passive: true });
+    elements.seriesPage.addEventListener("scroll", () => scheduleVisibleCoverPass(elements.seriesPage), { passive: true });
     elements.closeLibrary.addEventListener("click", () => closeLibrary());
     elements.closeSeries.addEventListener("click", () => closeSeries());
     elements.libraryAllList.addEventListener("click", () => onOpenCollection?.({ scope: "all", title: "Alle Bände", returnTarget: "library" }));
@@ -795,9 +1065,15 @@ export function createShelfUI({
     elements.seriesViewButtons.forEach((button) => button.addEventListener("click", () => setSeriesView(button.dataset.seriesView)));
     elements.seriesSearch.addEventListener("input", () => {
       state.seriesSearch = elements.seriesSearch.value;
+      state.seriesVisibleLimit = SHELF_PAGE_SIZE;
       renderSeries();
     });
-    elements.seriesFilter.addEventListener("change", () => { state.seriesFilter = elements.seriesFilter.value; renderSeries(); });
+    elements.seriesFilter.addEventListener("change", () => {
+      state.seriesFilter = elements.seriesFilter.value;
+      state.seriesVisibleLimit = SHELF_PAGE_SIZE;
+      renderSeries();
+    });
+    elements.seriesLoadMore.addEventListener("click", loadMoreSeriesEntries);
     elements.seriesSelectMode.addEventListener("click", () => toggleSelectionMode());
     elements.seriesTargetButton.addEventListener("click", () => {
       const summary = findSummary(state.selectedSeriesId);
@@ -866,16 +1142,14 @@ export function createShelfUI({
     else openIssueDetail(issueId);
   }
 
-  function appendCoverToSlot(slot, comic, series, bandNumber, { eager = false } = {}) {
-    const image = document.createElement("img");
+  function appendCoverToSlot(slot, comic, series, bandNumber) {
+    const image = createCoverImage();
     image.alt = "";
-    image.decoding = "async";
-    image.loading = eager ? "eager" : "lazy";
     const fallback = document.createElement("span");
     fallback.className = "series-cover-mini-fallback";
     fallback.textContent = String(bandNumber || getSeriesAbbreviation(series));
     slot.append(fallback, image);
-    scheduleCoverHydration(image, fallback, comic, { eager });
+    hydrateCoverImage(image, fallback, comic);
   }
 
   function appendMiniFallback(slot, series, label) {
@@ -893,128 +1167,119 @@ export function createShelfUI({
     const number = document.createElement("strong");
     number.textContent = String(bandNumber || "–");
     fallback.append(label, number);
-    const image = document.createElement("img");
+    const image = createCoverImage();
     image.alt = `Cover von ${series}, Band ${bandNumber}`;
-    image.decoding = "async";
-    image.loading = "lazy";
     container.append(fallback, image);
-    scheduleCoverHydration(image, fallback, comic);
+    hydrateCoverImage(image, fallback, comic);
   }
 
-  function scheduleCoverHydration(image, fallback, comic, { eager = false } = {}) {
-    if (eager || typeof IntersectionObserver !== "function") {
-      void hydrateCoverImage(image, fallback, comic);
-      return;
-    }
-
-    const observer = ensureCoverObserver();
-    state.coverTasks.set(fallback, { image, fallback, comic });
-    observer.observe(fallback);
-  }
-
-  function ensureCoverObserver() {
-    if (state.coverObserver) return state.coverObserver;
-    state.coverObserver = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting && entry.intersectionRatio <= 0) return;
-        const task = state.coverTasks.get(entry.target);
-        state.coverObserver?.unobserve(entry.target);
-        state.coverTasks.delete(entry.target);
-        if (task) void hydrateCoverImage(task.image, task.fallback, task.comic);
-      });
-    }, { rootMargin: "480px 0px" });
-    return state.coverObserver;
+  function createCoverImage() {
+    const image = document.createElement("img");
+    // Entenarchiv steuert das Nachladen selbst. Native Lazy-Loading-Hinweise
+    // wurden in versteckten, intern scrollenden iOS-Web-App-Seiten nicht immer
+    // erneut ausgewertet, wenn eine Reihenseite wieder geöffnet wurde.
+    image.decoding = "async";
+    image.referrerPolicy = "no-referrer";
+    return image;
   }
 
   async function hydrateCoverImage(image, fallback, comic) {
+    delete image.dataset.coverRetry;
     try {
+      const cachedObjectUrl = state.coverObjectUrlByComic.get(comic.id);
+      if (cachedObjectUrl) {
+        setImageSource(image, fallback, cachedObjectUrl, comic);
+        return;
+      }
+
       const local = typeof getCoverMedia === "function" ? await getCoverMedia(comic.id) : null;
       if (!image.isConnected) return;
       if (local?.blob instanceof Blob) {
         const objectUrl = URL.createObjectURL(local.blob);
         state.coverObjectUrls.add(objectUrl);
-        setImageSource(image, fallback, objectUrl);
+        state.coverObjectUrlByComic.set(comic.id, objectUrl);
+        setImageSource(image, fallback, objectUrl, comic);
         return;
       }
 
-      if (comic.duckipediaCoverUrl) {
-        setImageSource(image, fallback, comic.duckipediaCoverUrl);
-        return;
-      }
+      const hasSessionResult = state.resolvedCoverUrls.has(comic.id);
+      const remoteSource = hasSessionResult
+        ? state.resolvedCoverUrls.get(comic.id) || ""
+        : comic.duckipediaCoverUrl || "";
+      if (remoteSource) setImageSource(image, fallback, remoteSource, comic);
 
-      if (!shouldRepairDuckipediaCover(comic)) return;
-      const result = await requestCoverRepair(comic);
+      // Do not wait for an IntersectionObserver notification. iOS can skip it
+      // for fixed pages that were hidden and reopened. The bounded queue keeps
+      // network activity controlled while every rendered card starts loading.
+      if (!comic.numericBandNumber || typeof onResolveCover !== "function") return;
+      const resolvedSource = await requestRemoteCover(comic);
       if (!image.isConnected) return;
-      const repairedComic = result?.comic || comic;
-      if (repairedComic.duckipediaCoverUrl) setImageSource(image, fallback, repairedComic.duckipediaCoverUrl);
+      if (resolvedSource) {
+        if (resolvedSource !== remoteSource || !image.classList.contains("is-visible")) {
+          setImageSource(image, fallback, resolvedSource, comic);
+        }
+      } else if (remoteSource) {
+        clearImageSource(image, fallback);
+      }
     } catch (error) {
       console.warn("Cover konnte nicht geladen werden:", error);
     }
   }
 
-  function shouldRepairDuckipediaCover(comic) {
-    return Boolean(
-      comic?.id
-      && comic.numericBandNumber
-      && !comic.duckipediaCoverUrl
-      && state.snapshot.settings.duckipediaAutoEnrich !== false
-      && typeof navigator !== "undefined"
-      && navigator.onLine === true
-      && typeof onEnrichComic === "function"
-      && !state.coverRepairAttempted.has(comic.id)
-    );
+  function clearImageSource(image, fallback) {
+    image.onload = null;
+    image.onerror = null;
+    image.classList.remove("is-visible");
+    image.removeAttribute("src");
+    delete image.dataset.coverSource;
+    fallback?.classList.remove("hidden");
   }
 
-  function requestCoverRepair(comic) {
-    if (state.coverRepairPromises.has(comic.id)) return state.coverRepairPromises.get(comic.id);
-    state.coverRepairAttempted.add(comic.id);
-    const promise = new Promise((resolve) => {
-      state.coverRepairQueue.push({ comic, resolve });
-      pumpCoverRepairQueue();
-    }).finally(() => state.coverRepairPromises.delete(comic.id));
-    state.coverRepairPromises.set(comic.id, promise);
-    return promise;
-  }
-
-  function pumpCoverRepairQueue() {
-    while (state.coverRepairActive < 2 && state.coverRepairQueue.length) {
-      const job = state.coverRepairQueue.shift();
-      state.coverRepairActive += 1;
-      Promise.resolve(onEnrichComic?.(job.comic, { force: true, silent: true }))
-        .then((result) => {
-          if (result?.comic) updateSnapshotComic(result.comic);
-          job.resolve(result || null);
-        })
-        .catch((error) => {
-          console.warn("Duckipedia-Cover konnte nicht nachgeladen werden:", error);
-          job.resolve(null);
-        })
-        .finally(() => {
-          state.coverRepairActive -= 1;
-          pumpCoverRepairQueue();
-        });
+  function synchronizeResolvedCoverCache() {
+    const validIds = new Set(state.snapshot.comics.map((comic) => comic.id));
+    for (const id of [...state.resolvedCoverUrls.keys()]) {
+      if (!validIds.has(id)) state.resolvedCoverUrls.delete(id);
     }
-  }
-
-  function updateSnapshotComic(updatedComic) {
-    const index = state.snapshot.comics.findIndex((comic) => comic.id === updatedComic.id);
-    if (index >= 0) state.snapshot.comics[index] = updatedComic;
-    state.summaries.forEach((summary) => {
-      const comicIndex = summary.comics.findIndex((comic) => comic.id === updatedComic.id);
-      if (comicIndex >= 0) summary.comics[comicIndex] = updatedComic;
+    state.snapshot.comics.forEach((comic) => {
+      if (Number(comic.duckipediaCoverLookupVersion || 0) >= DUCKIPEDIA_LOOKUP_VERSION) {
+        state.resolvedCoverUrls.set(comic.id, String(comic.duckipediaCoverUrl || ""));
+      }
     });
   }
 
-  function setImageSource(image, fallback, source) {
-    image.addEventListener("load", () => {
+  function setImageSource(image, fallback, source, comic = null) {
+    const normalizedSource = String(source || "").trim();
+    if (!normalizedSource) return;
+
+    if (image.dataset.coverSource === normalizedSource && image.complete && image.naturalWidth > 0) {
       image.classList.add("is-visible");
       fallback?.classList.add("hidden");
-    }, { once: true });
-    image.addEventListener("error", () => {
+      return;
+    }
+
+    const token = String((Number(image.dataset.coverToken || 0) + 1) % 1000000);
+    image.dataset.coverToken = token;
+    image.dataset.coverSource = normalizedSource;
+    image.referrerPolicy = "no-referrer";
+    image.onload = () => {
+      if (image.dataset.coverToken !== token) return;
+      image.classList.add("is-visible");
+      fallback?.classList.add("hidden");
+    };
+    image.onerror = () => {
+      if (image.dataset.coverToken !== token) return;
       image.classList.remove("is-visible");
       fallback?.classList.remove("hidden");
-    }, { once: true });
-    image.src = source;
+      const isRemote = /^https?:/i.test(normalizedSource);
+      if (!isRemote || !comic || image.dataset.coverRetry === "1") return;
+      image.dataset.coverRetry = "1";
+      requestRemoteCover(comic, { force: true }).then((replacement) => {
+        if (!replacement || replacement === normalizedSource || !image.isConnected) return;
+        setImageSource(image, fallback, replacement, comic);
+      });
+    };
+    image.src = normalizedSource;
+    if (image.complete && image.naturalWidth > 0) image.onload?.();
   }
 
   function findSummary(seriesIdOrName) {
@@ -1024,12 +1289,19 @@ export function createShelfUI({
       || null;
   }
 
+
+  function resetCoverObservation() {
+    state.seriesCoverObserver?.disconnect();
+    state.libraryCoverObserver?.disconnect();
+    state.coverObserverTargets.clear();
+    state.coverScrollTimers.forEach((timer) => globalThis.clearTimeout(timer));
+    state.coverScrollTimers.clear();
+  }
+
   function clearCoverObjectUrls() {
-    state.coverObserver?.disconnect();
-    state.coverObserver = null;
-    state.coverTasks = new WeakMap();
     state.coverObjectUrls.forEach((url) => URL.revokeObjectURL(url));
     state.coverObjectUrls.clear();
+    state.coverObjectUrlByComic.clear();
   }
 
   function revokeIssueDetailObjectUrl() {
@@ -1090,6 +1362,9 @@ function collectElements() {
     seriesSearch: byId("series-search"),
     seriesFilter: byId("series-filter"),
     seriesVisibleCount: byId("series-visible-count"),
+    seriesLoadMore: byId("series-load-more"),
+    seriesLoadMoreLabel: byId("series-load-more-label"),
+    seriesLoadMoreCopy: byId("series-load-more-copy"),
     seriesSelectMode: byId("series-select-mode"),
     seriesShelfView: byId("series-shelf-view"),
     seriesShelfGrid: byId("series-shelf-grid"),
@@ -1107,14 +1382,12 @@ function collectElements() {
     seriesBulkCancel: byId("series-bulk-cancel"),
 
     issueDetailModal: byId("issue-detail-modal"),
-    issueDetailCard: byId("issue-detail-card"),
     closeIssueDetail: byId("close-issue-detail"),
     issueDetailSeries: byId("issue-detail-series"),
     issueDetailTitle: byId("issue-detail-title"),
     issueDetailMeta: byId("issue-detail-meta"),
     issueDetailCoverImage: byId("issue-detail-cover-image"),
     issueDetailCoverFallback: byId("issue-detail-cover-fallback"),
-    issueDetailFacts: byId("issue-detail-facts"),
     issueDetailCopies: byId("issue-detail-copies"),
     issueDetailNotes: byId("issue-detail-notes"),
     issueDetailDuckipedia: byId("issue-detail-duckipedia"),
@@ -1176,16 +1449,6 @@ function populateConditionSelect(select) {
     if (condition.code === DEFAULT_CONDITION_CODE) option.selected = true;
     select.append(option);
   });
-}
-
-function createDetailFact(label, value) {
-  const item = document.createElement("span");
-  const strong = document.createElement("strong");
-  strong.textContent = String(value);
-  const small = document.createElement("small");
-  small.textContent = label;
-  item.append(strong, small);
-  return item;
 }
 
 function createMiniTag(label) {
@@ -1272,10 +1535,10 @@ function clampPercent(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
 }
 
-function formatReleaseDate(value) {
+function formatShortDate(value) {
   const date = new Date(`${value}T12:00:00`);
   if (Number.isNaN(date.getTime())) return String(value || "");
-  return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
+  return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
 
 function toIsoDate(date) {
@@ -1308,6 +1571,15 @@ function setsEqual(first, second) {
 
 function isVisible(element) {
   return Boolean(element && !element.classList.contains("hidden"));
+}
+
+function isDescendantOf(element, root) {
+  let current = element;
+  while (current) {
+    if (current === root) return true;
+    current = current.parentElement;
+  }
+  return false;
 }
 
 function cssEscape(value) {

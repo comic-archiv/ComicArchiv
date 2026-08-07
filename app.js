@@ -44,7 +44,7 @@ import {
   upsertMetadataCache
 } from "./storage.js";
 import { calculateMissingBands, countMissingBands } from "./missing.js";
-import { lookupDuckipediaMetadata } from "./duckipedia.js";
+import { DUCKIPEDIA_LOOKUP_VERSION, lookupDuckipediaMetadata } from "./duckipedia.js";
 import { MagazineBarcodeScanner, parseSupplementToBandNumber } from "./scanner.js";
 import {
   BackupValidationError,
@@ -164,7 +164,8 @@ const state = {
   calendarFilter: "all",
   calendarSearch: "",
   latestDiagnosticReport: null,
-  diagnosticsRunning: false
+  diagnosticsRunning: false,
+  shelfCoverResolutionPromises: new Map()
 };
 
 const elements = {
@@ -507,10 +508,8 @@ async function initializeApp() {
     onOpenMissingDetail: (series, bandNumber) => openMissingDetailModal(series, bandNumber),
     onEditComic: startEditing,
     onManageCopies: openDuplicateModal,
-    onEnrichComic: (comic, options = {}) => enrichSingleComic(comic, {
-      force: options.force ?? true,
-      silent: options.silent ?? false
-    }),
+    onEnrichComic: (comic) => enrichSingleComic(comic, { force: true }),
+    onResolveCover: resolveShelfCoverUrl,
     onBulkSave: saveShelfBulkComics,
     onOpenProgress: openProgressForSeries,
     onToast: showToast
@@ -1428,6 +1427,9 @@ function buildComicFromForm() {
     notes,
     duckipediaPageUrl: metadata?.pageUrl || (editingMetadataApplies ? state.editingComic?.duckipediaPageUrl : "") || "",
     duckipediaCoverUrl: metadata?.coverUrl || (editingMetadataApplies ? state.editingComic?.duckipediaCoverUrl : "") || "",
+    duckipediaCoverFileName: metadata?.coverFileName || (editingMetadataApplies ? state.editingComic?.duckipediaCoverFileName : "") || "",
+    duckipediaCoverSource: metadata?.coverSource || (editingMetadataApplies ? state.editingComic?.duckipediaCoverSource : "") || "",
+    duckipediaCoverLookupVersion: Number(metadata?.lookupVersion || (editingMetadataApplies ? state.editingComic?.duckipediaCoverLookupVersion : 0) || 0),
     metadataStatus: metadata?.found === true
       ? "found"
       : metadata?.found === false
@@ -1654,7 +1656,8 @@ async function getMetadataForBand(series, bandNumber, { force = false, signal } 
   const key = createMetadataCacheKey(series, bandNumber);
   const cached = await getMetadataCache(key);
 
-  if (!force && cached && isMetadataFresh(cached)) {
+  const cachedLookupVersion = Number(cached?.lookupVersion || 0);
+  if (!force && cached && isMetadataFresh(cached) && cachedLookupVersion >= DUCKIPEDIA_LOOKUP_VERSION) {
     return { ...cached, fromCache: true };
   }
 
@@ -1677,6 +1680,9 @@ async function getMetadataForBand(series, bandNumber, { force = false, signal } 
     publicationYear: result.publicationYear || null,
     pageUrl: result.pageUrl || createConfiguredDuckipediaUrl(series, bandNumber),
     coverUrl: result.coverUrl || "",
+    coverFileName: result.coverFileName || "",
+    coverSource: result.coverSource || "",
+    lookupVersion: Number(result.lookupVersion || DUCKIPEDIA_LOOKUP_VERSION),
     reason: result.reason || "",
     fetchedAt: result.fetchedAt || new Date().toISOString()
   };
@@ -2290,6 +2296,9 @@ async function saveFleaMarketFinds() {
           notes: candidate.notes || "",
           duckipediaPageUrl: candidate.duckipediaUrl || metadata?.pageUrl || createConfiguredDuckipediaUrl(candidate.series, candidate.bandNumber),
           duckipediaCoverUrl: metadata?.coverUrl || "",
+          duckipediaCoverFileName: metadata?.coverFileName || "",
+          duckipediaCoverSource: metadata?.coverSource || "",
+          duckipediaCoverLookupVersion: Number(metadata?.lookupVersion || 0),
           metadataStatus: metadata?.found === true ? "found" : "",
           metadataFetchedAt: metadata?.fetchedAt || null,
           createdAt: now,
@@ -3674,11 +3683,31 @@ async function handleSaveCopyManager(event) {
 }
 
 function mergeComicWithMetadata(comic, metadata) {
+  const lookupVersion = Number(metadata?.lookupVersion || 0);
+  const hasResolvedInfoboxCover = Boolean(
+    metadata?.found
+    && lookupVersion >= DUCKIPEDIA_LOOKUP_VERSION
+    && metadata?.coverUrl
+  );
+  const hasConfirmedNoInfoboxCover = Boolean(
+    metadata?.found
+    && lookupVersion >= DUCKIPEDIA_LOOKUP_VERSION
+    && !metadata?.coverUrl
+    && !metadata?.coverFileName
+  );
+  const hasAuthoritativeCoverResult = hasResolvedInfoboxCover || hasConfirmedNoInfoboxCover;
+  const nextCoverUrl = hasAuthoritativeCoverResult
+    ? String(metadata.coverUrl || "")
+    : String(metadata?.coverUrl || comic.duckipediaCoverUrl || "");
+
   const nextValues = {
     title: comic.title || metadata.title || "",
     publicationYear: comic.publicationYear || metadata.publicationYear || null,
     duckipediaPageUrl: metadata.pageUrl || comic.duckipediaPageUrl || createConfiguredDuckipediaUrl(comic.series, comic.volumeNumber, comic.title),
-    duckipediaCoverUrl: metadata.coverUrl || comic.duckipediaCoverUrl || "",
+    duckipediaCoverUrl: nextCoverUrl,
+    duckipediaCoverFileName: hasAuthoritativeCoverResult ? String(metadata.coverFileName || "") : String(comic.duckipediaCoverFileName || ""),
+    duckipediaCoverSource: hasAuthoritativeCoverResult ? String(metadata.coverSource || "") : String(comic.duckipediaCoverSource || ""),
+    duckipediaCoverLookupVersion: hasAuthoritativeCoverResult ? lookupVersion : Number(comic.duckipediaCoverLookupVersion || 0),
     metadataStatus: metadata.found ? "found" : "not-found",
     metadataFetchedAt: metadata.fetchedAt || comic.metadataFetchedAt || new Date().toISOString(),
     dataFormatVersion: APP_CONFIG.dataFormatVersion
@@ -3688,6 +3717,57 @@ function mergeComicWithMetadata(comic, metadata) {
     changed,
     comic: changed ? { ...comic, ...nextValues, updatedAt: new Date().toISOString() } : comic
   };
+}
+
+async function resolveShelfCoverUrl(comic, { force = false } = {}) {
+  if (!comic || !comic.id || !comic.numericBandNumber) return "";
+
+  // Only a cover produced by the current infobox lookup may skip validation.
+  // Older URLs can originate from PageImages and are repaired automatically.
+  const storedLookupVersion = Number(comic.duckipediaCoverLookupVersion || 0);
+  if (!force && storedLookupVersion >= DUCKIPEDIA_LOOKUP_VERSION) {
+    return comic.duckipediaCoverUrl || "";
+  }
+
+  // A previously stored URL is still useful while offline or when automatic
+  // enrichment is disabled. It is not marked as validated, so the next online
+  // session can replace it with the cover declared by the Duckipedia infobox.
+  if (state.settings.duckipediaAutoEnrich === false || !navigator.onLine) {
+    return comic.duckipediaCoverUrl || "";
+  }
+
+  const existingPromise = state.shelfCoverResolutionPromises.get(comic.id);
+  if (existingPromise) return existingPromise;
+
+  const promise = (async () => {
+    try {
+      const metadata = await getMetadataForBand(comic.series, comic.numericBandNumber, { force });
+      const currentComic = state.comics.find((entry) => entry.id === comic.id) || comic;
+      const { comic: updatedComic, changed } = mergeComicWithMetadata(currentComic, metadata);
+      if (changed) {
+        await saveComic(updatedComic);
+        replaceComicInMemory(updatedComic);
+      }
+      return updatedComic.duckipediaCoverUrl || "";
+    } catch (error) {
+      console.warn(`Cover für ${comic.series}, Band ${comic.volumeNumber} konnte nicht automatisch geladen werden:`, error);
+      return comic.duckipediaCoverUrl || "";
+    } finally {
+      state.shelfCoverResolutionPromises.delete(comic.id);
+    }
+  })();
+
+  state.shelfCoverResolutionPromises.set(comic.id, promise);
+  return promise;
+}
+
+function replaceComicInMemory(updatedComic) {
+  const replace = (items) => {
+    const index = items.findIndex((entry) => entry.id === updatedComic.id);
+    if (index >= 0) items[index] = updatedComic;
+  };
+  replace(state.comics);
+  replace(state.filteredComics);
 }
 
 async function enrichSingleComic(comic, { force = false, silent = false } = {}) {
@@ -3702,8 +3782,6 @@ async function enrichSingleComic(comic, { force = false, silent = false } = {}) 
 
     if (changed) {
       await saveComic(updatedComic);
-      const stateIndex = state.comics.findIndex((entry) => entry.id === comic.id);
-      if (stateIndex >= 0) state.comics[stateIndex] = updatedComic;
       if (!silent) await recordDataChange(1);
     }
 
@@ -3713,7 +3791,7 @@ async function enrichSingleComic(comic, { force = false, silent = false } = {}) 
       showToast(metadata.found ? "Duckipedia-Daten wurden aktualisiert." : (metadata.reason || "Keine Duckipedia-Daten gefunden."), metadata.found ? "success" : "info");
     }
 
-    return { changed, found: metadata.found, comic: changed ? updatedComic : comic, metadata };
+    return { changed, found: metadata.found };
   } catch (error) {
     console.error("Metadaten konnten nicht aktualisiert werden:", error);
     if (!silent) showToast(`Duckipedia-Aktualisierung fehlgeschlagen: ${error.message}`, "error");
@@ -3741,6 +3819,9 @@ function startEditing(comic) {
     found: comic.metadataStatus === "found",
     pageUrl: comic.duckipediaPageUrl || createConfiguredDuckipediaUrl(comic.series, comic.volumeNumber, comic.title),
     coverUrl: comic.duckipediaCoverUrl || "",
+    coverFileName: comic.duckipediaCoverFileName || "",
+    coverSource: comic.duckipediaCoverSource || "",
+    lookupVersion: Number(comic.duckipediaCoverLookupVersion || 0),
     fetchedAt: comic.metadataFetchedAt || null
   };
   elements.metadataStatus.textContent = comic.metadataFetchedAt
@@ -4147,6 +4228,9 @@ async function lookupScannerMetadata(token) {
 
   state.scannerResult.pageUrl = result.pageUrl;
   state.scannerResult.coverUrl = result.coverUrl || "";
+  state.scannerResult.coverFileName = result.coverFileName || "";
+  state.scannerResult.coverSource = result.coverSource || "";
+  state.scannerResult.lookupVersion = Number(result.lookupVersion || 0);
   state.scannerResult.metadataFetchedAt = result.fetchedAt || new Date().toISOString();
   state.scannerResult.metadataStatus = result.found ? "found" : "not-found";
   elements.scannerDuckipediaLink.href = result.pageUrl;
@@ -4583,6 +4667,9 @@ function buildComicFromScanner() {
     notes: "",
     duckipediaPageUrl: scan.pageUrl || createConfiguredDuckipediaUrl(series, scan.bandNumber, title),
     duckipediaCoverUrl: scan.coverUrl || "",
+    duckipediaCoverFileName: scan.coverFileName || "",
+    duckipediaCoverSource: scan.coverSource || "",
+    duckipediaCoverLookupVersion: Number(scan.lookupVersion || 0),
     metadataStatus: scan.metadataStatus || "",
     metadataFetchedAt: scan.metadataFetchedAt || null,
     createdAt: now,
@@ -4607,6 +4694,9 @@ function handleScannerApplyToForm() {
     found: scan.metadataStatus === "found",
     pageUrl: scan.pageUrl || createConfiguredDuckipediaUrl(scan.series, scan.bandNumber),
     coverUrl: scan.coverUrl || "",
+    coverFileName: scan.coverFileName || "",
+    coverSource: scan.coverSource || "",
+    lookupVersion: Number(scan.lookupVersion || 0),
     fetchedAt: scan.metadataFetchedAt || null
   };
   if (!state.formHasLocalCover && state.formMetadata.coverUrl) {
@@ -5188,6 +5278,9 @@ async function handleMarkMissingBandOwned() {
       notes: elements.missingDetailNotes.value.trim(),
       duckipediaPageUrl: duckipediaUrl || metadata?.pageUrl || createConfiguredDuckipediaUrl(selected.series, selected.bandNumber),
       duckipediaCoverUrl: metadata?.coverUrl || "",
+      duckipediaCoverFileName: metadata?.coverFileName || "",
+      duckipediaCoverSource: metadata?.coverSource || "",
+      duckipediaCoverLookupVersion: Number(metadata?.lookupVersion || 0),
       metadataStatus: metadata?.found === true ? "found" : "",
       metadataFetchedAt: metadata?.fetchedAt || null,
       createdAt: now,

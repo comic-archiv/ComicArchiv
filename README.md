@@ -1,85 +1,63 @@
-# Entenarchiv 4.1.1
+# Entenarchiv 4.1.2
 
 Entenarchiv ist eine private, mobile und offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderbänden.
 
-Version 4.1.1 verfeinert die **digitale Bibliothek** für kleine iPhone-Displays: Der Reihenheader ist klar gegliedert, Regale lassen sich ohne Bandbereichswechsel kontinuierlich durchscrollen, Duckipedia-Cover werden zuverlässig nachgeladen und die Banddetailansicht bleibt kompakt und vollständig sichtbar.
+Version 4.1 führte die **digitalen Regale** ein. Version 4.1.2 stabilisiert die Coveranzeige auf dem iPhone, liest das richtige Duckipedia-Cover aus der jeweiligen Band-Infobox und macht die Banddetails zu einer vollwertigen Bildschirmansicht.
 
-## Verbessert in Version 4.1.1
+## Neu und verbessert in 4.1.2
 
-### Digitale Regale
+### Richtiges Cover aus der Duckipedia-Infobox
 
-Ein Klick auf **Lustige Taschenbücher** öffnet die Hauptreihe direkt als Regal. Vorhandene und fehlende Bandnummern erscheinen in der richtigen Reihenfolge:
+Entenarchiv versucht nicht mehr, ein Cover anhand uneinheitlicher Dateinamen oder irgendeines Bildes der Seite zu erraten.
 
-```text
-Band 1 · vorhanden
-Band 2 · vorhanden
-Band 3 · fehlt
-Band 4 · vorhanden
-```
+Die Reihenfolge lautet jetzt:
 
-Vorhandene Bände zeigen nach Möglichkeit das eigene lokale Cover oder die Duckipedia-Vorschau. Fehlt ein Bild, bleibt eine klar erkennbare, ruhige Platzhalterkarte sichtbar.
+1. eigenes, lokal gespeichertes Coverfoto,
+2. das im Duckipedia-Infoboxfeld `BILD` hinterlegte Originalcover,
+3. als Fallback das große Cover der gerenderten rechten Band-Infobox,
+4. grafischer Entenarchiv-Platzhalter.
 
-Duckipedia-Cover werden mit der für Comic-Cover notwendigen Bildlizenz-Option abgefragt. Bereits gespeicherte Bände ohne Cover können beim sichtbarkeitsnahen Laden im Hintergrund still aktualisiert werden.
+Das Feld `NEU-BILD` einer Neuauflage verdrängt das eigentliche Originalcover nicht. Die exakte Mediendatei wird anschließend über MediaWiki `imageinfo` in eine geeignete Vorschau aufgelöst.
 
-Lange Reihen erscheinen als ein durchgehendes Regal. Suche und Filter wirken auf die gesamte Reihe; Cover werden erst in der Nähe des sichtbaren Bereichs geladen, damit das Scrollen trotz vieler Bände flüssig bleibt.
+Die interne Cover-Lookup-Version wurde erhöht. Ältere, möglicherweise falsch zugeordnete Duckipedia-Cover werden bei der nächsten sichtbaren Online-Anzeige automatisch neu geprüft und im Comicdatensatz sowie im lokalen Metadaten-Cache ersetzt.
 
-### Hochwertige Reihenseiten
+### Cover laden ohne vorherigen Klick
 
-Jede Reihe erhält eine eigene Detailansicht mit:
+- Die ersten sichtbaren Cover einer Reihen- oder Bibliotheksansicht werden direkt vorgeladen.
+- Weitere Cover laden automatisch, sobald sie sich dem sichtbaren Bereich nähern.
+- Die Beobachtung ist an den tatsächlich scrollenden Unterseiten ausgerichtet und nicht mehr nur an das Browserfenster.
+- Entenarchiv verwendet für diese Galerie nicht zusätzlich das fehleranfällige native Lazy Loading versteckter iOS-Seiten.
+- Höchstens zwei externe Coverabfragen laufen gleichzeitig.
+- Bereits geladene lokale Cover-URLs bleiben beim Wechsel zwischen Bibliothek und Reihe gültig.
+- Erfolgreich aufgelöste Duckipedia-URLs werden in IndexedDB gespeichert und stehen nach erneutem Öffnen der App weiter zur Verfügung.
 
-- Vollständigkeit und Fortschrittsbalken,
-- Zahl der Ausgaben und physischen Exemplare,
-- ungelesenen und mehrfach vorhandenen Bänden,
-- nächster erkannter Neuerscheinung aus dem Kalender,
-- visueller Regal- und kompakter Listenansicht,
-- Suche innerhalb der Reihe,
-- Filter für vorhanden, fehlend, ungelesen, mehrfach vorhanden und schwächere Zustände,
-- direktem Zugriff auf das Sammlungsziel.
+### Vollbild-Banddetails auf dem iPhone
 
-Fehlende Bände sind im Regal anklickbar und öffnen die bestehende Fehlbandverwaltung. Vorhandene Bände öffnen eine kompakte Detailansicht mit allen physischen Exemplaren, Zuständen und Aktionen.
+Die Banddetailansicht nutzt auf kleinen Displays den vollständigen Bildschirm. Sie enthält:
 
-### Reihenbibliothek
+- Reihe, Titel, Bandnummer und Erscheinungsjahr,
+- zentriertes Cover oder Platzhalter,
+- alle physischen Exemplare,
+- Zustand, gelesen, foliert und Notizen je Exemplar,
+- Duckipedia-Link,
+- Bearbeiten, Exemplare verwalten und Metadaten aktualisieren.
 
-**Sonderbände & weitere Reihen** öffnet jetzt eine eigene Reihenbibliothek. Jede Reihe wird mit Cover-Collage, Vollständigkeit, Ausgaben, Exemplaren und relevanten Hinweisen dargestellt.
+Kopfbereich und Aktionen bleiben beim Scrollen gut erreichbar. Auf größeren Displays bleibt die kompakte Dialogdarstellung erhalten.
 
-Die Bibliothek lässt sich suchen und sortieren nach:
+### Weiterhin enthalten
 
-- Vollständigkeit,
-- Name,
-- Größe,
-- ungelesenen Bänden,
-- letzter Änderung.
+- digitale Regale mit vorhandenen Bänden und sichtbaren Lücken,
+- kontinuierliches Nachladen langer Reihen ohne Bandbereich-Auswahl,
+- Regal- und Listenansicht,
+- Suche, Filter und intelligente Listen,
+- Reihenfortschritt und nächste Neuerscheinung,
+- Sammelbearbeitung mit Rückgängig-Funktion,
+- beliebig viele physische Exemplare je Ausgabe,
+- Scanner, Kalender, Flohmarkt-Modus, Backups und sicherer Modus.
 
-Die Hauptreihe bleibt in der Gesamtansicht immer an erster Stelle.
+## Archivkern
 
-### Intelligente Listen
-
-Entenarchiv stellt automatisch acht praktische Listen zusammen:
-
-- Neu im Archiv
-- Noch ungelesen
-- Mehrfach vorhanden
-- Folierte Exemplare
-- Zustand 3 oder schwächer
-- Daten ergänzen
-- Ohne Cover
-- Aktueller Jahrgang
-
-Ein Klick öffnet die bereits bekannte Sammlungsansicht mit passendem Filter. Die aktive Liste wird dort sichtbar angezeigt und lässt sich mit einem Klick wieder verlassen.
-
-### Sammelbearbeitung
-
-In einer Reihenseite kann über **Auswählen** eine Mehrfachauswahl gestartet werden. Für alle ausgewählten Ausgaben lassen sich anschließend gemeinsam ändern:
-
-- gelesen oder ungelesen,
-- foliert oder entfoliert,
-- Zustand aller Exemplare.
-
-Die letzte Sammeländerung kann direkt wieder rückgängig gemacht werden.
-
-## Archivkern aus Version 4.0
-
-Entenarchiv unterscheidet weiterhin sauber zwischen:
+Entenarchiv unterscheidet sauber zwischen:
 
 ```text
 Reihe
@@ -89,61 +67,27 @@ Reihe
     └── weitere Exemplare
 ```
 
-Eine Ausgabe kann beliebig viele physische Exemplare besitzen. Fehlbandberechnung und Reihenfortschritt zählen die Ausgabe nur einmal; exemplarbezogene Statistiken berücksichtigen alle Bücher.
+Eine Ausgabe kann beliebig viele physische Exemplare besitzen. Fehlbandberechnung und Reihenfortschritt zählen eine Ausgabe nur einmal; exemplarbezogene Statistiken berücksichtigen alle Bücher.
 
 ## Daten und Kompatibilität
 
-Version 4.1.1 verwendet weiterhin:
+Version 4.1.2 verwendet unverändert:
 
 - Datenbank: `comicarchiv-db`
 - IndexedDB-Schema: `5`
 - Datenformat: `9`
 - Archivmodell: `1`
 
-Es ist **keine neue Datenbankmigration** erforderlich. Die in Version 4.0 übertragenen Reihen, Ausgaben, Exemplare, Cover, Ziele, Kalendertermine und Flohmarktmarkierungen bleiben erhalten.
-
-Die Coverübersicht liest nur lokale Cover-IDs und lädt nicht vorsorglich alle Bilddateien in den Arbeitsspeicher. Die eigentlichen Bilder werden erst sichtbarkeitsnah pro Band geladen.
+Es ist keine Datenmigration erforderlich. Reihen, Ausgaben, Exemplare, Cover, Ziele, Kalendertermine und Flohmarktmarkierungen bleiben erhalten.
 
 ## Datenschutz
 
-Die private Sammlung bleibt lokal in IndexedDB auf dem verwendeten Gerät. GitHub Pages veröffentlicht nur den Programmcode und statische Kalenderdateien. Eigene Comics, Zustände, Notizen und Cover werden nicht automatisch zu GitHub übertragen.
-
-Duckipedia wird nur für optionale bibliografische Zusatzdaten und externe Covervorschauen kontaktiert.
-
-## Wichtige Projektdateien
-
-```text
-Entenarchiv/
-├── index.html
-├── style.css
-├── app.js
-├── archive-model.js
-├── shelf.js
-├── shelf-ui.js
-├── storage.js
-├── missing.js
-├── export.js
-├── scanner.js
-├── calendar.js
-├── service-worker.js
-├── tests/
-├── scripts/
-└── .github/workflows/deploy-pages.yml
-```
-
-`shelf.js` enthält die testbare Fachlogik für Regale, Reihenübersichten, intelligente Listen und Sammeländerungen. `shelf-ui.js` kapselt die neue Bibliotheks- und Regaloberfläche.
+Die private Sammlung bleibt lokal in IndexedDB auf dem verwendeten Gerät. GitHub Pages veröffentlicht nur Programmcode und statische Kalenderdateien. Duckipedia wird ausschließlich für optionale bibliografische Metadaten und externe Covervorschauen kontaktiert.
 
 ## Qualitätsprüfung
 
-Lokal oder in GitHub Actions:
-
 ```bash
-npm run check
-npm run build
+npm run ci
 ```
 
-`npm run check` validiert Projektstruktur und JavaScript und führt derzeit 53 automatisierte Tests aus. `npm run build` erstellt anschließend das bereinigte Produktionspaket in `dist/`.
-
-## Update
-
-Die vollständige Anleitung befindet sich in `UPDATE-ANLEITUNG.md`. Vor jedem größeren Update sollte weiterhin ein aktuelles JSON-Backup und bei eigenen Coverbildern zusätzlich ein Medien-Backup erstellt werden.
+Der Befehl prüft Projektstruktur, Versionen, JavaScript-Syntax, Datenlogik, Backups, Kalender, Scanner, Archivkern, Duckipedia-Infoboxen, Galerie-Ladelogik und Produktions-Build.

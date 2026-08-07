@@ -124,7 +124,7 @@
 </div>
 <p aria-live="polite" class="form-message" id="export-message" role="status"></p>
 <p class="backup-help">JSON sichert deine Daten. Eigene Coverbilder sicherst du separat unter „Medien &amp; Metadaten“.</p>
-<p class="app-version-footer">Entenarchiv <span id="app-version">v4.1.1</span></p></section>
+<p class="app-version-footer">Entenarchiv <span id="app-version">v4.1.2</span></p></section>
 </main>
 <nav aria-label="Hauptnavigation" class="bottom-nav"><button class="bottom-nav-item" id="nav-calendar" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 8.5h15M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path></svg><span>Kalender</span></button><button class="bottom-nav-item bottom-nav-primary" id="nav-add" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg><span>Hinzufügen</span></button><button class="bottom-nav-item" id="nav-statistics" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"></path></svg><span>Statistiken</span></button></nav><section aria-hidden="true" aria-labelledby="add-page-title" class="app-page hidden" id="add-page">
 <header class="app-page-header">
@@ -295,7 +295,7 @@
 </header>
 <div class="app-page-content series-page-content">
 <section class="series-hero">
-<div class="series-hero-top">
+<div class="series-hero-summary">
 <div aria-hidden="true" class="series-hero-covers" id="series-hero-covers"></div>
 <div class="series-hero-main">
 <p class="eyebrow" id="series-hero-eyebrow">Deine Reihe</p>
@@ -305,16 +305,12 @@
 </div>
 </div>
 <div class="series-hero-metrics" id="series-hero-metrics"></div>
-<div class="series-next-release hidden" id="series-next-release">
-<span aria-hidden="true" class="series-next-release-icon"><svg viewBox="0 0 24 24"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path></svg></span>
-<span class="series-next-release-copy"><small>Nächste Neuerscheinung</small><strong id="series-next-release-title"></strong></span>
-<time id="series-next-release-date"></time>
-</div>
+<div class="series-next-release hidden" id="series-next-release"><span class="series-next-release-copy"><small>Nächste Neuerscheinung</small><strong id="series-next-release-title"></strong></span><time class="series-next-release-date" id="series-next-release-date"></time></div>
 <div class="series-hero-actions"><button class="secondary-button compact-button" id="series-target-button" type="button">Sammlungsziel verwalten</button></div>
 </section>
 <section class="panel series-toolbar">
 <div aria-label="Ansicht wählen" class="segmented-control"><button class="is-active" data-series-view="shelf" type="button">Regal</button><button data-series-view="list" type="button">Liste</button></div>
-<div class="series-toolbar-grid">
+<div class="series-toolbar-grid series-toolbar-grid-continuous">
 <label class="field field-full"><span>In dieser Reihe suchen</span><input id="series-search" placeholder="Bandnummer oder Titel" type="search"/></label>
 <label class="field field-full"><span>Ansicht filtern</span><select id="series-filter"><option value="all">Alle Bände &amp; Lücken</option><option value="owned">Nur vorhanden</option><option value="missing">Nur fehlend</option><option value="unread">Nur ungelesen</option><option value="multiple">Mehrfach vorhanden</option><option value="needs-care">Zustand 3 oder schwächer</option></select></label>
 </div>
@@ -325,7 +321,8 @@
 <section class="hidden" id="series-nonnumeric-section"><div class="subsection-heading"><h3>Weitere Ausgaben</h3></div><div class="shelf-grid" id="series-nonnumeric"></div></section>
 </div>
 <div class="hidden" id="series-list-view"><div class="series-comic-list" id="series-comic-list"></div></div>
-<div class="panel empty-state hidden" id="series-empty"><div aria-hidden="true" class="empty-icon">⌕</div><h3>Keine passenden Bände</h3><p>Ändere Suche oder Filter.</p></div>
+<button class="series-load-more hidden" id="series-load-more" type="button"><strong id="series-load-more-label">Weitere Bände laden</strong><small id="series-load-more-copy"></small></button>
+<div class="panel empty-state hidden" id="series-empty"><div aria-hidden="true" class="empty-icon">⌕</div><h3>Keine passenden Bände</h3><p>Ändere die Suche oder den Filter.</p></div>
 </div>
 <div class="series-bulk-bar hidden" id="series-bulk-bar">
 <div class="series-bulk-summary"><strong id="series-bulk-count">0 ausgewählt</strong><small>Die Aktion gilt für alle Exemplare der gewählten Bände.</small></div>
@@ -564,13 +561,13 @@
 </section>
 </div>
 </section>
-<div aria-labelledby="issue-detail-title" aria-modal="true" class="modal hidden" id="issue-detail-modal" role="dialog">
+<div aria-labelledby="issue-detail-title" aria-modal="true" class="modal issue-detail-modal hidden" id="issue-detail-modal" role="dialog">
 <div class="modal-backdrop" data-close-issue-detail=""></div>
-<section class="modal-card issue-detail-card" id="issue-detail-card">
+<section class="modal-card issue-detail-card">
 <div class="section-heading"><div><p class="eyebrow" id="issue-detail-series">Ausgabe</p><h2 id="issue-detail-title">Band</h2><p class="muted-copy" id="issue-detail-meta"></p></div><button aria-label="Details schließen" class="icon-button small-icon-button" id="close-issue-detail" type="button">×</button></div>
 <div class="issue-detail-layout">
-<figure class="issue-detail-cover" id="issue-detail-cover"><img alt="" class="hidden" id="issue-detail-cover-image"/><div class="shelf-cover-fallback" id="issue-detail-cover-fallback"><span>Band</span><strong>–</strong></div></figure>
-<div class="issue-detail-content"><div class="issue-detail-facts" id="issue-detail-facts"></div><div class="issue-detail-copies" id="issue-detail-copies"></div><p class="comic-notes hidden" id="issue-detail-notes"></p><a class="duckipedia-link" id="issue-detail-duckipedia" rel="noopener noreferrer" target="_blank">In Duckipedia nachschlagen ↗</a></div>
+<figure class="issue-detail-cover" id="issue-detail-cover"><img alt="" class="hidden" id="issue-detail-cover-image"/><div class="shelf-cover-fallback issue-detail-cover-fallback" id="issue-detail-cover-fallback"><span>Band</span><strong>–</strong></div></figure>
+<div class="issue-detail-content"><div class="issue-detail-copies" id="issue-detail-copies"></div><p class="comic-notes hidden" id="issue-detail-notes"></p><a class="duckipedia-link" id="issue-detail-duckipedia" rel="noopener noreferrer" target="_blank">In Duckipedia nachschlagen ↗</a></div>
 </div>
 <div class="issue-detail-actions"><button class="primary-button" id="issue-detail-edit" type="button">Comic bearbeiten</button><button class="secondary-button" id="issue-detail-copies-button" type="button">Exemplare verwalten</button><button class="secondary-button" id="issue-detail-enrich" type="button">Duckipedia-Daten laden</button></div>
 </section>

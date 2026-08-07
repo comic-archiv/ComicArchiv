@@ -238,6 +238,9 @@ export function migrateLegacyComicsToArchive(legacyComics, seriesCatalog, {
       publicationYear: preferred.publicationYear ?? null,
       duckipediaPageUrl: preferred.duckipediaPageUrl || "",
       duckipediaCoverUrl: preferred.duckipediaCoverUrl || "",
+      duckipediaCoverFileName: preferred.duckipediaCoverFileName || "",
+      duckipediaCoverSource: preferred.duckipediaCoverSource || "",
+      duckipediaCoverLookupVersion: Number(preferred.duckipediaCoverLookupVersion || 0),
       metadataStatus: preferred.metadataStatus || "",
       metadataFetchedAt: preferred.metadataFetchedAt || null,
       legacyComicIds,
@@ -395,6 +398,9 @@ export function materializeLegacyComics(issues, copies, seriesCatalog, {
         copyCount: normalizedCopies.length,
         duckipediaPageUrl: issue.duckipediaPageUrl || "",
         duckipediaCoverUrl: issue.duckipediaCoverUrl || "",
+        duckipediaCoverFileName: issue.duckipediaCoverFileName || "",
+        duckipediaCoverSource: issue.duckipediaCoverSource || "",
+        duckipediaCoverLookupVersion: Number(issue.duckipediaCoverLookupVersion || 0),
         metadataStatus: issue.metadataStatus || "",
         metadataFetchedAt: issue.metadataFetchedAt || null,
         createdAt: issue.createdAt,
@@ -431,6 +437,9 @@ export function legacyComicToArchiveRecords(comic, seriesCatalog, existingCopies
     publicationYear: comic.publicationYear,
     duckipediaPageUrl: comic.duckipediaPageUrl,
     duckipediaCoverUrl: comic.duckipediaCoverUrl,
+    duckipediaCoverFileName: comic.duckipediaCoverFileName,
+    duckipediaCoverSource: comic.duckipediaCoverSource,
+    duckipediaCoverLookupVersion: comic.duckipediaCoverLookupVersion,
     metadataStatus: comic.metadataStatus,
     metadataFetchedAt: comic.metadataFetchedAt,
     legacyComicIds: deduplicateStrings([...(comic.legacyComicIds || []), comic.id].filter(Boolean), 200),
@@ -522,6 +531,15 @@ export function normalizeIssueRecord(input, {
       : null,
     duckipediaPageUrl: normalizeOptionalUrl(source.duckipediaPageUrl),
     duckipediaCoverUrl: normalizeOptionalUrl(source.duckipediaCoverUrl),
+    duckipediaCoverFileName: String(source.duckipediaCoverFileName || "").trim().slice(0, 300),
+    duckipediaCoverSource: ["infobox-wikitext", "infobox-html", ""].includes(source.duckipediaCoverSource)
+      ? source.duckipediaCoverSource
+      : "",
+    duckipediaCoverLookupVersion: Number.isSafeInteger(Number(source.duckipediaCoverLookupVersion))
+      && Number(source.duckipediaCoverLookupVersion) >= 0
+      && Number(source.duckipediaCoverLookupVersion) <= 999
+      ? Number(source.duckipediaCoverLookupVersion)
+      : 0,
     metadataStatus: ["found", "not-found", ""].includes(source.metadataStatus) ? source.metadataStatus : "",
     metadataFetchedAt: isDateString(source.metadataFetchedAt) ? source.metadataFetchedAt : null,
     legacyComicIds: deduplicateStrings(source.legacyComicIds || [], 200),

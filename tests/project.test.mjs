@@ -53,7 +53,7 @@ test("Archivkern, Migrationsbericht und getrennte physische Exemplare sind einge
 });
 
 
-test("Version 4.1, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet", async () => {
+test("Version 4.1.2, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet", async () => {
   const [config, storage, recovery, version, serviceWorker] = await Promise.all([
     read("config.js"),
     read("storage.js"),
@@ -62,16 +62,15 @@ test("Version 4.1, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet", 
     read("service-worker.js")
   ]);
   const versionData = JSON.parse(version);
-  assert.equal(versionData.appVersion, "4.1.1");
+  assert.equal(versionData.appVersion, "4.1.2");
   assert.equal(versionData.dataFormatVersion, 9);
   assert.equal(versionData.archiveModelVersion, 1);
-  assert.match(config, /appVersion:\s*"4\.1\.1"/);
+  assert.match(config, /appVersion:\s*"4\.1\.2"/);
   assert.match(config, /dataFormatVersion:\s*9/);
   assert.match(storage, /const DATABASE_VERSION = 5/);
-  assert.match(recovery, /const APP_VERSION = "4\.1\.1"/);
+  assert.match(recovery, /const APP_VERSION = "4\.1\.2"/);
   assert.match(recovery, /const DATA_FORMAT_VERSION = 9/);
-  assert.match(serviceWorker, /const APP_VERSION = "4\.1\.1"/);
-  assert.match(serviceWorker, /CACHE_NAME = `\$\{CACHE_PREFIX\}v4-1-1`/);
+  assert.match(serviceWorker, /const APP_VERSION = "4\.1\.2"/);
 });
 
 test("Service Worker hält den Archivkern im kritischen Offline-Paket", async () => {
@@ -84,28 +83,54 @@ test("Service Worker hält den Archivkern im kritischen Offline-Paket", async ()
 
 
 test("Digitales Regal, Reihenbibliothek und Sammelbearbeitung sind eingebunden", async () => {
-  const [html, app, shelf, shelfUi, serviceWorker, css] = await Promise.all([
+  const [html, app, shelf, shelfUi, serviceWorker] = await Promise.all([
     read("index.html"),
     read("app.js"),
     read("shelf.js"),
     read("shelf-ui.js"),
-    read("service-worker.js"),
-    read("style.css")
+    read("service-worker.js")
   ]);
   assert.match(html, /id="library-page"/);
   assert.match(html, /id="series-page"/);
   assert.match(html, /id="series-bulk-bar"/);
   assert.match(html, /id="issue-detail-modal"/);
-  assert.match(html, /id="issue-detail-facts"/);
-  assert.doesNotMatch(html, /id="series-range"/);
   assert.match(app, /createShelfUI/);
   assert.match(shelf, /buildShelfSlots/);
   assert.match(shelf, /applyBulkPatch/);
   assert.match(shelfUi, /openSeries/);
   assert.match(shelfUi, /getAllCoverMediaKeys/);
   assert.match(shelfUi, /initialSnapshot\.localCoverIds/);
-  assert.match(shelfUi, /buildShelfSlots\(summary\.comics, \{ target: maximumBand, startBand: 1, maximumBand \}\)/);
-  assert.match(shelfUi, /requestCoverRepair/);
-  assert.match(css, /\.issue-detail-cover\s*\{[\s\S]*?position:\s*relative/);
   assert.match(serviceWorker, /\.\/shelf-ui\.js/);
+});
+
+test("Cover-Hotfix nutzt die Duckipedia-Infobox, lädt Regale selbstständig und öffnet Banddetails vollflächig", async () => {
+  const [html, css, shelfUi, duckipedia, app] = await Promise.all([
+    read("index.html"),
+    read("style.css"),
+    read("shelf-ui.js"),
+    read("duckipedia.js"),
+    read("app.js")
+  ]);
+
+  assert.doesNotMatch(html, /id="series-range"/);
+  assert.match(html, /id="series-load-more"/);
+  assert.match(shelfUi, /seriesVisibleLimit/);
+  assert.match(shelfUi, /root:\s*elements\.seriesPage/);
+  assert.match(shelfUi, /root:\s*elements\.libraryPage/);
+  assert.match(shelfUi, /scheduleCoverPriming/);
+  assert.match(shelfUi, /isNearScrollViewport/);
+  assert.match(shelfUi, /\[0, 120, 420\]/);
+  assert.match(shelfUi, /requestRemoteCover/);
+  assert.doesNotMatch(shelfUi, /image\.loading\s*=\s*"lazy"/);
+  assert.match(duckipedia, /DUCKIPEDIA_LOOKUP_VERSION\s*=\s*3/);
+  assert.match(duckipedia, /extractPublicationInfobox/);
+  assert.match(duckipedia, /readField\("BILD"/);
+  assert.match(duckipedia, /prop:\s*"imageinfo"/);
+  assert.match(app, /cachedLookupVersion\s*>=\s*DUCKIPEDIA_LOOKUP_VERSION/);
+  assert.match(css, /\.issue-detail-cover\s*\{[\s\S]*?position:\s*relative;/);
+  assert.match(css, /#issue-detail-modal \.issue-detail-card\s*\{[\s\S]*?height:\s*min\(90dvh, 840px\)/);
+  assert.match(css, /@media \(max-width:\s*620px\)[\s\S]*?#issue-detail-modal \.issue-detail-card\s*\{[\s\S]*?height:\s*100dvh/);
+  assert.match(css, /#issue-detail-modal \.issue-detail-layout\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/);
+  assert.match(css, /\.series-hero-summary\s*\{/);
+  assert.match(css, /\.series-next-release-date\s*\{/);
 });
