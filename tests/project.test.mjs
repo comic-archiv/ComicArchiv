@@ -53,7 +53,7 @@ test("Archivkern, Migrationsbericht und getrennte physische Exemplare sind einge
 });
 
 
-test("Version 4.1.2, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet", async () => {
+test("Version 4.2.0, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet", async () => {
   const [config, storage, recovery, version, serviceWorker] = await Promise.all([
     read("config.js"),
     read("storage.js"),
@@ -62,15 +62,15 @@ test("Version 4.1.2, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet"
     read("service-worker.js")
   ]);
   const versionData = JSON.parse(version);
-  assert.equal(versionData.appVersion, "4.1.2");
+  assert.equal(versionData.appVersion, "4.2.0");
   assert.equal(versionData.dataFormatVersion, 9);
   assert.equal(versionData.archiveModelVersion, 1);
-  assert.match(config, /appVersion:\s*"4\.1\.2"/);
+  assert.match(config, /appVersion:\s*"4\.2\.0"/);
   assert.match(config, /dataFormatVersion:\s*9/);
   assert.match(storage, /const DATABASE_VERSION = 5/);
-  assert.match(recovery, /const APP_VERSION = "4\.1\.2"/);
+  assert.match(recovery, /const APP_VERSION = "4\.2\.0"/);
   assert.match(recovery, /const DATA_FORMAT_VERSION = 9/);
-  assert.match(serviceWorker, /const APP_VERSION = "4\.1\.2"/);
+  assert.match(serviceWorker, /const APP_VERSION = "4\.2\.0"/);
 });
 
 test("Service Worker hält den Archivkern im kritischen Offline-Paket", async () => {
@@ -133,4 +133,30 @@ test("Cover-Hotfix nutzt die Duckipedia-Infobox, lädt Regale selbstständig und
   assert.match(css, /#issue-detail-modal \.issue-detail-layout\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/);
   assert.match(css, /\.series-hero-summary\s*\{/);
   assert.match(css, /\.series-next-release-date\s*\{/);
+});
+
+test("Version 4.2 bindet Scanner Pro, Zustandsassistent und einen überlagerungsfreien Seitenkopf ein", async () => {
+  const [html, app, css, serviceWorker, buildScript] = await Promise.all([
+    read("index.html"),
+    read("app.js"),
+    read("style.css"),
+    read("service-worker.js"),
+    read("scripts/build-static.mjs")
+  ]);
+
+  assert.match(html, /id="scanner-mode-fast"/);
+  assert.match(html, /id="scanner-mode-review"/);
+  assert.match(html, /id="condition-assistant-modal"/);
+  assert.match(html, /id="scanner-stat-scanned"/);
+  assert.match(app, /mergeScannerQueueItem/);
+  assert.match(app, /renderScannerSessionStats/);
+  assert.match(app, /evaluateConditionAssessment/);
+  assert.match(css, /\.app-page\s*\{[\s\S]*?isolation:\s*isolate/);
+  assert.match(css, /\.app-page-header\s*\{[\s\S]*?z-index:\s*1000/);
+  assert.match(css, /\.scanner-pro-modal \.scanner-modal-card\s*\{[\s\S]*?height:\s*min\(94dvh, 920px\)/);
+  assert.match(css, /\.condition-assistant-card\s*\{[\s\S]*?height:\s*min\(92dvh, 860px\)/);
+  assert.match(serviceWorker, /\.\/condition-assistant\.js/);
+  assert.match(serviceWorker, /\.\/scanner-pro\.js/);
+  assert.match(buildScript, /"condition-assistant\.js"/);
+  assert.match(buildScript, /"scanner-pro\.js"/);
 });

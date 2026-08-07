@@ -169,6 +169,7 @@ test("Reihenbibliothek und digitales Regal rendern mit echten Modulaufrufen", as
     localCoverIds: new Set()
   };
 
+  let resolvedCoverCalls = 0;
   const ui = createShelfUI({
     getSnapshot: () => snapshot,
     getCoverMedia: async () => null,
@@ -178,6 +179,10 @@ test("Reihenbibliothek und digitales Regal rendern mit echten Modulaufrufen", as
     onEditComic() {},
     onManageCopies() {},
     onEnrichComic: async () => {},
+    onResolveCover: async (comic) => {
+      resolvedCoverCalls += 1;
+      return `https://example.invalid/${comic.id}.jpg`;
+    },
     onBulkSave: async () => {},
     onOpenProgress() {},
     onToast() {}
@@ -187,6 +192,13 @@ test("Reihenbibliothek und digitales Regal rendern mit echten Modulaufrufen", as
   assert.equal(elements.get("series-library-grid").children.length, 1);
   assert.equal(elements.get("smart-list-grid").children.length, 8);
   assert.equal(elements.get("library-page").classList.contains("hidden"), false);
+  await new Promise((resolve) => setTimeout(resolve, 15));
+  assert.ok(resolvedCoverCalls > 0, "Galeriecover müssen ohne vorherigen Band-Klick automatisch aufgelöst werden");
+  const callsAfterFirstLibraryOpen = resolvedCoverCalls;
+  ui.closeLibrary({ returnFocus: false });
+  ui.openLibrary("other");
+  await new Promise((resolve) => setTimeout(resolve, 15));
+  assert.equal(resolvedCoverCalls, callsAfterFirstLibraryOpen, "Bereits aufgelöste Cover dürfen beim erneuten Öffnen nicht neu verloren gehen oder abgefragt werden");
 
   ui.openSeries("ltb-main");
   assert.equal(elements.get("series-page-title").textContent, "Lustiges Taschenbuch");

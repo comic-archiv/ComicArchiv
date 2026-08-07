@@ -8,6 +8,7 @@ import {
   mergeCopyLists,
   mergeFormValuesIntoCopies,
   migrateLegacyComicsToArchive,
+  normalizeIssueRecord,
   validateArchiveGraph
 } from "../archive-model.js";
 
@@ -171,4 +172,27 @@ test("der Archivgraph lehnt Ausgaben ohne physisches Exemplar ab", () => {
   });
   assert.equal(result.valid, false);
   assert.match(result.problems.join(" "), /besitzt kein Exemplar/);
+});
+
+
+test("Infobox-Cover-Herkunft bleibt im Archivkern erhalten", () => {
+  const issue = normalizeIssueRecord({
+    id: "issue-cover",
+    seriesId: "ltb-main",
+    volumeNumber: "2",
+    numericBandNumber: 2,
+    title: "Hallo... hier Micky!",
+    duckipediaPageUrl: "https://de.duckipedia.org/LTB_2",
+    duckipediaCoverUrl: "https://example.invalid/Lutabu002.jpg",
+    duckipediaCoverFileName: "Lutabu002.jpg",
+    duckipediaCoverSource: "infobox-wikitext",
+    duckipediaCoverLookupVersion: 3,
+    metadataStatus: "found",
+    metadataFetchedAt: "2026-08-08T00:00:00.000Z",
+    createdAt: "2026-08-08T00:00:00.000Z",
+    updatedAt: "2026-08-08T00:00:00.000Z"
+  });
+  assert.equal(issue.duckipediaCoverFileName, "Lutabu002.jpg");
+  assert.equal(issue.duckipediaCoverSource, "infobox-wikitext");
+  assert.equal(issue.duckipediaCoverLookupVersion, 3);
 });

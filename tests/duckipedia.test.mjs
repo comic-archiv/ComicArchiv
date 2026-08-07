@@ -146,7 +146,7 @@ test("Gerenderte Infobox ist der Fallback, wenn kein BILD-Feld vorhanden ist", a
   try {
     const result = await lookupDuckipediaMetadata("Lustiges Taschenbuch", 2);
     assert.equal(result.coverUrl, "https://de.duckipedia.org/images/thumb/a/ab/Korrektes_Cover.png/250px-Korrektes_Cover.png");
-    assert.equal(result.coverSource, "rendered-infobox");
+    assert.equal(result.coverSource, "infobox-html");
   } finally {
     globalThis.fetch = originalFetch;
   }

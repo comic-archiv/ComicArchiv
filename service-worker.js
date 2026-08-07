@@ -1,6 +1,6 @@
-const APP_VERSION = "4.1.2";
+const APP_VERSION = "4.2.0";
 const CACHE_PREFIX = "entenarchiv-shell-";
-const CACHE_NAME = `${CACHE_PREFIX}v4-1-2`;
+const CACHE_NAME = `${CACHE_PREFIX}v4-2-0`;
 
 const CORE_SHELL = Object.freeze([
   "./",
@@ -20,6 +20,8 @@ const CORE_SHELL = Object.freeze([
   "./duckipedia.js",
   "./media.js",
   "./calendar.js",
+  "./condition-assistant.js",
+  "./scanner-pro.js",
   "./app.js",
   "./manifest.webmanifest",
   "./version.json",

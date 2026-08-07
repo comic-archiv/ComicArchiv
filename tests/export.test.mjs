@@ -244,3 +244,26 @@ test("Backup-Import lehnt Textwerte in booleschen Exemplarfeldern ab", () => {
     /Archivkern im Backup ist ungültig|true oder false|Exemplar/
   );
 });
+
+
+test("JSON-Backup behält validierte Duckipedia-Infobox-Cover", () => {
+  const comic = buildComic({
+    volumeNumber: "2",
+    numericBandNumber: 2,
+    title: "Hallo... hier Micky!",
+    duckipediaPageUrl: "https://de.duckipedia.org/LTB_2",
+    duckipediaCoverUrl: "https://example.invalid/Lutabu002.jpg",
+    duckipediaCoverFileName: "Lutabu002.jpg",
+    duckipediaCoverSource: "infobox-html",
+    duckipediaCoverLookupVersion: 3,
+    metadataStatus: "found",
+    metadataFetchedAt: "2026-08-08T00:00:00.000Z"
+  });
+  const parsed = parseAndValidateBackup(createJsonBackup([comic], { theme: "dark" }, []));
+  assert.equal(parsed.comics[0].duckipediaCoverFileName, "Lutabu002.jpg");
+  assert.equal(parsed.comics[0].duckipediaCoverSource, "infobox-html");
+  assert.equal(parsed.comics[0].duckipediaCoverLookupVersion, 3);
+  assert.equal(parsed.archiveCore.issues[0].duckipediaCoverFileName, "Lutabu002.jpg");
+  assert.equal(parsed.archiveCore.issues[0].duckipediaCoverSource, "infobox-html");
+  assert.equal(parsed.archiveCore.issues[0].duckipediaCoverLookupVersion, 3);
+});

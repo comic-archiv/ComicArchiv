@@ -124,7 +124,7 @@
 </div>
 <p aria-live="polite" class="form-message" id="export-message" role="status"></p>
 <p class="backup-help">JSON sichert deine Daten. Eigene Coverbilder sicherst du separat unter „Medien &amp; Metadaten“.</p>
-<p class="app-version-footer">Entenarchiv <span id="app-version">v4.1.2</span></p></section>
+<p class="app-version-footer">Entenarchiv <span id="app-version">v4.2.0</span></p></section>
 </main>
 <nav aria-label="Hauptnavigation" class="bottom-nav"><button class="bottom-nav-item" id="nav-calendar" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 8.5h15M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path></svg><span>Kalender</span></button><button class="bottom-nav-item bottom-nav-primary" id="nav-add" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg><span>Hinzufügen</span></button><button class="bottom-nav-item" id="nav-statistics" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"></path></svg><span>Statistiken</span></button></nav><section aria-hidden="true" aria-labelledby="add-page-title" class="app-page hidden" id="add-page">
 <header class="app-page-header">
@@ -188,15 +188,15 @@
 <p aria-live="polite" class="field-help" id="metadata-status"></p>
 </div>
 <div class="field" id="primary-condition-field">
-<div class="field-label-row"><label for="condition" id="primary-condition-label">Zustand <strong aria-hidden="true">*</strong></label><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Bewertungshilfe</button></div>
+<div class="field-label-row"><label for="condition" id="primary-condition-label">Zustand <strong aria-hidden="true">*</strong></label><span class="condition-actions"><button class="inline-action condition-assistant-trigger" data-assistant-notes="notes" data-assistant-target="condition" data-open-condition-assistant="" type="button">Assistent</button><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Stufen</button></span></div>
 <select id="condition" name="condition" required=""></select>
 <small class="field-error" id="condition-error"></small>
 </div>
-<label class="field hidden" id="duplicate-condition-field">
-<span>Zustand Exemplar 2 <strong aria-hidden="true">*</strong></span>
+<div class="field hidden" id="duplicate-condition-field">
+<div class="field-label-row"><label for="duplicate-condition">Zustand Exemplar 2 <strong aria-hidden="true">*</strong></label><span class="condition-actions"><button class="inline-action condition-assistant-trigger" data-assistant-target="duplicate-condition" data-open-condition-assistant="" type="button">Assistent</button><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Stufen</button></span></div>
 <select id="duplicate-condition" name="duplicateCondition"></select>
 <small class="field-error" id="duplicate-condition-error"></small>
-</label>
+</div>
 </div>
 <fieldset class="switch-group compact-switch-group">
 <legend>Eigenschaften</legend>
@@ -408,7 +408,7 @@
 <div class="field-grid compact-field-grid">
 <label class="field field-full"><span>Suche</span><input id="flea-market-search" placeholder="Reihe, Bandnummer oder Titel" type="search"/></label>
 <label class="field"><span>Bereich</span><select id="flea-market-scope"><option value="all">Alle Reihen</option><option value="main">Nur Hauptreihe</option><option value="other">Nur Sonderreihen</option></select></label>
-<div class="field"><div class="field-label-row"><label for="flea-market-default-condition">Standardzustand</label><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Hilfe</button></div><select id="flea-market-default-condition"></select></div>
+<div class="field"><div class="field-label-row"><label for="flea-market-default-condition">Standardzustand</label><span class="condition-actions"><button class="inline-action condition-assistant-trigger" data-assistant-target="flea-market-default-condition" data-open-condition-assistant="" type="button">Assistent</button><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Stufen</button></span></div><select id="flea-market-default-condition"></select></div>
 </div>
 <button class="secondary-button compact-button" id="flea-market-apply-condition" type="button">Zustand auf gefundene Bände anwenden</button>
 </section>
@@ -573,24 +573,41 @@
 </section>
 </div>
 
-<div aria-labelledby="scanner-modal-title" aria-modal="true" class="modal hidden" id="scanner-modal" role="dialog">
+<div aria-labelledby="scanner-modal-title" aria-modal="true" class="modal scanner-pro-modal hidden" id="scanner-modal" role="dialog">
 <div class="modal-backdrop" data-close-scanner=""></div>
 <section class="modal-card scanner-modal-card">
-<div class="section-heading">
-<div><p class="eyebrow">Schnellerfassung</p><h2 id="scanner-modal-title">Serien-Scanner</h2></div>
+<header class="scanner-pro-header">
+<div><p class="eyebrow">Schnellerfassung</p><h2 id="scanner-modal-title">Scanner Pro</h2></div>
 <button aria-label="Scanner schließen" class="icon-button small-icon-button" id="close-scanner" type="button">×</button>
+</header>
+<div class="scanner-pro-body">
+<section aria-label="Scanner-Modus" class="scanner-mode-panel">
+<div class="scanner-mode-switch" role="group" aria-label="Scanner-Modus wählen">
+<button class="scanner-mode-button is-active" data-scanner-mode="fast" id="scanner-mode-fast" type="button"><strong>Scan &amp; weiter</strong><small>Direkt vormerken, Kamera bleibt aktiv</small></button>
+<button class="scanner-mode-button" data-scanner-mode="review" id="scanner-mode-review" type="button"><strong>Vorher prüfen</strong><small>Angaben vor jedem Band kontrollieren</small></button>
 </div>
+<p class="scanner-mode-description" id="scanner-mode-description">Erkannte Bände landen sofort in der Warteschlange. Duckipedia-Daten werden parallel ergänzt.</p>
+</section>
+<section aria-label="Scan-Sitzung" class="scanner-session-stats">
+<div><span>Scans</span><strong id="scanner-stat-scanned">0</strong></div>
+<div><span>Neu</span><strong id="scanner-stat-new">0</strong></div>
+<div><span>Vorhanden</span><strong id="scanner-stat-existing">0</strong></div>
+<div><span>Prüfen</span><strong id="scanner-stat-review">0</strong></div>
+</section>
+<details class="scanner-defaults" open>
+<summary>Reihe &amp; Standardwerte</summary>
 <div class="scanner-settings-grid">
 <label class="field field-full"><span>Reihe <strong aria-hidden="true">*</strong></span><select id="scanner-series"></select></label>
-<div class="field"><div class="field-label-row"><label for="scanner-condition">Standardzustand</label><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Hilfe</button></div><select id="scanner-condition"></select></div>
-<label class="field hidden" id="scanner-duplicate-condition-field"><span>Zustand Exemplar 2</span><select id="scanner-duplicate-condition"></select></label>
+<div class="field"><div class="field-label-row"><label for="scanner-condition">Standardzustand</label><span class="condition-actions"><button class="inline-action condition-assistant-trigger" data-assistant-target="scanner-condition" data-open-condition-assistant="" type="button">Assistent</button><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Stufen</button></span></div><select id="scanner-condition"></select></div>
+<div class="field hidden" id="scanner-duplicate-condition-field"><div class="field-label-row"><label for="scanner-duplicate-condition">Zustand Exemplar 2</label><button class="inline-action condition-assistant-trigger" data-assistant-target="scanner-duplicate-condition" data-open-condition-assistant="" type="button">Assistent</button></div><select id="scanner-duplicate-condition"></select></div>
 </div>
 <fieldset class="switch-group compact-switch-group scanner-switches">
-<legend>Eigenschaften für gescannte Bände</legend>
+<legend>Eigenschaften für neue Exemplare</legend>
 <label class="check-row"><input id="scanner-is-read" type="checkbox"/><span>Gelesen</span></label>
-<label class="check-row"><input id="scanner-is-duplicate" type="checkbox"/><span>Doppelt</span></label>
+<label class="check-row"><input id="scanner-is-duplicate" type="checkbox"/><span>Direkt zwei Exemplare</span></label>
 <label class="check-row"><input id="scanner-is-sealed" type="checkbox"/><span>Foliert</span></label>
 </fieldset>
+</details>
 <div class="scanner-viewport">
 <div aria-label="Kamerabild für die Barcode-Erkennung" class="scanner-camera-target" id="scanner-camera-target"></div>
 <div aria-hidden="true" class="scanner-frame"><span></span></div>
@@ -598,11 +615,12 @@
 <svg aria-hidden="true" viewbox="0 0 24 24"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M7 9v6M10 8v8M13 9v6M16 8v8"></path></svg>
 <span>Kamera noch nicht aktiv</span>
 </div>
+<div aria-live="polite" class="scanner-detected-flash hidden" id="scanner-detected-flash"><span id="scanner-detected-kicker">Vorgemerkt</span><strong>Band <span id="scanner-detected-band">–</span></strong><small id="scanner-detected-note"></small></div>
 </div>
 <p aria-live="polite" class="scanner-status" id="scanner-status" role="status">Bereit zum Scannen.</p>
 <div class="scanner-source-actions">
 <button class="primary-button" id="scanner-start" type="button">Kamera starten</button>
-<button class="secondary-button hidden" id="scanner-stop" type="button">Kamera stoppen</button>
+<button class="secondary-button hidden" id="scanner-stop" type="button">Kamera pausieren</button>
 <label class="secondary-button file-button" for="scanner-photo">Foto auswerten</label>
 <input accept="image/*" capture="environment" class="visually-hidden" id="scanner-photo" type="file"/>
 </div>
@@ -626,24 +644,24 @@
 </div>
 <p aria-live="polite" class="field-help" id="scanner-lookup-status"></p>
 <div class="modal-actions scanner-result-actions">
-<button class="primary-button" id="scanner-save" type="button">Zur Warteschlange &amp; weiter</button>
-<button class="secondary-button" id="scanner-apply-form" type="button">Nur ins Formular übernehmen</button>
+<button class="primary-button" id="scanner-save" type="button">Vormerken &amp; weiter</button>
+<button class="secondary-button" id="scanner-apply-form" type="button">Ins Formular übernehmen</button>
 <button class="text-button" id="scanner-rescan" type="button">Neu scannen</button>
 </div>
 </section>
 <section aria-labelledby="scanner-queue-title" class="scanner-queue" id="scanner-queue">
 <div class="subsection-heading scanner-queue-heading">
-<div><h3 id="scanner-queue-title">Warteschlange</h3><span class="muted-copy" id="scanner-queue-count">0 Bände</span></div>
-<button class="text-button danger-text" id="scanner-clear-queue" type="button">Liste leeren</button>
+<div><h3 id="scanner-queue-title">Warteschlange</h3><span class="muted-copy" id="scanner-queue-count">0 Ausgaben</span></div>
+<button class="text-button danger-text" id="scanner-clear-queue" type="button">Leeren</button>
 </div>
-<p class="field-help">Scanne mehrere Bände nacheinander. Vor dem Sammelspeichern kannst du Titel, Jahr, Zustand und Eigenschaften je Band korrigieren.</p>
 <div class="scanner-queue-toolbar">
-<button class="secondary-button" id="scanner-apply-defaults" type="button">Aktuelle Einstellungen auf alle anwenden</button>
-<button class="primary-button" id="scanner-save-queue" type="button">Alle geprüften Bände speichern</button>
+<button class="secondary-button" id="scanner-apply-defaults" type="button">Standardwerte anwenden</button>
+<button class="primary-button" id="scanner-save-queue" type="button">Geprüfte Bände speichern</button>
 </div>
 <div class="scanner-queue-list" id="scanner-queue-list"></div>
 <p aria-live="polite" class="form-message" id="scanner-queue-message" role="status"></p>
 </section>
+</div>
 </section>
 </div>
 <div aria-labelledby="series-modal-title" aria-modal="true" class="modal hidden" id="series-modal" role="dialog">
@@ -676,7 +694,7 @@
 <div class="field-grid compact-field-grid">
 <label class="field field-full"><span>Titel / Name</span><input id="missing-detail-name" maxlength="200" placeholder="Optional" type="text"/></label>
 <label class="field"><span>Erscheinungsjahr</span><input id="missing-detail-year" inputmode="numeric" max="2035" min="1800" placeholder="Optional" type="number"/></label>
-<div class="field"><div class="field-label-row"><label for="missing-detail-condition">Zustand (Wunsch / gefunden)</label><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Hilfe</button></div><select id="missing-detail-condition"></select></div>
+<div class="field"><div class="field-label-row"><label for="missing-detail-condition">Zustand (Wunsch / gefunden)</label><span class="condition-actions"><button class="inline-action condition-assistant-trigger" data-assistant-notes="missing-detail-notes" data-assistant-target="missing-detail-condition" data-open-condition-assistant="" type="button">Assistent</button><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Stufen</button></span></div><select id="missing-detail-condition"></select></div>
 <label class="field field-full"><span>Exakter Duckipedia-Link</span><input id="missing-detail-url" inputmode="url" maxlength="1000" placeholder="Optional – sonst wird die Suche geöffnet" type="url"/></label>
 <label class="field field-full"><span>Notizen</span><textarea id="missing-detail-notes" maxlength="2000" placeholder="Optional" rows="3"></textarea></label>
 </div>
@@ -741,6 +759,30 @@
 <p class="condition-guide-intro">Das deutsche System bewertet vollständige Comics von Zustand 0 bis 4. Zwischenstufen liegen jeweils zwischen den beiden ganzen Stufen. Zustand 5 kennzeichnet einen im Comicteil unvollständigen Band. Preisrelationen sind nur grobe Richtwerte und keine automatische Wertbestimmung.</p>
 <div class="condition-guide-list" id="condition-guide-list"></div>
 <p class="condition-guide-footnote">Tipp: Bewerte den Gesamteindruck und notiere besondere Mängel wie Lochung, Restaurierung, Tesa, fehlende Sammelmarken oder Wasserschäden zusätzlich im Notizfeld.</p>
+</section>
+</div>
+<div aria-labelledby="condition-assistant-title" aria-modal="true" class="modal condition-assistant-modal hidden" id="condition-assistant-modal" role="dialog">
+<div class="modal-backdrop" data-close-condition-assistant=""></div>
+<section class="modal-card condition-assistant-card">
+<header class="condition-assistant-header"><div><p class="eyebrow">Geführt bewerten</p><h2 id="condition-assistant-title">Zustandsassistent</h2><p class="muted-copy" id="condition-assistant-target-label">Aktuelles Exemplar</p></div><button aria-label="Zustandsassistent schließen" class="icon-button small-icon-button" id="close-condition-assistant" type="button">×</button></header>
+<div class="condition-assistant-progress" aria-label="Fortschritt"><span id="condition-assistant-progress-fill"></span></div>
+<div class="condition-assistant-body">
+<section class="condition-assistant-step" data-assistant-step="1" id="condition-assistant-step-completeness">
+<p class="condition-assistant-step-label">Schritt 1 von 4</p><h3>Ist der Band vollständig?</h3><p class="muted-copy">Zustand 5 gilt ausschließlich für einen im Comicteil unvollständigen Band.</p>
+<fieldset class="assistant-choice-group"><legend>Comicteil</legend><label class="assistant-choice"><input name="assistant-comic-complete" type="radio" value="yes"/><span><strong>Vollständig</strong><small>Alle Comicseiten sind vorhanden.</small></span></label><label class="assistant-choice"><input name="assistant-comic-complete" type="radio" value="no"/><span><strong>Unvollständig</strong><small>Im Comicteil fehlen Seiten oder Inhalte.</small></span></label></fieldset>
+<fieldset class="assistant-choice-group"><legend>Umschlag</legend><label class="assistant-choice"><input name="assistant-cover-complete" type="radio" value="yes"/><span><strong>Vollständig</strong><small>Vorder- und Rückseite sind vorhanden.</small></span></label><label class="assistant-choice"><input name="assistant-cover-complete" type="radio" value="no"/><span><strong>Nicht vollständig</strong><small>Bitte später ausdrücklich in den Notizen dokumentieren.</small></span></label></fieldset>
+</section>
+<section class="condition-assistant-step hidden" data-assistant-step="2" id="condition-assistant-step-impression">
+<p class="condition-assistant-step-label">Schritt 2 von 4</p><h3>Wie wirkt das Heft insgesamt?</h3><p class="muted-copy">Wähle den Gesamteindruck, bevor einzelne Mängel berücksichtigt werden.</p><div class="assistant-impression-list" id="condition-assistant-impressions"></div>
+</section>
+<section class="condition-assistant-step hidden" data-assistant-step="3" id="condition-assistant-step-defects">
+<p class="condition-assistant-step-label">Schritt 3 von 4</p><h3>Welche konkreten Mängel siehst du?</h3><p class="muted-copy">Mehrfachauswahl möglich. Die stärkste relevante Stufe begrenzt die Empfehlung.</p><div class="assistant-defect-groups" id="condition-assistant-defects"></div>
+</section>
+<section class="condition-assistant-step hidden" data-assistant-step="4" id="condition-assistant-step-result">
+<p class="condition-assistant-step-label">Schritt 4 von 4</p><h3>Empfehlung</h3><div class="assistant-result-card" id="condition-assistant-result"></div><label class="check-row assistant-note-option"><input checked="" id="condition-assistant-add-note" type="checkbox"/><span><strong>Mängel als Notiz ergänzen</strong><small>Vorhandene Notizen bleiben erhalten.</small></span></label><p class="condition-assistant-disclaimer">Der Assistent überträgt die Beschreibungen des deutschen Comic-Zustandssystems in eine Orientierungshilfe. Maßgeblich bleibt deine Prüfung des konkreten Bands.</p>
+</section>
+</div>
+<footer class="condition-assistant-actions"><button class="secondary-button hidden" id="condition-assistant-back" type="button">Zurück</button><button class="primary-button" id="condition-assistant-next" type="button">Weiter</button><button class="primary-button hidden" id="condition-assistant-apply" type="button">Empfehlung übernehmen</button></footer>
 </section>
 </div>
 <div aria-labelledby="import-title" aria-modal="true" class="modal hidden" id="import-modal" role="dialog">

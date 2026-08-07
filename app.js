@@ -47,6 +47,21 @@ import { calculateMissingBands, countMissingBands } from "./missing.js";
 import { DUCKIPEDIA_LOOKUP_VERSION, lookupDuckipediaMetadata } from "./duckipedia.js";
 import { MagazineBarcodeScanner, parseSupplementToBandNumber } from "./scanner.js";
 import {
+  SCANNER_MODES,
+  classifyScannerResult,
+  createScannerQueueKey,
+  mergeScannerQueueItem,
+  normalizeScannerMode,
+  summarizeScannerQueue
+} from "./scanner-pro.js";
+import {
+  CONDITION_ASSISTANT_DEFECT_GROUPS,
+  CONDITION_ASSISTANT_IMPRESSIONS,
+  buildConditionAssessmentNote,
+  createConditionAssessment,
+  evaluateConditionAssessment
+} from "./condition-assistant.js";
+import {
   BackupValidationError,
   createCollectionCsv,
   createDatedFilename,
@@ -135,6 +150,10 @@ const state = {
   scannerResult: null,
   scannerLookupController: null,
   scannerQueue: [],
+  scannerMode: SCANNER_MODES.FAST,
+  scannerSessionScans: 0,
+  scannerQueueLookups: new Map(),
+  scannerFlashTimer: null,
   formMetadata: null,
   pendingCover: null,
   removeCoverRequested: false,
@@ -155,6 +174,9 @@ const state = {
   copyManagerDraft: [],
   archiveCoreStatus: null,
   conditionGuideReturnTarget: null,
+  conditionAssistantStep: 1,
+  conditionAssistantAssessment: createConditionAssessment(),
+  conditionAssistantTarget: null,
   editingCustomSeriesName: "",
   selectedCalendarEventId: null,
   calendarImporting: false,
@@ -437,9 +459,27 @@ const elements = {
   conditionGuideModal: document.querySelector("#condition-guide-modal"),
   closeConditionGuide: document.querySelector("#close-condition-guide"),
   conditionGuideList: document.querySelector("#condition-guide-list"),
+  conditionAssistantModal: document.querySelector("#condition-assistant-modal"),
+  closeConditionAssistant: document.querySelector("#close-condition-assistant"),
+  conditionAssistantTargetLabel: document.querySelector("#condition-assistant-target-label"),
+  conditionAssistantProgressFill: document.querySelector("#condition-assistant-progress-fill"),
+  conditionAssistantImpressions: document.querySelector("#condition-assistant-impressions"),
+  conditionAssistantDefects: document.querySelector("#condition-assistant-defects"),
+  conditionAssistantResult: document.querySelector("#condition-assistant-result"),
+  conditionAssistantAddNote: document.querySelector("#condition-assistant-add-note"),
+  conditionAssistantBack: document.querySelector("#condition-assistant-back"),
+  conditionAssistantNext: document.querySelector("#condition-assistant-next"),
+  conditionAssistantApply: document.querySelector("#condition-assistant-apply"),
   openScanner: document.querySelector("#open-scanner"),
   scannerModal: document.querySelector("#scanner-modal"),
   closeScanner: document.querySelector("#close-scanner"),
+  scannerModeFast: document.querySelector("#scanner-mode-fast"),
+  scannerModeReview: document.querySelector("#scanner-mode-review"),
+  scannerModeDescription: document.querySelector("#scanner-mode-description"),
+  scannerStatScanned: document.querySelector("#scanner-stat-scanned"),
+  scannerStatNew: document.querySelector("#scanner-stat-new"),
+  scannerStatExisting: document.querySelector("#scanner-stat-existing"),
+  scannerStatReview: document.querySelector("#scanner-stat-review"),
   scannerSeries: document.querySelector("#scanner-series"),
   scannerCondition: document.querySelector("#scanner-condition"),
   scannerDuplicateCondition: document.querySelector("#scanner-duplicate-condition"),
@@ -449,6 +489,10 @@ const elements = {
   scannerIsSealed: document.querySelector("#scanner-is-sealed"),
   scannerCameraTarget: document.querySelector("#scanner-camera-target"),
   scannerCameraPlaceholder: document.querySelector("#scanner-camera-placeholder"),
+  scannerDetectedFlash: document.querySelector("#scanner-detected-flash"),
+  scannerDetectedKicker: document.querySelector("#scanner-detected-kicker"),
+  scannerDetectedBand: document.querySelector("#scanner-detected-band"),
+  scannerDetectedNote: document.querySelector("#scanner-detected-note"),
   scannerStatus: document.querySelector("#scanner-status"),
   scannerStart: document.querySelector("#scanner-start"),
   scannerStop: document.querySelector("#scanner-stop"),
@@ -523,6 +567,7 @@ async function initializeApp() {
     applyTheme(state.settings.theme);
     elements.showCovers.checked = state.settings.showCovers !== false;
     elements.autoEnrich.checked = state.settings.duckipediaAutoEnrich !== false;
+    state.scannerMode = normalizeScannerMode(state.settings.scannerMode);
     persistThemeLocally(state.settings.theme);
   } catch (error) {
     console.warn("Einstellungen konnten nicht geladen werden:", error);
@@ -530,8 +575,10 @@ async function initializeApp() {
   }
 
   renderConditionGuide();
+  renderConditionAssistantOptions();
   populateConfiguration();
   updateDuplicateConditionVisibility();
+  updateScannerModeUI();
   renderScannerQueue();
   resetCoverEditorState();
   await refreshCollection();
@@ -954,6 +1001,8 @@ function bindEvents() {
   elements.closeProgress.addEventListener("click", closeProgressPage);
   elements.openScanner.addEventListener("click", openScannerModal);
   elements.closeScanner.addEventListener("click", closeScannerModal);
+  elements.scannerModeFast.addEventListener("click", () => setScannerMode(SCANNER_MODES.FAST));
+  elements.scannerModeReview.addEventListener("click", () => setScannerMode(SCANNER_MODES.REVIEW));
   elements.scannerStart.addEventListener("click", startScannerCamera);
   elements.scannerStop.addEventListener("click", stopScannerCamera);
   elements.scannerPhoto.addEventListener("change", handleScannerPhoto);
@@ -1065,6 +1114,15 @@ function bindEvents() {
   document.querySelectorAll("[data-open-condition-guide]").forEach((button) => {
     button.addEventListener("click", openConditionGuide);
   });
+  document.addEventListener("click", handleConditionAssistantTrigger);
+  elements.closeConditionAssistant.addEventListener("click", closeConditionAssistant);
+  elements.conditionAssistantBack.addEventListener("click", () => changeConditionAssistantStep(-1));
+  elements.conditionAssistantNext.addEventListener("click", () => changeConditionAssistantStep(1));
+  elements.conditionAssistantApply.addEventListener("click", applyConditionAssistantRecommendation);
+  elements.conditionAssistantModal.addEventListener("change", handleConditionAssistantChange);
+  elements.conditionAssistantModal.addEventListener("click", (event) => {
+    if (event.target.closest("[data-close-condition-assistant]")) closeConditionAssistant();
+  });
   elements.closeConditionGuide.addEventListener("click", closeConditionGuide);
   elements.conditionGuideModal.addEventListener("click", (event) => {
     if (event.target.closest("[data-close-condition-guide]")) closeConditionGuide();
@@ -1078,6 +1136,7 @@ function bindEvents() {
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     if (elements.archiveMigrationModal && !elements.archiveMigrationModal.classList.contains("hidden")) return acknowledgeArchiveMigration();
+    if (!elements.conditionAssistantModal.classList.contains("hidden")) return closeConditionAssistant();
     if (!elements.conditionGuideModal.classList.contains("hidden")) return closeConditionGuide();
     if (!elements.diagnosticsModal.classList.contains("hidden")) return closeDiagnosticsModal();
     if (!elements.importModal.classList.contains("hidden")) return closeImportModal();
@@ -1142,6 +1201,314 @@ function closeConditionGuide() {
   const target = state.conditionGuideReturnTarget;
   state.conditionGuideReturnTarget = null;
   if (target && typeof target.focus === "function") target.focus();
+}
+
+function renderConditionAssistantOptions() {
+  if (!elements.conditionAssistantImpressions || !elements.conditionAssistantDefects) return;
+
+  elements.conditionAssistantImpressions.replaceChildren();
+  CONDITION_ASSISTANT_IMPRESSIONS.forEach((impression) => {
+    const label = document.createElement("label");
+    label.className = "assistant-choice assistant-impression-choice";
+
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "assistant-impression";
+    input.value = impression.id;
+
+    const badge = createConditionBadge(impression.code, "Orientierungsstufe");
+    badge.classList.add("assistant-choice-badge");
+
+    const copy = document.createElement("span");
+    const title = document.createElement("strong");
+    title.textContent = impression.label;
+    const help = document.createElement("small");
+    help.textContent = impression.help;
+    copy.append(title, help);
+
+    label.append(input, badge, copy);
+    elements.conditionAssistantImpressions.append(label);
+  });
+
+  elements.conditionAssistantDefects.replaceChildren();
+  CONDITION_ASSISTANT_DEFECT_GROUPS.forEach((group) => {
+    const section = document.createElement("section");
+    section.className = "assistant-defect-group";
+
+    const heading = document.createElement("div");
+    const title = document.createElement("h4");
+    title.textContent = group.title;
+    const description = document.createElement("p");
+    description.textContent = group.description;
+    heading.append(title, description);
+
+    const list = document.createElement("div");
+    list.className = "assistant-defect-list";
+    group.defects.forEach((defect) => {
+      const label = document.createElement("label");
+      label.className = "assistant-defect-choice";
+
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.name = "assistant-defect";
+      input.value = defect.id;
+
+      const text = document.createElement("span");
+      text.textContent = defect.label;
+      const minimum = document.createElement("small");
+      minimum.textContent = `mindestens Zustand ${defect.code}`;
+      label.append(input, text, minimum);
+      list.append(label);
+    });
+
+    section.append(heading, list);
+    elements.conditionAssistantDefects.append(section);
+  });
+}
+
+function handleConditionAssistantTrigger(event) {
+  const button = event.target.closest("[data-open-condition-assistant]");
+  if (!button) return;
+  event.preventDefault();
+
+  const queueId = button.dataset.assistantQueueId;
+  if (queueId) {
+    const item = state.scannerQueue.find((entry) => entry.queueId === queueId);
+    if (!item) return;
+    const copyIndex = Math.max(0, Number(button.dataset.assistantQueueCopyIndex || 0));
+    const drafts = Array.isArray(item.copyDrafts) && item.copyDrafts.length
+      ? item.copyDrafts
+      : [{ condition: item.condition || DEFAULT_CONDITION_CODE, isRead: item.isRead === true, isSealed: item.isSealed === true, notes: item.notes || "" }];
+    const copyDraft = drafts[copyIndex];
+    if (!copyDraft) return;
+    openConditionAssistant({
+      currentCode: copyDraft.condition,
+      label: `${item.series} · Band ${item.volumeNumber} · Exemplar ${copyIndex + 1}`,
+      notesAvailable: true,
+      returnTarget: button,
+      apply: (code, note) => {
+        copyDraft.condition = code;
+        if (note) copyDraft.notes = appendConditionNote(copyDraft.notes, note);
+        item.copyDrafts = drafts;
+        syncScannerQueueLegacyFields(item);
+        renderScannerQueue();
+      }
+    });
+    return;
+  }
+
+  if (button.dataset.assistantCopyIndex !== undefined) {
+    const index = Number(button.dataset.assistantCopyIndex);
+    const copy = state.copyManagerDraft[index];
+    if (!copy) return;
+    openConditionAssistant({
+      currentCode: copy.condition,
+      label: `Exemplar ${index + 1}`,
+      notesAvailable: true,
+      returnTarget: button,
+      apply: (code, note) => {
+        copy.condition = code;
+        if (note) copy.notes = appendConditionNote(copy.notes, note);
+        renderCopyManager();
+      }
+    });
+    return;
+  }
+
+  const select = document.getElementById(button.dataset.assistantTarget || "");
+  if (!(select instanceof HTMLSelectElement)) return;
+  const notes = document.getElementById(button.dataset.assistantNotes || "");
+  const label = button.dataset.assistantLabel
+    || select.closest(".field")?.querySelector("label, span")?.textContent?.replace(/\s+/g, " ").trim()
+    || "Zustand";
+
+  openConditionAssistant({
+    currentCode: select.value,
+    label,
+    notesAvailable: notes instanceof HTMLTextAreaElement || notes instanceof HTMLInputElement,
+    returnTarget: button,
+    apply: (code, note) => {
+      select.value = code;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      if (note && (notes instanceof HTMLTextAreaElement || notes instanceof HTMLInputElement)) {
+        notes.value = appendConditionNote(notes.value, note);
+        notes.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }
+  });
+}
+
+function openConditionAssistant({ currentCode, label, apply, notesAvailable = false, returnTarget = null }) {
+  const assessment = createConditionAssessment(currentCode);
+  if (assessment.comicComplete !== false) assessment.comicComplete = true;
+  assessment.coverComplete = true;
+
+  state.conditionAssistantTarget = { apply, notesAvailable, returnTarget };
+  state.conditionAssistantAssessment = assessment;
+  state.conditionAssistantStep = 1;
+  elements.conditionAssistantTargetLabel.textContent = label || "Aktuelles Exemplar";
+  elements.conditionAssistantAddNote.checked = true;
+  elements.conditionAssistantAddNote.closest("label")?.classList.toggle("hidden", !notesAvailable);
+  syncConditionAssistantControls();
+  renderConditionAssistantStep();
+  elements.conditionAssistantModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+  window.setTimeout(() => elements.closeConditionAssistant.focus(), 0);
+}
+
+function closeConditionAssistant() {
+  if (elements.conditionAssistantModal.classList.contains("hidden")) return;
+  elements.conditionAssistantModal.classList.add("hidden");
+  restoreBodyModalState();
+  const target = state.conditionAssistantTarget?.returnTarget;
+  state.conditionAssistantTarget = null;
+  if (target && typeof target.focus === "function") target.focus();
+}
+
+function syncConditionAssistantControls() {
+  const assessment = state.conditionAssistantAssessment;
+  elements.conditionAssistantModal.querySelectorAll('input[name="assistant-comic-complete"]').forEach((input) => {
+    input.checked = input.value === (assessment.comicComplete === false ? "no" : "yes");
+  });
+  elements.conditionAssistantModal.querySelectorAll('input[name="assistant-cover-complete"]').forEach((input) => {
+    input.checked = input.value === (assessment.coverComplete === false ? "no" : "yes");
+  });
+  elements.conditionAssistantModal.querySelectorAll('input[name="assistant-impression"]').forEach((input) => {
+    input.checked = input.value === assessment.impression;
+  });
+  elements.conditionAssistantModal.querySelectorAll('input[name="assistant-defect"]').forEach((input) => {
+    input.checked = assessment.defects.includes(input.value);
+  });
+}
+
+function handleConditionAssistantChange(event) {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement)) return;
+  const assessment = state.conditionAssistantAssessment;
+  if (input.name === "assistant-comic-complete") assessment.comicComplete = input.value === "yes";
+  if (input.name === "assistant-cover-complete") assessment.coverComplete = input.value === "yes";
+  if (input.name === "assistant-impression") assessment.impression = input.value;
+  if (input.name === "assistant-defect") {
+    assessment.defects = [...elements.conditionAssistantModal.querySelectorAll('input[name="assistant-defect"]:checked')]
+      .map((entry) => entry.value);
+  }
+  if (state.conditionAssistantStep === 4) renderConditionAssistantResult();
+}
+
+function changeConditionAssistantStep(delta) {
+  const current = state.conditionAssistantStep;
+  if (delta > 0) {
+    if (current === 1) {
+      if (state.conditionAssistantAssessment.comicComplete === null || state.conditionAssistantAssessment.coverComplete === null) {
+        showToast("Bitte bestätige Comicteil und Umschlag.", "error");
+        return;
+      }
+      state.conditionAssistantStep = state.conditionAssistantAssessment.comicComplete === false ? 4 : 2;
+    } else if (current === 2) {
+      if (!state.conditionAssistantAssessment.impression) {
+        showToast("Bitte wähle den Gesamteindruck aus.", "error");
+        return;
+      }
+      state.conditionAssistantStep = 3;
+    } else if (current === 3) {
+      state.conditionAssistantStep = 4;
+    }
+  } else if (delta < 0) {
+    state.conditionAssistantStep = current === 4 && state.conditionAssistantAssessment.comicComplete === false
+      ? 1
+      : Math.max(1, current - 1);
+  }
+  renderConditionAssistantStep();
+}
+
+function renderConditionAssistantStep() {
+  const step = state.conditionAssistantStep;
+  elements.conditionAssistantModal.querySelectorAll("[data-assistant-step]").forEach((section) => {
+    section.classList.toggle("hidden", Number(section.dataset.assistantStep) !== step);
+  });
+  elements.conditionAssistantProgressFill.style.width = `${step * 25}%`;
+  elements.conditionAssistantBack.classList.toggle("hidden", step === 1);
+  elements.conditionAssistantNext.classList.toggle("hidden", step === 4);
+  elements.conditionAssistantApply.classList.toggle("hidden", step !== 4);
+  if (step === 4) renderConditionAssistantResult();
+  elements.conditionAssistantModal.querySelector(".condition-assistant-body")?.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function renderConditionAssistantResult() {
+  const result = evaluateConditionAssessment(state.conditionAssistantAssessment);
+  elements.conditionAssistantResult.replaceChildren();
+
+  const heading = document.createElement("div");
+  heading.className = "assistant-result-heading";
+  const badge = result.code ? createConditionBadge(result.code, result.label) : document.createElement("span");
+  if (!result.code) {
+    badge.className = "assistant-result-empty-badge";
+    badge.textContent = "?";
+  }
+
+  const copy = document.createElement("div");
+  const title = document.createElement("strong");
+  title.textContent = result.code ? `Zustand ${result.code} – ${result.label}` : result.label;
+  const relation = document.createElement("small");
+  relation.textContent = result.priceRelation || "Weitere Angaben erforderlich";
+  copy.append(title, relation);
+
+  const confidence = document.createElement("span");
+  confidence.className = `assistant-confidence is-${result.confidence}`;
+  confidence.textContent = result.confidence === "high"
+    ? "Klare Orientierung"
+    : result.confidence === "medium"
+      ? "Individuell prüfen"
+      : "Angaben ergänzen";
+  heading.append(badge, copy, confidence);
+  elements.conditionAssistantResult.append(heading);
+
+  if (result.description) {
+    const description = document.createElement("p");
+    description.className = "assistant-result-description";
+    description.textContent = result.description;
+    elements.conditionAssistantResult.append(description);
+  }
+
+  if (result.reasons.length) {
+    const list = document.createElement("ul");
+    list.className = "assistant-result-reasons";
+    result.reasons.forEach((reason) => {
+      const item = document.createElement("li");
+      item.textContent = reason;
+      list.append(item);
+    });
+    elements.conditionAssistantResult.append(list);
+  }
+
+  result.warnings.forEach((warning) => {
+    const note = document.createElement("p");
+    note.className = "assistant-result-warning";
+    note.textContent = warning;
+    elements.conditionAssistantResult.append(note);
+  });
+  elements.conditionAssistantApply.disabled = !result.code;
+}
+
+function applyConditionAssistantRecommendation() {
+  const result = evaluateConditionAssessment(state.conditionAssistantAssessment);
+  if (!result.code || !state.conditionAssistantTarget?.apply) {
+    showToast("Die Angaben reichen noch nicht für eine Empfehlung.", "error");
+    return;
+  }
+  const note = elements.conditionAssistantAddNote.checked && state.conditionAssistantTarget.notesAvailable
+    ? buildConditionAssessmentNote(state.conditionAssistantAssessment)
+    : "";
+  state.conditionAssistantTarget.apply(result.code, note);
+  closeConditionAssistant();
+  showToast(`Zustand ${result.code} wurde übernommen.`, "success");
+}
+
+function appendConditionNote(currentValue, note) {
+  const current = String(currentValue || "").trim();
+  const addition = String(note || "").trim();
+  if (!addition || current.includes(addition)) return current;
+  return current ? `${current}\n${addition}` : addition;
 }
 
 function openAddPage() {
@@ -3526,18 +3893,30 @@ function renderCopyManager() {
     const fields = document.createElement("div");
     fields.className = "copy-manager-fields";
 
-    const conditionField = document.createElement("label");
+    const conditionField = document.createElement("div");
     conditionField.className = "field";
-    const conditionLabel = document.createElement("span");
+    const conditionSelectId = `copy-condition-${index}`;
+    const conditionLabelRow = document.createElement("div");
+    conditionLabelRow.className = "field-label-row";
+    const conditionLabel = document.createElement("label");
+    conditionLabel.htmlFor = conditionSelectId;
     conditionLabel.textContent = "Zustand";
+    const assistantButton = document.createElement("button");
+    assistantButton.type = "button";
+    assistantButton.className = "inline-action condition-assistant-trigger";
+    assistantButton.dataset.openConditionAssistant = "";
+    assistantButton.dataset.assistantCopyIndex = String(index);
+    assistantButton.textContent = "Assistent";
+    conditionLabelRow.append(conditionLabel, assistantButton);
     const conditionSelect = document.createElement("select");
+    conditionSelect.id = conditionSelectId;
     conditionSelect.dataset.copyIndex = String(index);
     conditionSelect.dataset.copyField = "condition";
     APP_CONFIG.conditions.forEach((condition) => {
       conditionSelect.append(createOption(condition.code, `Zustand ${condition.code} – ${condition.label}`));
     });
     conditionSelect.value = normalizeConditionCode(copy.condition, DEFAULT_CONDITION_CODE);
-    conditionField.append(conditionLabel, conditionSelect);
+    conditionField.append(conditionLabelRow, conditionSelect);
 
     const flags = document.createElement("fieldset");
     flags.className = "copy-manager-flags";
@@ -4026,7 +4405,10 @@ async function openScannerModal() {
   elements.scannerIsRead.checked = elements.isRead.checked;
   elements.scannerIsDuplicate.checked = elements.isDuplicate.checked;
   elements.scannerIsSealed.checked = elements.isSealed.checked;
+  state.scannerMode = normalizeScannerMode(state.settings.scannerMode || state.scannerMode);
+  state.scannerSessionScans = summarizeScannerQueue(state.scannerQueue).scans;
   updateScannerDuplicateConditionVisibility();
+  updateScannerModeUI();
   clearScannerResult();
   renderScannerQueue();
   elements.scannerModal.classList.remove("hidden");
@@ -4046,10 +4428,42 @@ function closeScannerModal() {
   stopScannerCamera();
   abortScannerLookup();
   clearScannerResult();
+  hideScannerDetectedFlash();
   elements.scannerPhoto.value = "";
   elements.scannerManualCode.value = "";
   elements.scannerModal.classList.add("hidden");
   restoreBodyModalState();
+}
+
+async function setScannerMode(mode) {
+  const nextMode = normalizeScannerMode(mode);
+  if (state.scannerMode === nextMode) return;
+  state.scannerMode = nextMode;
+  state.settings = await saveAppSettings({ ...state.settings, scannerMode: nextMode }).catch((error) => {
+    recordDiagnosticError(error, "Scanner-Modus speichern", "warning");
+    return { ...state.settings, scannerMode: nextMode };
+  });
+  clearScannerResult();
+  updateScannerModeUI();
+  if (!elements.scannerModal.classList.contains("hidden")) {
+    stopScannerCamera();
+    await startScannerCamera();
+  }
+}
+
+function updateScannerModeUI() {
+  const isFast = state.scannerMode === SCANNER_MODES.FAST;
+  elements.scannerModeFast.classList.toggle("is-active", isFast);
+  elements.scannerModeReview.classList.toggle("is-active", !isFast);
+  elements.scannerModeFast.setAttribute("aria-pressed", String(isFast));
+  elements.scannerModeReview.setAttribute("aria-pressed", String(!isFast));
+  elements.scannerModeDescription.textContent = isFast
+    ? "Erkannte Bände landen sofort in der Warteschlange. Duckipedia-Daten werden parallel ergänzt."
+    : "Nach jedem Scan kannst du Titel, Jahr und vorhandene Exemplare prüfen, bevor der Band vorgemerkt wird.";
+  elements.scannerModal.dataset.scannerMode = state.scannerMode;
+  elements.scannerSave.textContent = isFast ? "Änderungen übernehmen" : "Vormerken & weiter";
+  elements.scannerRescan.textContent = isFast ? "Treffer ausblenden" : "Neu scannen";
+  renderScannerSessionStats();
 }
 
 async function startScannerCamera() {
@@ -4078,16 +4492,19 @@ async function startScannerCamera() {
   }
 
   stopScannerCamera();
-  clearScannerResult();
+  if (state.scannerMode === SCANNER_MODES.REVIEW) clearScannerResult();
   elements.scannerStart.disabled = true;
   elements.scannerCameraPlaceholder.classList.add("hidden");
   elements.scannerStart.classList.add("hidden");
   elements.scannerStop.classList.remove("hidden");
-  setScannerStatus("Kamera aktiv: Richte die gesamte weiße Barcodefläche waagerecht im Rahmen aus.");
+  setScannerStatus(state.scannerMode === SCANNER_MODES.FAST
+    ? "Kamera aktiv: Halte die gesamte weiße Barcodefläche in den Rahmen und nimm den Band nach der Bestätigung wieder heraus."
+    : "Kamera aktiv: Richte die gesamte weiße Barcodefläche waagerecht im Rahmen aus.");
 
   try {
     await scanner.start({
-      onDetected: handleScannerDetected,
+      continuous: state.scannerMode === SCANNER_MODES.FAST,
+      onDetected: (payload) => handleScannerDetected(payload, { source: "camera" }),
       onInterim: ({ type }) => {
         if (type === "main-code-only") {
           setScannerStatus("Großer Barcode erkannt. Bewege das Heft etwas weiter weg, damit auch der kleine Zusatzcode rechts sichtbar ist.");
@@ -4118,10 +4535,7 @@ async function handleScannerPhoto() {
   const [file] = elements.scannerPhoto.files || [];
   elements.scannerPhoto.value = "";
 
-  if (!file) {
-    return;
-  }
-
+  if (!file) return;
   if (!elements.scannerSeries.value) {
     setScannerStatus("Bitte wähle vor der Fotoauswertung eine Reihe aus.", "error");
     return;
@@ -4135,7 +4549,7 @@ async function handleScannerPhoto() {
   try {
     await ensureScannerLibrary();
     const payload = await getBarcodeScanner().decodeImageFile(file);
-    handleScannerDetected(payload);
+    await handleScannerDetected(payload, { source: "photo" });
   } catch (error) {
     console.error("Barcodefoto konnte nicht ausgewertet werden:", error);
     recordDiagnosticError(error, "Barcodefoto auswerten", "warning");
@@ -4145,7 +4559,7 @@ async function handleScannerPhoto() {
   }
 }
 
-function handleScannerManualCode() {
+async function handleScannerManualCode() {
   const extension = elements.scannerManualCode.value.trim();
   const bandNumber = parseSupplementToBandNumber(extension);
 
@@ -4162,10 +4576,22 @@ function handleScannerManualCode() {
   }
 
   stopScannerCamera();
-  handleScannerDetected({ extension, bandNumber, mainBarcode: "", format: null });
+  elements.scannerManualCode.value = "";
+  await handleScannerDetected({ extension, bandNumber, mainBarcode: "", format: null }, { source: "manual" });
 }
 
-function handleScannerDetected(payload) {
+async function handleScannerDetected(payload, { source = "camera" } = {}) {
+  state.scannerSessionScans += 1;
+  renderScannerSessionStats();
+
+  if (state.scannerMode === SCANNER_MODES.FAST) {
+    await queueScannerDetectedPayload(payload, { source });
+    if (source !== "camera" && !elements.scannerModal.classList.contains("hidden")) {
+      window.setTimeout(() => startScannerCamera(), 220);
+    }
+    return;
+  }
+
   const series = elements.scannerSeries.value;
   const token = `${series}::${payload.bandNumber}::${Date.now()}::${Math.random()}`;
   const pageUrl = createConfiguredDuckipediaUrl(series, payload.bandNumber);
@@ -4174,23 +4600,23 @@ function handleScannerDetected(payload) {
   abortScannerLookup();
   state.scannerResult = {
     ...payload,
+    recognitionSource: source,
     series,
     pageUrl,
+    metadataStatus: navigator.onLine ? "loading" : "offline",
     token
   };
 
   elements.scannerBandNumber.textContent = String(payload.bandNumber);
-  elements.scannerExtension.textContent = `Code ${payload.extension}`;
+  elements.scannerExtension.textContent = source === "manual" ? `Manuell ${payload.extension}` : `Code ${payload.extension}`;
   elements.scannerResultName.value = "";
   elements.scannerResultYear.value = "";
   elements.scannerDuckipediaLink.href = pageUrl;
   elements.scannerResult.classList.remove("hidden");
-  setScannerStatus(`Band ${payload.bandNumber} wurde erkannt. Prüfe die Angaben und speichere den Band.` , "success");
+  setScannerStatus(`Band ${payload.bandNumber} wurde erkannt. Prüfe die Angaben und merke den Band vor.`, "success");
+  showScannerDetectedFlash(payload.bandNumber, source === "manual" ? "Manuell erkannt" : "Erkannt", "Bitte Angaben prüfen");
 
-  const existingIssue = state.comics.find((comic) => (
-    normalizeSeriesLookup(comic.series) === normalizeSeriesLookup(series)
-    && comic.numericBandNumber === payload.bandNumber
-  ));
+  const existingIssue = findExistingScannerIssue(series, payload.bandNumber);
   const existingCopyCount = existingIssue ? getComicCopies(existingIssue).length : 0;
   elements.scannerExistingWarning.classList.toggle("hidden", existingCopyCount === 0);
   elements.scannerExistingWarning.textContent = existingCopyCount === 0
@@ -4199,14 +4625,123 @@ function handleScannerDetected(payload) {
       ? "Dieser Band ist bereits mit einem Exemplar vorhanden."
       : `Dieser Band ist bereits mit ${existingCopyCount} Exemplaren vorhanden.`;
 
-  lookupScannerMetadata(token);
+  await lookupScannerMetadata(token);
 }
 
-async function lookupScannerMetadata(token) {
-  if (!state.scannerResult || state.scannerResult.token !== token) {
+async function queueScannerDetectedPayload(payload, { source = "camera" } = {}) {
+  const series = elements.scannerSeries.value;
+  if (!series) {
+    setScannerStatus("Bitte wähle zuerst eine Reihe aus.", "error");
     return;
   }
 
+  const existingIssue = findExistingScannerIssue(series, payload.bandNumber);
+  const now = new Date().toISOString();
+  const queueId = createStableId();
+  const pageUrl = createConfiguredDuckipediaUrl(series, payload.bandNumber);
+  const copyCount = elements.scannerIsDuplicate.checked ? 2 : 1;
+  const copyDrafts = Array.from({ length: copyCount }, (_, index) => ({
+    condition: index === 1
+      ? (elements.scannerDuplicateCondition.value || elements.scannerCondition.value || DEFAULT_CONDITION_CODE)
+      : (elements.scannerCondition.value || DEFAULT_CONDITION_CODE),
+    isRead: index === 0 ? elements.scannerIsRead.checked : false,
+    isSealed: index === 0 ? elements.scannerIsSealed.checked : false,
+    notes: ""
+  }));
+
+  const incoming = {
+    queueId,
+    queueKey: createScannerQueueKey(series, payload.bandNumber),
+    series,
+    volumeNumber: String(payload.bandNumber),
+    numericBandNumber: payload.bandNumber,
+    title: "",
+    publicationYear: null,
+    condition: copyDrafts[0].condition,
+    isRead: copyDrafts[0].isRead,
+    isSealed: copyDrafts[0].isSealed,
+    isDuplicate: copyDrafts.length > 1,
+    duplicateCondition: copyDrafts[1]?.condition || null,
+    notes: "",
+    copyDrafts,
+    extension: payload.extension,
+    mainBarcode: payload.mainBarcode || "",
+    recognitionSource: source,
+    pageUrl,
+    existingComicId: existingIssue?.id || null,
+    action: existingIssue ? "additional-copy" : "add",
+    metadataStatus: navigator.onLine ? "queued" : "offline",
+    metadataError: "",
+    scanCount: 1,
+    lastDetectedAt: now,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  const merged = mergeScannerQueueItem(state.scannerQueue, incoming);
+  if (!merged.item) {
+    setScannerStatus("Der erkannte Band konnte nicht vorgemerkt werden.", "error");
+    return;
+  }
+  state.scannerQueue = merged.queue;
+  renderScannerQueue();
+
+  const label = merged.merged
+    ? `${merged.addedCopies} weiteres Exemplar${merged.addedCopies === 1 ? "" : "e"}`
+    : existingIssue
+      ? "Als weiteres Exemplar"
+      : "Neue Ausgabe";
+  showScannerDetectedFlash(payload.bandNumber, "Vorgemerkt", label);
+  setScannerStatus(`${series}, Band ${payload.bandNumber} wurde vorgemerkt. Nächsten Band in den Rahmen halten.`, "success");
+  try { navigator.vibrate?.(35); } catch { /* optionale Rückmeldung */ }
+
+  if (!merged.merged || !["found", "loading"].includes(merged.item.metadataStatus)) {
+    void lookupScannerQueueMetadata(merged.item.queueId);
+  }
+}
+
+async function lookupScannerQueueMetadata(queueId) {
+  if (!navigator.onLine || state.scannerQueueLookups.has(queueId)) return;
+  const item = state.scannerQueue.find((entry) => entry.queueId === queueId);
+  if (!item) return;
+  const controller = new AbortController();
+  state.scannerQueueLookups.set(queueId, controller);
+  item.metadataStatus = "loading";
+  item.metadataError = "";
+  renderScannerQueue();
+
+  try {
+    const result = await getMetadataForBand(item.series, item.numericBandNumber, { signal: controller.signal });
+    if (controller.signal.aborted) return;
+    const current = state.scannerQueue.find((entry) => entry.queueId === queueId);
+    if (!current) return;
+    current.pageUrl = result.pageUrl || current.pageUrl;
+    current.coverUrl = result.coverUrl || current.coverUrl || "";
+    current.coverFileName = result.coverFileName || current.coverFileName || "";
+    current.coverSource = result.coverSource || current.coverSource || "";
+    current.lookupVersion = Number(result.lookupVersion || current.lookupVersion || 0);
+    current.metadataFetchedAt = result.fetchedAt || new Date().toISOString();
+    current.metadataStatus = result.found ? "found" : "not-found";
+    current.metadataError = result.found ? "" : (result.reason || "Keine passenden Duckipedia-Daten gefunden.");
+    if (!current.title && result.title) current.title = result.title;
+    if (!current.publicationYear && result.publicationYear) current.publicationYear = result.publicationYear;
+  } catch (error) {
+    if (error?.name !== "AbortError") {
+      const current = state.scannerQueue.find((entry) => entry.queueId === queueId);
+      if (current) {
+        current.metadataStatus = navigator.onLine ? "error" : "offline";
+        current.metadataError = error.message || "Duckipedia-Daten konnten nicht geladen werden.";
+      }
+      recordDiagnosticError(error, "Scanner-Metadaten laden", "warning");
+    }
+  } finally {
+    state.scannerQueueLookups.delete(queueId);
+    renderScannerQueue();
+  }
+}
+
+async function lookupScannerMetadata(token) {
+  if (!state.scannerResult || state.scannerResult.token !== token) return;
   if (!navigator.onLine) {
     elements.scannerLookupStatus.textContent = "Offline: Titel und Erscheinungsjahr können gerade nicht automatisch ergänzt werden.";
     return;
@@ -4216,46 +4751,60 @@ async function lookupScannerMetadata(token) {
   state.scannerLookupController = controller;
   elements.scannerLookupStatus.textContent = "Duckipedia wird nach Titel und Erscheinungsjahr durchsucht …";
 
-  const result = await getMetadataForBand(
-    state.scannerResult.series,
-    state.scannerResult.bandNumber,
-    { signal: controller.signal }
-  );
-
-  if (!state.scannerResult || state.scannerResult.token !== token || controller.signal.aborted) {
-    return;
-  }
-
-  state.scannerResult.pageUrl = result.pageUrl;
-  state.scannerResult.coverUrl = result.coverUrl || "";
-  state.scannerResult.coverFileName = result.coverFileName || "";
-  state.scannerResult.coverSource = result.coverSource || "";
-  state.scannerResult.lookupVersion = Number(result.lookupVersion || 0);
-  state.scannerResult.metadataFetchedAt = result.fetchedAt || new Date().toISOString();
-  state.scannerResult.metadataStatus = result.found ? "found" : "not-found";
-  elements.scannerDuckipediaLink.href = result.pageUrl;
-
-  if (result.title) {
-    elements.scannerResultName.value = result.title;
-  }
-
-  if (result.publicationYear) {
-    elements.scannerResultYear.value = String(result.publicationYear);
-  }
-
-  if (result.found && (result.title || result.publicationYear)) {
-    const foundParts = [result.title ? "Titel" : "", result.publicationYear ? "Jahr" : ""].filter(Boolean);
-    elements.scannerLookupStatus.textContent = `${foundParts.join(" und ")} wurden aus Duckipedia ergänzt.`;
-  } else if (result.found) {
-    elements.scannerLookupStatus.textContent = "Die Bandseite wurde gefunden, enthält aber keine automatisch auswertbaren Titel- oder Jahresangaben.";
-  } else {
-    elements.scannerLookupStatus.textContent = result.reason || "Titel und Jahr konnten nicht automatisch ergänzt werden.";
+  try {
+    const result = await getMetadataForBand(state.scannerResult.series, state.scannerResult.bandNumber, { signal: controller.signal });
+    if (!state.scannerResult || state.scannerResult.token !== token || controller.signal.aborted) return;
+    state.scannerResult.pageUrl = result.pageUrl;
+    state.scannerResult.coverUrl = result.coverUrl || "";
+    state.scannerResult.coverFileName = result.coverFileName || "";
+    state.scannerResult.coverSource = result.coverSource || "";
+    state.scannerResult.lookupVersion = Number(result.lookupVersion || 0);
+    state.scannerResult.metadataFetchedAt = result.fetchedAt || new Date().toISOString();
+    state.scannerResult.metadataStatus = result.found ? "found" : "not-found";
+    elements.scannerDuckipediaLink.href = result.pageUrl;
+    if (result.title) elements.scannerResultName.value = result.title;
+    if (result.publicationYear) elements.scannerResultYear.value = String(result.publicationYear);
+    if (result.found && (result.title || result.publicationYear)) {
+      const foundParts = [result.title ? "Titel" : "", result.publicationYear ? "Jahr" : ""].filter(Boolean);
+      elements.scannerLookupStatus.textContent = `${foundParts.join(" und ")} wurden aus Duckipedia ergänzt.`;
+    } else if (result.found) {
+      elements.scannerLookupStatus.textContent = "Die Bandseite wurde gefunden, enthält aber keine automatisch auswertbaren Titel- oder Jahresangaben.";
+    } else {
+      elements.scannerLookupStatus.textContent = result.reason || "Titel und Jahr konnten nicht automatisch ergänzt werden.";
+    }
+  } catch (error) {
+    if (error?.name !== "AbortError") {
+      elements.scannerLookupStatus.textContent = `Duckipedia-Daten konnten nicht geladen werden: ${error.message}`;
+      state.scannerResult.metadataStatus = "error";
+    }
   }
 }
 
 function abortScannerLookup() {
   state.scannerLookupController?.abort();
   state.scannerLookupController = null;
+}
+
+function findExistingScannerIssue(series, bandNumber) {
+  return state.comics.find((comic) => (
+    normalizeSeriesLookup(comic.series) === normalizeSeriesLookup(series)
+    && comic.numericBandNumber === Number(bandNumber)
+  )) || null;
+}
+
+function showScannerDetectedFlash(bandNumber, kicker, note = "") {
+  window.clearTimeout(state.scannerFlashTimer);
+  elements.scannerDetectedBand.textContent = String(bandNumber);
+  elements.scannerDetectedKicker.textContent = kicker;
+  elements.scannerDetectedNote.textContent = note;
+  elements.scannerDetectedFlash.classList.remove("hidden");
+  state.scannerFlashTimer = window.setTimeout(hideScannerDetectedFlash, 1050);
+}
+
+function hideScannerDetectedFlash() {
+  window.clearTimeout(state.scannerFlashTimer);
+  state.scannerFlashTimer = null;
+  elements.scannerDetectedFlash.classList.add("hidden");
 }
 
 async function handleScannerSave() {
@@ -4265,33 +4814,38 @@ async function handleScannerSave() {
   }
 
   try {
-    const comic = buildComicFromScanner();
-    const alreadyQueued = state.scannerQueue.some((item) => (
-      item.series === comic.series && item.numericBandNumber === comic.numericBandNumber
-    ));
-
-    if (alreadyQueued) {
-      setScannerStatus(`${comic.series}, Band ${comic.volumeNumber} befindet sich bereits in der Warteschlange.`, "error");
-      return;
-    }
-
-    const existingComic = state.comics.find((entry) => (
-      normalizeSeriesLookup(entry.series) === normalizeSeriesLookup(comic.series)
-      && entry.numericBandNumber === comic.numericBandNumber
-    ));
-
-    state.scannerQueue.push({
-      ...comic,
+    const item = buildComicFromScanner();
+    const existingComic = findExistingScannerIssue(item.series, item.numericBandNumber);
+    const now = new Date().toISOString();
+    const incoming = {
+      ...item,
       queueId: createStableId(),
+      queueKey: createScannerQueueKey(item.series, item.numericBandNumber),
       extension: state.scannerResult.extension,
-      pageUrl: state.scannerResult.pageUrl,
+      mainBarcode: state.scannerResult.mainBarcode || "",
+      recognitionSource: state.scannerResult.recognitionSource || "camera",
+      pageUrl: item.duckipediaPageUrl,
+      coverUrl: item.duckipediaCoverUrl,
+      coverFileName: item.duckipediaCoverFileName,
+      coverSource: item.duckipediaCoverSource,
+      lookupVersion: item.duckipediaCoverLookupVersion,
       existingComicId: existingComic?.id || null,
-      action: existingComic ? "additional-copy" : "add"
-    });
+      action: existingComic ? "additional-copy" : "add",
+      scanCount: 1,
+      lastDetectedAt: now
+    };
 
+    const merged = mergeScannerQueueItem(state.scannerQueue, incoming);
+    if (!merged.item) throw new Error("Der erkannte Band konnte nicht vorgemerkt werden.");
+    state.scannerQueue = merged.queue;
     renderScannerQueue();
     clearScannerResult();
-    setScannerStatus(`${comic.series}, Band ${comic.volumeNumber} wurde vorgemerkt. Bereit für den nächsten Scan.`, "success");
+
+    const copyText = merged.addedCopies === 1 ? "ein Exemplar" : `${merged.addedCopies} Exemplare`;
+    setScannerStatus(
+      `${item.series}, Band ${item.volumeNumber}: ${copyText} vorgemerkt. Bereit für den nächsten Scan.`,
+      "success"
+    );
     await startScannerCamera();
   } catch (error) {
     console.error("Gescannter Band konnte nicht vorgemerkt werden:", error);
@@ -4299,98 +4853,184 @@ async function handleScannerSave() {
   }
 }
 
+function renderScannerSessionStats() {
+  const summary = summarizeScannerQueue(state.scannerQueue, { sessionScans: state.scannerSessionScans });
+  elements.scannerStatScanned.textContent = String(summary.scans);
+  elements.scannerStatNew.textContent = String(summary.new);
+  elements.scannerStatExisting.textContent = String(summary.existing);
+  elements.scannerStatReview.textContent = String(summary.review);
+}
+
 function renderScannerQueue() {
   elements.scannerQueueList.replaceChildren();
   const queue = state.scannerQueue;
-  elements.scannerQueueCount.textContent = queue.length === 1 ? "1 Band" : `${queue.length} Bände`;
+  const summary = summarizeScannerQueue(queue, { sessionScans: state.scannerSessionScans });
+  elements.scannerQueueCount.textContent = queue.length === 0
+    ? "0 Ausgaben"
+    : `${queue.length} ${queue.length === 1 ? "Ausgabe" : "Ausgaben"} · ${summary.copies} ${summary.copies === 1 ? "Exemplar" : "Exemplare"}`;
   elements.scannerSaveQueue.disabled = queue.length === 0;
   elements.scannerApplyDefaults.disabled = queue.length === 0;
   elements.scannerClearQueue.disabled = queue.length === 0;
+  renderScannerSessionStats();
 
   if (queue.length === 0) {
-    const empty = document.createElement("p");
+    const empty = document.createElement("div");
     empty.className = "scanner-queue-empty";
-    empty.textContent = "Noch keine Bände vorgemerkt.";
+    const title = document.createElement("strong");
+    title.textContent = "Bereit für die erste Ausgabe";
+    const copy = document.createElement("p");
+    copy.textContent = "Halte den Barcode in den Rahmen. Im Schnellmodus bleibt die Kamera für den nächsten Band aktiv.";
+    empty.append(title, copy);
     elements.scannerQueueList.append(empty);
     return;
   }
 
   queue.forEach((item, index) => {
+    const status = classifyScannerResult(item);
+    const drafts = getScannerQueueCopyDrafts(item);
     const card = document.createElement("article");
-    card.className = "scanner-queue-card";
+    card.className = `scanner-queue-card is-${status.tone}`;
     card.dataset.queueId = item.queueId;
+    card.dataset.queueStatus = status.id;
 
     const heading = document.createElement("div");
     heading.className = "scanner-queue-card-heading";
+
+    const identity = document.createElement("div");
+    identity.className = "scanner-queue-identity";
+    const number = document.createElement("span");
+    number.className = "scanner-queue-number";
+    number.textContent = String(item.volumeNumber);
     const titleWrap = document.createElement("div");
     const kicker = document.createElement("span");
     kicker.className = "stat-label";
-    kicker.textContent = `Position ${index + 1}`;
+    kicker.textContent = `${item.series} · Position ${index + 1}`;
     const title = document.createElement("h4");
-    title.textContent = `${item.series} · Band ${item.volumeNumber}`;
-    titleWrap.append(kicker, title);
+    title.textContent = item.title || `Band ${item.volumeNumber}`;
+    const meta = document.createElement("small");
+    meta.textContent = item.publicationYear
+      ? `Erschienen ${item.publicationYear}`
+      : getScannerMetadataMessage(item);
+    titleWrap.append(kicker, title, meta);
+    identity.append(number, titleWrap);
+
+    const headingActions = document.createElement("div");
+    headingActions.className = "scanner-queue-heading-actions";
+    const statusBadge = document.createElement("span");
+    statusBadge.className = `scanner-queue-status is-${status.tone}`;
+    statusBadge.textContent = status.label;
+    const copyBadge = document.createElement("span");
+    copyBadge.className = "scanner-copy-count";
+    copyBadge.textContent = drafts.length === 1 ? "1 Exemplar" : `${drafts.length} Exemplare`;
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "icon-button small-icon-button scanner-queue-remove";
     remove.dataset.queueAction = "remove";
     remove.setAttribute("aria-label", `${item.series}, Band ${item.volumeNumber} aus der Warteschlange entfernen`);
     remove.textContent = "×";
-    heading.append(titleWrap, remove);
+    headingActions.append(statusBadge, copyBadge, remove);
+    heading.append(identity, headingActions);
 
+    const details = document.createElement("details");
+    details.className = "scanner-queue-editor";
+    details.open = status.needsReview;
+    const summaryElement = document.createElement("summary");
+    const summaryLabel = document.createElement("span");
+    summaryLabel.textContent = status.needsReview ? "Angaben prüfen" : "Angaben & Exemplare";
+    const summaryHint = document.createElement("small");
+    summaryHint.textContent = drafts.length === 1
+      ? getConditionLabel(drafts[0].condition)
+      : `${drafts.length} Zustände bearbeiten`;
+    summaryElement.append(summaryLabel, summaryHint);
+
+    const editor = document.createElement("div");
+    editor.className = "scanner-queue-editor-body";
     const grid = document.createElement("div");
     grid.className = "field-grid compact-field-grid scanner-queue-fields";
     grid.append(
       createQueueInput("Titel", "title", item.title, "text", 200, "field-full"),
-      createQueueInput("Erscheinungsjahr", "publicationYear", item.publicationYear ?? "", "number", 4),
-      createQueueConditionSelect("Zustand", "condition", item.condition)
+      createQueueInput("Erscheinungsjahr", "publicationYear", item.publicationYear ?? "", "number", 4)
     );
 
     if (item.existingComicId) {
       const actionField = document.createElement("label");
-      actionField.className = "field field-full";
+      actionField.className = "field";
       const actionLabel = document.createElement("span");
       actionLabel.textContent = "Bereits vorhanden";
       const actionSelect = document.createElement("select");
       actionSelect.dataset.queueField = "action";
       actionSelect.append(
-        createOption("skip", "Überspringen"),
-        createOption("additional-copy", "Als weiteres Exemplar übernehmen")
+        createOption("additional-copy", "Als weiteres Exemplar speichern"),
+        createOption("skip", "Überspringen")
       );
-      actionSelect.value = item.action === "second-copy" ? "additional-copy" : item.action;
+      actionSelect.value = item.action === "skip" ? "skip" : "additional-copy";
       const existing = state.comics.find((comic) => comic.id === item.existingComicId);
       const hint = document.createElement("small");
       hint.className = "field-help";
       const count = existing ? getComicCopies(existing).length : 0;
-      hint.textContent = count === 1
-        ? "Aktuell ist ein Exemplar gespeichert."
-        : `Aktuell sind ${count} Exemplare gespeichert.`;
+      hint.textContent = `${count} ${count === 1 ? "Exemplar ist" : "Exemplare sind"} bereits im Archiv.`;
       actionField.append(actionLabel, actionSelect, hint);
       grid.append(actionField);
     }
+    editor.append(grid);
 
-    const toggles = document.createElement("div");
-    toggles.className = "scanner-queue-toggles";
-    toggles.append(
-      createQueueCheckbox("Gelesen", "isRead", item.isRead),
-      createQueueCheckbox("Foliert", "isSealed", item.isSealed),
-      createQueueCheckbox("Doppelt", "isDuplicate", item.isDuplicate)
-    );
+    const copiesHeading = document.createElement("div");
+    copiesHeading.className = "scanner-copy-editor-heading";
+    const copiesTitle = document.createElement("div");
+    const copiesStrong = document.createElement("strong");
+    copiesStrong.textContent = "Physische Exemplare";
+    const copiesSmall = document.createElement("small");
+    copiesSmall.textContent = "Jeder erneute Scan derselben Ausgabe ergänzt ein Exemplar, nicht einen zweiten Bandeintrag.";
+    copiesTitle.append(copiesStrong, copiesSmall);
+    const addCopy = document.createElement("button");
+    addCopy.type = "button";
+    addCopy.className = "inline-action";
+    addCopy.dataset.queueAction = "add-copy";
+    addCopy.textContent = "+ Exemplar";
+    copiesHeading.append(copiesTitle, addCopy);
+    editor.append(copiesHeading);
 
-    const duplicateField = createQueueConditionSelect("Zustand Exemplar 2", "duplicateCondition", item.duplicateCondition || item.condition);
-    duplicateField.classList.toggle("hidden", !item.isDuplicate || Boolean(item.existingComicId));
-    duplicateField.dataset.duplicateField = "true";
-    grid.append(duplicateField);
+    const copyList = document.createElement("div");
+    copyList.className = "scanner-copy-editor-list";
+    drafts.forEach((draft, copyIndex) => {
+      copyList.append(createScannerQueueCopyEditor(item, draft, copyIndex, drafts.length));
+    });
+    editor.append(copyList);
 
+    const footer = document.createElement("div");
+    footer.className = "scanner-queue-card-footer";
     const link = document.createElement("a");
     link.className = "text-link scanner-queue-link";
     link.href = item.pageUrl || createConfiguredDuckipediaUrl(item.series, item.volumeNumber, item.title);
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     link.textContent = "Duckipedia öffnen";
+    footer.append(link);
 
-    card.append(heading, grid, toggles, link);
+    if (["error", "not-found", "offline"].includes(item.metadataStatus)) {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "text-button";
+      retry.dataset.queueAction = "retry-metadata";
+      retry.textContent = navigator.onLine ? "Daten erneut laden" : "Offline";
+      retry.disabled = !navigator.onLine;
+      footer.append(retry);
+    }
+
+    editor.append(footer);
+    details.append(summaryElement, editor);
+    card.append(heading, details);
     elements.scannerQueueList.append(card);
   });
+}
+
+function getScannerMetadataMessage(item) {
+  if (item.metadataStatus === "loading" || item.metadataStatus === "queued") return "Duckipedia-Daten werden ergänzt …";
+  if (item.metadataStatus === "offline") return "Offline erkannt · Daten später ergänzen";
+  if (item.metadataStatus === "not-found") return "Keine Duckipedia-Daten gefunden";
+  if (item.metadataStatus === "error") return item.metadataError || "Daten konnten nicht geladen werden";
+  if (item.metadataStatus === "found") return "Duckipedia-Daten geladen";
+  return "Bandnummer erkannt";
 }
 
 function createQueueInput(labelText, fieldName, value, type, maxLength, extraClass = "") {
@@ -4413,27 +5053,87 @@ function createQueueInput(labelText, fieldName, value, type, maxLength, extraCla
   return label;
 }
 
-function createQueueConditionSelect(labelText, fieldName, value) {
-  const label = document.createElement("label");
-  label.className = "field";
-  const span = document.createElement("span");
-  span.textContent = labelText;
-  const select = document.createElement("select");
-  select.dataset.queueField = fieldName;
+function createScannerQueueCopyEditor(item, draft, copyIndex, copyCount) {
+  const card = document.createElement("article");
+  card.className = "scanner-copy-editor-item";
+  card.dataset.queueCopyIndex = String(copyIndex);
+
+  const heading = document.createElement("div");
+  heading.className = "scanner-copy-editor-item-heading";
+  const title = document.createElement("strong");
+  title.textContent = `Exemplar ${copyIndex + 1}`;
+  heading.append(title);
+  if (copyCount > 1) {
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "text-button danger-text compact-button";
+    remove.dataset.queueAction = "remove-copy";
+    remove.dataset.queueCopyIndex = String(copyIndex);
+    remove.textContent = "Entfernen";
+    heading.append(remove);
+  }
+
+  const fields = document.createElement("div");
+  fields.className = "scanner-copy-editor-fields";
+
+  const conditionField = document.createElement("div");
+  conditionField.className = "field";
+  const conditionId = `scanner-${item.queueId}-copy-${copyIndex}-condition`;
+  const labelRow = document.createElement("div");
+  labelRow.className = "field-label-row";
+  const conditionLabel = document.createElement("label");
+  conditionLabel.htmlFor = conditionId;
+  conditionLabel.textContent = "Zustand";
+  const assistant = document.createElement("button");
+  assistant.type = "button";
+  assistant.className = "inline-action condition-assistant-trigger";
+  assistant.dataset.openConditionAssistant = "";
+  assistant.dataset.assistantQueueId = item.queueId;
+  assistant.dataset.assistantQueueCopyIndex = String(copyIndex);
+  assistant.textContent = "Assistent";
+  labelRow.append(conditionLabel, assistant);
+  const conditionSelect = document.createElement("select");
+  conditionSelect.id = conditionId;
+  conditionSelect.dataset.queueCopyField = "condition";
+  conditionSelect.dataset.queueCopyIndex = String(copyIndex);
   APP_CONFIG.conditions.forEach((condition) => {
-    select.append(createOption(condition.code, `Zustand ${condition.code} – ${condition.label}`));
+    conditionSelect.append(createOption(condition.code, `Zustand ${condition.code} – ${condition.label}`));
   });
-  select.value = value;
-  label.append(span, select);
-  return label;
+  conditionSelect.value = normalizeConditionCode(draft.condition, DEFAULT_CONDITION_CODE);
+  conditionField.append(labelRow, conditionSelect);
+
+  const flags = document.createElement("div");
+  flags.className = "scanner-copy-flags";
+  flags.append(
+    createQueueCopyCheckbox("Gelesen", "isRead", draft.isRead, copyIndex),
+    createQueueCopyCheckbox("Foliert", "isSealed", draft.isSealed, copyIndex)
+  );
+
+  const notesField = document.createElement("label");
+  notesField.className = "field field-full scanner-copy-notes";
+  const notesLabel = document.createElement("span");
+  notesLabel.textContent = "Notiz";
+  const notes = document.createElement("textarea");
+  notes.rows = 2;
+  notes.maxLength = 1200;
+  notes.placeholder = "Optional, z. B. Stempel, Knick oder Tauschbestand";
+  notes.dataset.queueCopyField = "notes";
+  notes.dataset.queueCopyIndex = String(copyIndex);
+  notes.value = String(draft.notes || "");
+  notesField.append(notesLabel, notes);
+
+  fields.append(conditionField, flags, notesField);
+  card.append(heading, fields);
+  return card;
 }
 
-function createQueueCheckbox(labelText, fieldName, checked) {
+function createQueueCopyCheckbox(labelText, fieldName, checked, copyIndex) {
   const label = document.createElement("label");
   label.className = "check-row compact-check";
   const input = document.createElement("input");
   input.type = "checkbox";
-  input.dataset.queueField = fieldName;
+  input.dataset.queueCopyField = fieldName;
+  input.dataset.queueCopyIndex = String(copyIndex);
   input.checked = Boolean(checked);
   const span = document.createElement("span");
   span.textContent = labelText;
@@ -4441,62 +5141,150 @@ function createQueueCheckbox(labelText, fieldName, checked) {
   return label;
 }
 
+function getScannerQueueCopyDrafts(item) {
+  if (!Array.isArray(item.copyDrafts) || item.copyDrafts.length === 0) {
+    item.copyDrafts = [{
+      condition: normalizeConditionCode(item.condition, DEFAULT_CONDITION_CODE),
+      isRead: item.isRead === true,
+      isSealed: item.isSealed === true,
+      notes: String(item.notes || "")
+    }];
+    if (item.isDuplicate) {
+      item.copyDrafts.push({
+        condition: normalizeConditionCode(item.duplicateCondition || item.condition, DEFAULT_CONDITION_CODE),
+        isRead: false,
+        isSealed: false,
+        notes: ""
+      });
+    }
+  }
+  item.copyDrafts = item.copyDrafts.map((draft) => ({
+    condition: normalizeConditionCode(draft?.condition, DEFAULT_CONDITION_CODE),
+    isRead: draft?.isRead === true,
+    isSealed: draft?.isSealed === true,
+    notes: String(draft?.notes || "")
+  }));
+  syncScannerQueueLegacyFields(item);
+  return item.copyDrafts;
+}
+
+function syncScannerQueueLegacyFields(item) {
+  const drafts = Array.isArray(item.copyDrafts) && item.copyDrafts.length
+    ? item.copyDrafts
+    : [{ condition: DEFAULT_CONDITION_CODE, isRead: false, isSealed: false, notes: "" }];
+  const primary = drafts[0];
+  item.condition = normalizeConditionCode(primary.condition, DEFAULT_CONDITION_CODE);
+  item.isRead = primary.isRead === true;
+  item.isSealed = primary.isSealed === true;
+  item.notes = String(primary.notes || "");
+  item.isDuplicate = drafts.length > 1;
+  item.duplicateCondition = drafts[1]?.condition || null;
+}
+
 function handleScannerQueueInput(event) {
-  const control = event.target.closest("[data-queue-field]");
+  const control = event.target.closest("[data-queue-field], [data-queue-copy-field]");
   const card = event.target.closest("[data-queue-id]");
   if (!control || !card) return;
   const item = state.scannerQueue.find((entry) => entry.queueId === card.dataset.queueId);
   if (!item) return;
 
+  if (control.dataset.queueCopyField) {
+    const copyIndex = Number(control.dataset.queueCopyIndex);
+    const drafts = getScannerQueueCopyDrafts(item);
+    const draft = drafts[copyIndex];
+    if (!draft) return;
+    const field = control.dataset.queueCopyField;
+    draft[field] = control instanceof HTMLInputElement && control.type === "checkbox"
+      ? control.checked
+      : control.value;
+    syncScannerQueueLegacyFields(item);
+    renderScannerSessionStats();
+    return;
+  }
+
   const field = control.dataset.queueField;
-  if (control instanceof HTMLInputElement && control.type === "checkbox") {
-    item[field] = control.checked;
-  } else if (field === "publicationYear") {
+  if (field === "publicationYear") {
     item.publicationYear = control.value ? Number(control.value) : null;
   } else {
     item[field] = control.value;
   }
 
-  if (field === "isDuplicate") {
-    if (item.isDuplicate && !item.duplicateCondition) item.duplicateCondition = item.condition;
-    renderScannerQueue();
-  }
+  if (field === "action") renderScannerQueue();
+  else renderScannerSessionStats();
 }
 
 function handleScannerQueueClick(event) {
   const button = event.target.closest("button[data-queue-action]");
   const card = event.target.closest("[data-queue-id]");
   if (!button || !card) return;
-  if (button.dataset.queueAction === "remove") {
-    state.scannerQueue = state.scannerQueue.filter((entry) => entry.queueId !== card.dataset.queueId);
+  const queueId = card.dataset.queueId;
+  const item = state.scannerQueue.find((entry) => entry.queueId === queueId);
+  if (!item) return;
+
+  const action = button.dataset.queueAction;
+  if (action === "remove") {
+    state.scannerQueueLookups.get(queueId)?.abort();
+    state.scannerQueueLookups.delete(queueId);
+    state.scannerQueue = state.scannerQueue.filter((entry) => entry.queueId !== queueId);
+    renderScannerQueue();
+    return;
+  }
+
+  if (action === "retry-metadata") {
+    void lookupScannerQueueMetadata(queueId);
+    return;
+  }
+
+  const drafts = getScannerQueueCopyDrafts(item);
+  if (action === "add-copy") {
+    drafts.push({
+      condition: elements.scannerDuplicateCondition.value || elements.scannerCondition.value || DEFAULT_CONDITION_CODE,
+      isRead: false,
+      isSealed: false,
+      notes: ""
+    });
+    syncScannerQueueLegacyFields(item);
+    renderScannerQueue();
+    return;
+  }
+
+  if (action === "remove-copy") {
+    const copyIndex = Number(button.dataset.queueCopyIndex);
+    if (drafts.length <= 1 || !Number.isInteger(copyIndex)) return;
+    drafts.splice(copyIndex, 1);
+    syncScannerQueueLegacyFields(item);
     renderScannerQueue();
   }
 }
 
 function applyScannerDefaultsToQueue() {
   if (state.scannerQueue.length === 0) return;
-  const condition = elements.scannerCondition.value;
-  const isDuplicate = elements.scannerIsDuplicate.checked;
+  const primaryCondition = elements.scannerCondition.value || DEFAULT_CONDITION_CODE;
+  const secondaryCondition = elements.scannerDuplicateCondition.value || primaryCondition;
   state.scannerQueue.forEach((item) => {
-    item.condition = condition;
-    item.isRead = elements.scannerIsRead.checked;
-    item.isSealed = elements.scannerIsSealed.checked;
-    if (!item.existingComicId) {
-      item.isDuplicate = isDuplicate;
-      item.duplicateCondition = isDuplicate
-        ? (elements.scannerDuplicateCondition.value || condition)
-        : null;
+    const drafts = getScannerQueueCopyDrafts(item);
+    drafts.forEach((draft, index) => {
+      draft.condition = index === 0 ? primaryCondition : secondaryCondition;
+      draft.isRead = index === 0 ? elements.scannerIsRead.checked : false;
+      draft.isSealed = index === 0 ? elements.scannerIsSealed.checked : false;
+    });
+    if (elements.scannerIsDuplicate.checked && drafts.length === 1) {
+      drafts.push({ condition: secondaryCondition, isRead: false, isSealed: false, notes: "" });
     }
+    syncScannerQueueLegacyFields(item);
   });
   renderScannerQueue();
-  elements.scannerQueueMessage.textContent = "Die aktuellen Scanner-Einstellungen wurden auf alle vorgemerkten Bände angewendet.";
+  elements.scannerQueueMessage.textContent = "Die aktuellen Scanner-Einstellungen wurden auf alle vorgemerkten Exemplare angewendet.";
   elements.scannerQueueMessage.dataset.type = "success";
 }
 
 function clearScannerQueue() {
   if (state.scannerQueue.length === 0) return;
-  if (!window.confirm("Die gesamte Scanner-Warteschlange verwerfen? Noch nicht gespeicherte Bände gehen dabei verloren.")) return;
+  if (!window.confirm("Die gesamte Scanner-Warteschlange verwerfen? Noch nicht gespeicherte Exemplare gehen dabei verloren.")) return;
+  state.scannerQueueLookups.forEach((controller) => controller.abort());
+  state.scannerQueueLookups.clear();
   state.scannerQueue = [];
+  state.scannerSessionScans = 0;
   renderScannerQueue();
   elements.scannerQueueMessage.textContent = "Warteschlange geleert.";
   elements.scannerQueueMessage.dataset.type = "info";
@@ -4511,6 +5299,9 @@ async function saveScannerQueue() {
 
   const records = [];
   let skipped = 0;
+  let savedCopies = 0;
+  let newIssues = 0;
+  let updatedIssues = 0;
 
   try {
     state.scannerQueue.forEach((item) => {
@@ -4520,32 +5311,43 @@ async function saveScannerQueue() {
         return;
       }
 
-      if (["additional-copy", "second-copy"].includes(item.action) && item.existingComicId) {
-        const existing = state.comics.find((comic) => comic.id === item.existingComicId);
-        if (!existing) {
-          skipped += 1;
-          return;
-        }
-        const now = new Date().toISOString();
-        const copies = [
-          ...getComicCopies(existing),
-          normalizeCopy({
-            id: createEntityId("copy"),
-            issueId: existing.id,
-            condition: item.condition,
-            isRead: item.isRead,
-            isSealed: item.isSealed,
-            notes: "",
-            source: "scanner",
-            createdAt: now,
-            updatedAt: now
-          }, { issueId: existing.id, position: getComicCopies(existing).length + 1, now })
-        ].map((copy, index) => ({ ...copy, issueId: existing.id, displayOrder: index + 1 }));
+      const drafts = getScannerQueueCopyDrafts(item);
+      const now = new Date().toISOString();
+      const existing = item.existingComicId
+        ? state.comics.find((comic) => comic.id === item.existingComicId)
+        : findComicBySeriesAndVolume(item.series, item.volumeNumber);
+
+      if (existing) {
+        const existingCopies = getComicCopies(existing);
+        const incomingCopies = drafts.map((draft, index) => normalizeCopy({
+          id: createEntityId("copy"),
+          issueId: existing.id,
+          condition: draft.condition,
+          isRead: draft.isRead,
+          isSealed: draft.isSealed,
+          notes: draft.notes,
+          source: "scanner-pro",
+          createdAt: now,
+          updatedAt: now
+        }, { issueId: existing.id, position: existingCopies.length + index + 1, now }));
+        const copies = [...existingCopies, ...incomingCopies].map((copy, index) => ({
+          ...copy,
+          issueId: existing.id,
+          displayOrder: index + 1
+        }));
         const primary = copies[0];
         records.push({
           ...existing,
-          title: existing.title || item.title,
-          publicationYear: existing.publicationYear || item.publicationYear,
+          seriesId: existing.seriesId || resolveConfiguredSeriesId(item.series),
+          title: existing.title || item.title || "",
+          publicationYear: existing.publicationYear || item.publicationYear || null,
+          duckipediaPageUrl: existing.duckipediaPageUrl || item.pageUrl || "",
+          duckipediaCoverUrl: existing.duckipediaCoverUrl || item.coverUrl || "",
+          duckipediaCoverFileName: existing.duckipediaCoverFileName || item.coverFileName || "",
+          duckipediaCoverSource: existing.duckipediaCoverSource || item.coverSource || "",
+          duckipediaCoverLookupVersion: Number(existing.duckipediaCoverLookupVersion || item.lookupVersion || 0),
+          metadataStatus: existing.metadataStatus || item.metadataStatus || "",
+          metadataFetchedAt: existing.metadataFetchedAt || item.metadataFetchedAt || null,
           copies,
           copyCount: copies.length,
           condition: primary.condition,
@@ -4553,17 +5355,56 @@ async function saveScannerQueue() {
           isRead: primary.isRead,
           isSealed: primary.isSealed,
           isDuplicate: copies.length > 1,
+          dataFormatVersion: APP_CONFIG.dataFormatVersion,
           updatedAt: now
         });
+        savedCopies += incomingCopies.length;
+        updatedIssues += 1;
         return;
       }
 
-      const { queueId, extension, pageUrl, existingComicId, action, ...comic } = item;
+      const issueId = createStableId();
+      const copies = drafts.map((draft, index) => normalizeCopy({
+        id: createEntityId("copy"),
+        issueId,
+        condition: draft.condition,
+        isRead: draft.isRead,
+        isSealed: draft.isSealed,
+        notes: draft.notes,
+        source: "scanner-pro",
+        createdAt: now,
+        updatedAt: now
+      }, { issueId, position: index + 1, now }));
+      const primary = copies[0];
       records.push({
-        ...comic,
-        duplicateCondition: comic.isDuplicate ? (comic.duplicateCondition || comic.condition) : null,
-        updatedAt: new Date().toISOString()
+        id: issueId,
+        seriesId: resolveConfiguredSeriesId(item.series),
+        dataFormatVersion: APP_CONFIG.dataFormatVersion,
+        series: item.series,
+        volumeNumber: String(item.volumeNumber),
+        numericBandNumber: Number(item.numericBandNumber),
+        title: String(item.title || ""),
+        publicationYear: item.publicationYear || null,
+        copies,
+        copyCount: copies.length,
+        condition: primary.condition,
+        duplicateCondition: copies[1]?.condition || null,
+        isRead: primary.isRead,
+        isDuplicate: copies.length > 1,
+        isSealed: primary.isSealed,
+        notes: primary.notes || "",
+        duckipediaPageUrl: item.pageUrl || createConfiguredDuckipediaUrl(item.series, item.volumeNumber, item.title),
+        duckipediaCoverUrl: item.coverUrl || "",
+        duckipediaCoverFileName: item.coverFileName || "",
+        duckipediaCoverSource: item.coverSource || "",
+        duckipediaCoverLookupVersion: Number(item.lookupVersion || 0),
+        metadataStatus: item.metadataStatus || "",
+        metadataFetchedAt: item.metadataFetchedAt || null,
+        createdAt: now,
+        updatedAt: now
       });
+      savedCopies += copies.length;
+      newIssues += 1;
     });
   } catch (error) {
     elements.scannerQueueMessage.textContent = error.message;
@@ -4572,7 +5413,7 @@ async function saveScannerQueue() {
   }
 
   if (records.length === 0) {
-    elements.scannerQueueMessage.textContent = "Alle vorgemerkten Bände sind auf Überspringen gestellt.";
+    elements.scannerQueueMessage.textContent = "Alle vorgemerkten Ausgaben sind auf Überspringen gestellt.";
     elements.scannerQueueMessage.dataset.type = "info";
     return;
   }
@@ -4580,14 +5421,22 @@ async function saveScannerQueue() {
   setScannerControlsBusy(true);
   try {
     await upsertComics(records);
-    await recordDataChange(records.length);
+    await recordDataChange(Math.max(1, records.length));
+    state.scannerQueueLookups.forEach((controller) => controller.abort());
+    state.scannerQueueLookups.clear();
     state.scannerQueue = [];
+    state.scannerSessionScans = 0;
     renderScannerQueue();
     await refreshCollection();
     await refreshArchiveCoreStatus({ showReport: false });
-    elements.scannerQueueMessage.textContent = `${records.length} Bände gespeichert${skipped ? `, ${skipped} übersprungen` : ""}.`;
+
+    const parts = [];
+    if (newIssues) parts.push(`${newIssues} neue ${newIssues === 1 ? "Ausgabe" : "Ausgaben"}`);
+    if (updatedIssues) parts.push(`${updatedIssues} ${updatedIssues === 1 ? "Ausgabe ergänzt" : "Ausgaben ergänzt"}`);
+    const prefix = parts.join(" und ") || `${records.length} Ausgaben`;
+    elements.scannerQueueMessage.textContent = `${prefix} · ${savedCopies} ${savedCopies === 1 ? "Exemplar" : "Exemplare"} gespeichert${skipped ? ` · ${skipped} übersprungen` : ""}.`;
     elements.scannerQueueMessage.dataset.type = "success";
-    showToast(`${records.length} Bände aus der Warteschlange gespeichert.`);
+    showToast(`${savedCopies} ${savedCopies === 1 ? "Exemplar" : "Exemplare"} aus Scanner Pro gespeichert.`);
   } catch (error) {
     console.error("Scanner-Warteschlange konnte nicht gespeichert werden:", error);
     elements.scannerQueueMessage.textContent = `Sammelspeicherung fehlgeschlagen: ${error.message}`;
@@ -4599,18 +5448,22 @@ async function saveScannerQueue() {
 
 function validateQueuedComic(item) {
   if (item.action === "skip") return;
-  if (!APP_CONFIG.conditions.some((entry) => entry.code === item.condition)) {
-    throw new Error(`${item.series}, Band ${item.volumeNumber}: Ungültiger Zustand.`);
-  }
-  if (item.isDuplicate && !APP_CONFIG.conditions.some((entry) => entry.code === item.duplicateCondition)) {
-    throw new Error(`${item.series}, Band ${item.volumeNumber}: Zustand des zweiten Exemplars fehlt.`);
-  }
-  if (item.title.length > 200) {
+  const drafts = getScannerQueueCopyDrafts(item);
+  if (!drafts.length) throw new Error(`${item.series}, Band ${item.volumeNumber}: Mindestens ein Exemplar ist erforderlich.`);
+  drafts.forEach((draft, index) => {
+    if (!APP_CONFIG.conditions.some((entry) => entry.code === draft.condition)) {
+      throw new Error(`${item.series}, Band ${item.volumeNumber}, Exemplar ${index + 1}: Ungültiger Zustand.`);
+    }
+    if (String(draft.notes || "").length > 1200) {
+      throw new Error(`${item.series}, Band ${item.volumeNumber}, Exemplar ${index + 1}: Die Notiz ist zu lang.`);
+    }
+  });
+  if (String(item.title || "").length > 200) {
     throw new Error(`${item.series}, Band ${item.volumeNumber}: Der Titel ist zu lang.`);
   }
   if (
-    item.publicationYear !== null &&
-    (!Number.isInteger(item.publicationYear) || item.publicationYear < 1800 || item.publicationYear > APP_CONFIG.publicationYearMaximum)
+    item.publicationYear !== null && item.publicationYear !== undefined && item.publicationYear !== "" &&
+    (!Number.isInteger(Number(item.publicationYear)) || Number(item.publicationYear) < 1800 || Number(item.publicationYear) > APP_CONFIG.publicationYearMaximum)
   ) {
     throw new Error(`${item.series}, Band ${item.volumeNumber}: Ungültiges Erscheinungsjahr.`);
   }
@@ -4619,9 +5472,6 @@ function validateQueuedComic(item) {
 function buildComicFromScanner() {
   const scan = state.scannerResult;
   const series = elements.scannerSeries.value;
-  const condition = elements.scannerCondition.value;
-  const isDuplicate = elements.scannerIsDuplicate.checked;
-  const duplicateCondition = isDuplicate ? elements.scannerDuplicateCondition.value : null;
   const title = elements.scannerResultName.value.trim();
   const yearRaw = elements.scannerResultYear.value.trim();
   const publicationYear = yearRaw ? Number(yearRaw) : null;
@@ -4629,19 +5479,7 @@ function buildComicFromScanner() {
   if (!scan || !series || scan.series !== series) {
     throw new Error("Die Reihe wurde nach dem Scan geändert. Bitte scanne den Band erneut.");
   }
-
-  if (!APP_CONFIG.conditions.some((entry) => entry.code === condition)) {
-    throw new Error("Bitte wähle einen gültigen Zustand aus.");
-  }
-
-  if (isDuplicate && !APP_CONFIG.conditions.some((entry) => entry.code === duplicateCondition)) {
-    throw new Error("Bitte wähle den Zustand des zweiten Exemplars aus.");
-  }
-
-  if (title.length > 200) {
-    throw new Error("Der Titel darf höchstens 200 Zeichen enthalten.");
-  }
-
+  if (title.length > 200) throw new Error("Der Titel darf höchstens 200 Zeichen enthalten.");
   if (
     publicationYear !== null &&
     (!Number.isInteger(publicationYear) || publicationYear < 1800 || publicationYear > APP_CONFIG.publicationYearMaximum)
@@ -4649,6 +5487,12 @@ function buildComicFromScanner() {
     throw new Error(`Das Erscheinungsjahr muss zwischen 1800 und ${APP_CONFIG.publicationYearMaximum} liegen.`);
   }
 
+  const copyDrafts = createScannerCopyDraftsFromControls();
+  copyDrafts.forEach((draft, index) => {
+    if (!APP_CONFIG.conditions.some((entry) => entry.code === draft.condition)) {
+      throw new Error(`Bitte wähle für Exemplar ${index + 1} einen gültigen Zustand aus.`);
+    }
+  });
   const now = new Date().toISOString();
 
   return {
@@ -4659,12 +5503,13 @@ function buildComicFromScanner() {
     numericBandNumber: scan.bandNumber,
     title,
     publicationYear,
-    condition,
-    duplicateCondition,
-    isRead: elements.scannerIsRead.checked,
-    isDuplicate,
-    isSealed: elements.scannerIsSealed.checked,
-    notes: "",
+    copyDrafts,
+    condition: copyDrafts[0].condition,
+    duplicateCondition: copyDrafts[1]?.condition || null,
+    isRead: copyDrafts[0].isRead,
+    isDuplicate: copyDrafts.length > 1,
+    isSealed: copyDrafts[0].isSealed,
+    notes: copyDrafts[0].notes,
     duckipediaPageUrl: scan.pageUrl || createConfiguredDuckipediaUrl(series, scan.bandNumber, title),
     duckipediaCoverUrl: scan.coverUrl || "",
     duckipediaCoverFileName: scan.coverFileName || "",
@@ -4676,6 +5521,26 @@ function buildComicFromScanner() {
     updatedAt: now
   };
 }
+
+function createScannerCopyDraftsFromControls() {
+  const primaryCondition = elements.scannerCondition.value || DEFAULT_CONDITION_CODE;
+  const drafts = [{
+    condition: primaryCondition,
+    isRead: elements.scannerIsRead.checked,
+    isSealed: elements.scannerIsSealed.checked,
+    notes: ""
+  }];
+  if (elements.scannerIsDuplicate.checked) {
+    drafts.push({
+      condition: elements.scannerDuplicateCondition.value || primaryCondition,
+      isRead: false,
+      isSealed: false,
+      notes: ""
+    });
+  }
+  return drafts;
+}
+
 
 function handleScannerApplyToForm() {
   if (!state.scannerResult) {
@@ -4746,6 +5611,8 @@ function updateScannerDuplicateConditionVisibility() {
 
 function setScannerControlsBusy(isBusy) {
   [
+    elements.scannerModeFast,
+    elements.scannerModeReview,
     elements.scannerSeries,
     elements.scannerCondition,
     elements.scannerDuplicateCondition,
@@ -5500,6 +6367,8 @@ function formatDiagnosticDate(value) {
 function restoreBodyModalState() {
   const anyModalOpen = [
     elements.conditionGuideModal,
+    elements.conditionAssistantModal,
+    elements.issueDetailModal,
     elements.diagnosticsModal,
     elements.importModal,
     elements.seriesModal,

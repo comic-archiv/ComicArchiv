@@ -1,28 +1,48 @@
-# Änderungsprotokoll
+# Änderungen
 
-## 4.1.2 – Infobox-Cover und Vollbilddetails
+## 4.2.0 – Scanner Pro und Zustandsassistent
+
+- Header-Ebenen korrigiert: scrollende Elemente laufen hinter der Kopfzeile durch.
+- kontinuierlicher Scanner-Modus für Stapelerfassung
+- optionaler Prüfmodus vor dem Vormerken
+- Sitzungsstatistik und strukturierte Warteschlange
+- mehrere physische Exemplare pro gescannter Ausgabe
+- getrennte Zustände, Lesestatus, Folierung und Notizen je Exemplar
+- geführter Zustandsassistent auf Basis des deutschen Zustandsrasters
+- Scanner- und Assistentmodule im Offline-Paket
+- 74 automatisierte Tests
+
+
+## 4.1.2 – Infobox-Cover und vollflächige Banddetails
 
 ### Behoben
 
-- Duckipedia-Cover werden aus dem tatsächlichen Infoboxfeld `BILD` der Bandseite gelesen.
-- Das Feld `NEU-BILD`, Rezensionsthumbnails, Storybilder und Logos können das Originalcover nicht mehr verdrängen.
-- Als Fallback wird ausschließlich das große Bild der gerenderten rechten Band-Infobox ausgewertet.
-- ältere Coverzuordnungen werden über Lookup-Version 3 automatisch erneut geprüft und lokal ersetzt.
-- Galeriecover laden auf dem iPhone ohne vorheriges Öffnen eines Bands.
-- Cover verschwinden beim Wechsel zwischen Reihenbibliothek und Regal nicht mehr.
-- Bilder aus dem Browsercache werden auch dann sichtbar geschaltet, wenn sie bereits vor dem regulären Ladeereignis vollständig verfügbar sind.
-- die Banddetailansicht ist auf dem iPhone nicht mehr als gequetschter Teilhöhen-Dialog dargestellt.
+- Duckipedia-Cover werden nicht mehr aus beliebigen Bildern einer Bandseite erraten.
+- Das Infobox-Feld `BILD` wird als Originalcover verwendet; `NEU-BILD` überschreibt es nicht.
+- Rezensionbilder, Logos, Icons und Storybilder werden nicht mehr als Cover gespeichert.
+- sichtbare Cover laden auf iOS ohne vorheriges Öffnen einer Banddetailansicht.
+- Cover verschwinden beim Wechsel zwischen Reihe, Bibliothek und Startseite nicht mehr sofort.
+- die Banddetailansicht ist auf dem iPhone keine kleine Bottom-Sheet-Fläche mehr.
 
 ### Verbessert
 
-- getrennte Coverbeobachtung für die tatsächlich scrollende Bibliotheks- und Reihenseite
-- Vorladen der ersten sichtbaren Cover und weiterer Bilder in Scrollrichtung
-- höchstens zwei parallele Duckipedia-Coverabfragen
-- persistente Speicherung erfolgreicher Cover-URLs im Comicdatensatz und Metadaten-Cache
-- lokale Cover-Blob-URLs bleiben beim Wechsel zwischen Unterseiten erhalten
-- Vollbild-Banddetails mit zentriertem Cover, einspaltigem Inhalt und sicheren iPhone-Abständen
-- temporär fehlgeschlagene Bildauflösung wird nicht fälschlich als endgültig validiertes leeres Cover gespeichert
-- kontinuierliches Nachladen langer Reihen ohne sichtbare Bandbereich-Auswahl bleibt erhalten
+- Cover-Lookup-Version 3 invalidiert alte ungenaue Cacheergebnisse.
+- MediaWiki-`imageinfo` löst die in der Vorlage genannte Datei in eine skalierte Bild-URL auf.
+- gerenderte rechte Duckipedia-Infobox dient als begrenzter Fallback bei ungewöhnlichen Vorlagen.
+- getrennte IntersectionObserver für Reihenbibliothek und Regal verwenden die jeweilige interne Scrollfläche.
+- sichtbare und nahe Cover werden zusätzlich mehrfach aktiv angestoßen.
+- Scroll-Fallback gleicht verpasste Observer-Ereignisse aus.
+- native Bild-Lazy-Loading-Hinweise wurden aus den intern scrollenden Regalansichten entfernt.
+- lokale Blob-URLs bleiben beim normalen Ansichtswechsel erhalten.
+- Detailansicht nutzt mobil `100dvh` und auf größeren Displays bis zu `90dvh`.
+
+### Weiterhin enthalten
+
+- überlappungsfreier Reihenkopf,
+- sauber formatierte nächste Neuerscheinung,
+- kontinuierliches Regal ohne Bandbereich-Auswahl,
+- begrenzte parallele Coverabfragen,
+- vollständige Suche und Filter über die ganze Reihe.
 
 ### Kompatibilität
 

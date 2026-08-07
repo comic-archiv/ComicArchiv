@@ -951,7 +951,8 @@ function normalizeSettings(settings) {
       : DEFAULT_SETTINGS.calendarReminderTime,
     archiveMigrationAcknowledgedAt: isValidDateString(source.archiveMigrationAcknowledgedAt)
       ? source.archiveMigrationAcknowledgedAt
-      : null
+      : null,
+    scannerMode: source.scannerMode === "review" ? "review" : "fast"
   };
 }
 

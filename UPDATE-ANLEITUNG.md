@@ -1,101 +1,159 @@
-# Entenarchiv 4.1.2 – Update- und Testanleitung
+# Entenarchiv 4.2.0 – Update-, Bedienungs- und Testanleitung
 
-## Inhalt des Updates
+## Was dieses Update verändert
 
-Version 4.1.2 behebt die noch offenen Probleme der digitalen Regale:
+Version 4.2.0 ergänzt Scanner Pro, den geführten Zustandsassistenten und den Header-Hotfix. Datenbankname, IndexedDB-Schema, Datenformat und Archivmodell bleiben unverändert. Eine erneute Migration der Sammlung ist nicht erforderlich.
 
-1. Duckipedia-Cover werden aus der echten Band-Infobox statt über unsichere Bildheuristiken gewählt.
-2. Sichtbare Galeriecover laden automatisch, ohne dass der Band vorher geöffnet werden muss.
-3. Geladene Cover bleiben nach dem Verlassen und erneuten Öffnen einer Reihenseite erhalten.
-4. Die Banddetailansicht nutzt auf dem iPhone den vollständigen Bildschirm.
+## Vor dem Update
 
-Die Datenbankstruktur bleibt unverändert. Es ist keine Migration notwendig.
+1. Entenarchiv auf dem iPhone öffnen.
+2. Unter **Export & Backup** ein aktuelles JSON-Backup erstellen.
+3. Bei eigenen Coverbildern zusätzlich ein vollständiges Medien-Backup erstellen.
+4. In der Dateien-App prüfen, dass die Dateien vorhanden sind.
 
-## 1. Vor dem Update sichern
+## Dateien bei GitHub hochladen
 
-1. Öffne Entenarchiv auf dem iPhone.
-2. Erstelle unter **Export & Backup** ein aktuelles JSON-Backup.
-3. Bei eigenen Coverfotos zusätzlich ein Medien-Backup erstellen.
-4. Prüfe in der Dateien-App, dass beide Dateien vorhanden sind.
-
-## 2. Dateien bei GitHub hochladen
-
-1. Lade `Entenarchiv-v4.1.2-Cover-Vollbild-Hotfix.zip` herunter.
-2. Entpacke die ZIP-Datei auf dem Mac.
-3. Öffne dein bestehendes Entenarchiv-Repository.
-4. Wähle **Add file → Upload files**.
-5. Öffne den entpackten Ordner `Entenarchiv`.
-6. Lade den vollständigen sichtbaren Inhalt hoch und ersetze die vorhandenen Dateien.
-7. Verwende beispielsweise diese Commit-Nachricht:
+1. `Entenarchiv-v4.2.0-Scanner-Pro-Zustandsassistent.zip` herunterladen.
+2. ZIP auf dem Mac entpacken.
+3. Das bestehende GitHub-Repository öffnen.
+4. **Add file → Upload files** wählen.
+5. Den vollständigen sichtbaren Inhalt des entpackten Ordners `Entenarchiv` hochladen.
+6. Bestehende Dateien ersetzen.
+7. Besonders prüfen, dass diese neuen Dateien im Hauptverzeichnis liegen:
 
 ```text
-Entenarchiv Version 4.1.2
+scanner-pro.js
+condition-assistant.js
 ```
 
-Der bestehende GitHub-Actions-Workflow muss nicht erneut eingerichtet werden. `index.html` muss weiterhin direkt im Hauptverzeichnis des Repositorys liegen.
+8. Beispielsweise mit `Entenarchiv Version 4.2.0` committen.
+9. Unter **Actions** warten, bis **Qualitätsprüfung** und **GitHub Pages veröffentlichen** grün sind.
 
-## 3. Veröffentlichung prüfen
+Der bereits eingerichtete GitHub-Actions-Workflow muss nicht verändert werden.
 
-1. Öffne in GitHub den Reiter **Actions**.
-2. Öffne **Entenarchiv prüfen und veröffentlichen**.
-3. Warte, bis **Qualitätsprüfung** und **GitHub Pages veröffentlichen** grün sind.
+## Update auf dem iPhone aktivieren
 
-Scheitert die Qualitätsprüfung, bleibt die bisherige geprüfte Version veröffentlicht.
-
-## 4. Update auf dem iPhone aktivieren
-
-1. Stelle eine Internetverbindung her.
-2. Schließe Entenarchiv über den App-Umschalter vollständig.
-3. Öffne die Home-Screen-App erneut.
-4. Schließe und öffne sie bei Bedarf ein zweites Mal.
-5. Kontrolliere unten im Backup-Bereich:
+1. Internetverbindung aktivieren.
+2. Entenarchiv über den App-Umschalter vollständig schließen.
+3. App erneut öffnen.
+4. Bei Bedarf ein zweites Mal schließen und öffnen.
+5. Im Backup-Bereich ganz unten kontrollieren:
 
 ```text
-Entenarchiv v4.1.2
+Entenarchiv v4.2.0
 ```
 
-Die Home-Screen-App muss nicht entfernt werden. Lösche keine Safari-Websitedaten.
+Die Home-Screen-App darf installiert bleiben. Websitedaten müssen nicht gelöscht werden.
 
-## 5. Automatisches Laden der Cover testen
+# Scanner Pro verwenden
 
-1. Öffne **Lustige Taschenbücher**.
-2. Bleibe mit aktiver Internetverbindung einige Sekunden in der Regalansicht.
-3. Die ersten sichtbaren Cover müssen erscheinen, ohne dass du einen Band antippst.
-4. Scrolle langsam weiter. Weitere Cover müssen automatisch nachladen, bevor sie vollständig sichtbar sind.
-5. Verlasse die Reihe und öffne sie erneut. Bereits geladene Cover müssen wieder erscheinen.
-6. Schließe Entenarchiv vollständig und öffne es erneut. Erfolgreich gespeicherte Duckipedia-Cover müssen weiterhin verfügbar sein.
+## Scan & weiter
 
-Beim ersten Durchlauf können ältere Einträge etwas länger benötigen, weil ihre bisherige Coverzuordnung einmalig gegen die aktuelle Infobox geprüft wird.
+Dieser Modus eignet sich für größere Stapel.
 
-## 6. Das konkrete Beispiel LTB 2 prüfen
+1. **Hinzufügen → Serien-Scanner** öffnen.
+2. **Scan & weiter** wählen.
+3. Reihe und Standardwerte festlegen.
+4. Kamera erlauben und die vollständige weiße Barcodefläche in den Rahmen halten.
+5. Nach der grünen Bestätigung den Band aus dem Bild nehmen.
+6. Nächsten Band vor die Kamera halten.
 
-1. Suche in der Hauptreihe nach Band `2`.
-2. Entenarchiv muss das Originalcover verwenden, das in der rechten Duckipedia-Bandinfobox angezeigt wird.
-3. Ein Rezensionsthumbnail, ein Bild aus einer Geschichte, ein Logo oder das Feld `NEU-BILD` darf nicht als Hauptcover erscheinen.
-4. Ist zunächst noch ein altes Cover sichtbar, lasse die Seite kurz online geöffnet. Die neue Lookup-Version ersetzt alte Zuordnungen automatisch.
+Jeder akzeptierte Scan landet direkt in der Warteschlange. Duckipedia-Titel und Erscheinungsjahr werden unabhängig davon im Hintergrund geladen.
 
-## 7. Vollbild-Banddetails testen
+## Vorher prüfen
 
-1. Tippe einen vorhandenen Band an.
-2. Die Detailansicht muss auf dem iPhone den gesamten Bildschirm einnehmen.
-3. Das Cover muss zentriert über den Exemplardaten stehen.
-4. Prüfe, dass Titel, Jahr, alle Exemplare, Zustände, Lesestatus, Folierung und Notizen lesbar sind.
-5. Scrolle bis zu den Aktionen am unteren Rand.
-6. Teste **Comic bearbeiten**, **Exemplare verwalten** und **Duckipedia-Daten laden**.
-7. Schließe die Ansicht über das X oben rechts.
+Dieser Modus ist sinnvoll bei uneinheitlichen Reihen oder problematischen Barcodes.
 
-## 8. Offline-Test
+1. **Vorher prüfen** wählen.
+2. Band scannen.
+3. Titel und Erscheinungsjahr kontrollieren.
+4. **Vormerken & weiter** antippen.
+5. Nächsten Band scannen.
 
-1. Öffne die aktualisierte App und mindestens eine Reihe einmal online.
-2. Schließe die App.
-3. Aktiviere den Flugmodus.
-4. Öffne Entenarchiv erneut.
-5. App, Sammlung und bereits gespeicherte Cover müssen weiterhin funktionieren. Noch nie geladene Duckipedia-Bilder benötigen weiterhin eine Internetverbindung.
+## Mehrere Exemplare derselben Ausgabe
 
-## Fehlerdiagnose
+Wird derselbe Band erneut gescannt, bleibt es bei einer Ausgabe. In der Warteschlange erscheint ein weiteres physisches Exemplar. Für jedes Exemplar lassen sich separat pflegen:
 
-Sollte Entenarchiv nicht starten oder ein Coverproblem bestehen:
+- Zustand,
+- gelesen oder ungelesen,
+- foliert oder nicht foliert,
+- Notiz.
 
-1. Öffne **Export & Backup → Technische Speicherdetails → Diagnose & Sicherheit**.
-2. Erstelle einen Diagnosebericht.
-3. Lösche nicht eigenständig die Websitedaten, da dort die lokale Sammlung gespeichert ist.
+Über **+ Exemplar** kann ein weiteres Exemplar auch manuell ergänzt werden. Vorhandene Ausgaben können als zusätzliches Exemplar übernommen oder übersprungen werden.
+
+## Warteschlange speichern
+
+1. Treffer mit gelbem Hinweis öffnen und prüfen.
+2. Bei Bedarf Titel, Jahr oder Exemplardaten korrigieren.
+3. **Geprüfte Bände speichern** antippen.
+
+Erst dann werden die Daten dauerhaft in IndexedDB geschrieben.
+
+# Zustandsassistent verwenden
+
+Neben einem Zustandsfeld gibt es jetzt **Assistent** und **Stufen**.
+
+Der Assistent fragt nacheinander:
+
+1. Ist der Comicteil vollständig?
+2. Ist der Umschlag vollständig?
+3. Wie wirkt der Band insgesamt?
+4. Welche konkreten Mängel sind vorhanden?
+
+Danach erscheint eine begründete Empfehlung. Mit **Empfehlung übernehmen** wird die Stufe in das jeweilige Zustandsfeld geschrieben. Ist ein Notizfeld verfügbar, können die ausgewählten Mängel zusätzlich als Notiz gespeichert werden.
+
+Wichtig: Die Empfehlung ist eine Orientierungshilfe. Grenzfälle, Restaurationen und ungewöhnliche Mängelkombinationen müssen weiterhin am konkreten Exemplar beurteilt werden.
+
+# Konkrete Tests nach dem Update
+
+## Header
+
+1. Eine Reihenseite, Sammlungsliste oder Statistik öffnen.
+2. Nach unten scrollen.
+3. Kontrollieren, dass Karten und Auswahlleisten hinter der Kopfzeile verschwinden.
+
+## Scanner-Schnellmodus
+
+1. Zwei unterschiedliche Bände scannen.
+2. Ersten Band aus dem Bild nehmen und danach noch einmal scannen.
+3. Prüfen:
+   - zwei Ausgaben in der Warteschlange,
+   - beim doppelt gescannten Band zwei Exemplare,
+   - Kamera blieb zwischen den Scans aktiv.
+
+## Vorhandener Band
+
+1. Einen bereits gespeicherten Band scannen.
+2. Prüfen, dass **Als weiteres Exemplar speichern** angeboten wird.
+3. Zustand des neuen Exemplars setzen.
+4. Warteschlange speichern.
+5. In der Banddetailansicht kontrollieren, dass kein zweiter Bandeintrag entstanden ist.
+
+## Zustandsassistent
+
+1. Im normalen Hinzufügen auf **Assistent** tippen.
+2. Einen gepflegten Gesamteindruck und einen Riss bis etwa 5 cm wählen.
+3. Prüfen, dass die Empfehlung nicht besser als Zustand 2–3 ausfällt.
+4. Empfehlung übernehmen und kontrollieren, dass die Mängelnotiz ergänzt wurde.
+
+## Offline
+
+1. Entenarchiv mindestens einmal online öffnen.
+2. App vollständig schließen.
+3. Flugmodus aktivieren.
+4. App erneut öffnen.
+5. Sammlung, Regale, Zustandsassistent und bereits vorgemerkte lokale Daten müssen erreichbar sein. Duckipedia-Anreicherung benötigt weiterhin Internet.
+
+# Bestehende Daten
+
+Version 4.2.0 verändert nicht:
+
+- vorhandene Ausgaben,
+- physische Exemplare,
+- eigene Reihen,
+- Reihenziele,
+- fehlende Bände,
+- Flohmarkt-Markierungen,
+- Kalendertermine,
+- eigene Coverbilder,
+- bisherige Backups.

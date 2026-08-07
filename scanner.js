@@ -1,6 +1,8 @@
 const MAX_IMAGE_EDGE = 2200;
 const IMAGE_DECODE_TIMEOUT_MS = 7000;
 const INTERIM_MESSAGE_INTERVAL_MS = 1400;
+const CONTINUOUS_DETECTION_COOLDOWN_MS = 1050;
+const SCENE_CLEAR_RESET_MS = 480;
 
 const EXTENDED_EAN_READERS = Object.freeze([
   {
@@ -25,6 +27,10 @@ export class MagazineBarcodeScanner {
     this.detectHandler = null;
     this.processedHandler = null;
     this.lastInterimAt = 0;
+    this.continuous = false;
+    this.lastPayloadKey = "";
+    this.blockedUntil = 0;
+    this.sceneClearSince = 0;
   }
 
   isSupported() {
@@ -37,7 +43,7 @@ export class MagazineBarcodeScanner {
     );
   }
 
-  async start({ onDetected, onInterim, onError } = {}) {
+  async start({ onDetected, onInterim, onError, continuous = false } = {}) {
     if (this.isStarting || this.isRunning) {
       return;
     }
@@ -49,6 +55,7 @@ export class MagazineBarcodeScanner {
     }
 
     this.stop();
+    this.continuous = Boolean(continuous);
     this.isStarting = true;
     const currentSession = ++this.sessionId;
     this.targetElement.replaceChildren();
@@ -99,7 +106,18 @@ export class MagazineBarcodeScanner {
           return;
         }
 
-        this.stop();
+        const now = Date.now();
+        const payloadKey = `${payload.extension}:${payload.bandNumber}`;
+        if (this.continuous) {
+          if (now < this.blockedUntil) return;
+          if (this.lastPayloadKey === payloadKey) return;
+          this.lastPayloadKey = payloadKey;
+          this.blockedUntil = now + CONTINUOUS_DETECTION_COOLDOWN_MS;
+          this.sceneClearSince = 0;
+        } else {
+          this.stop();
+        }
+
         onDetected?.(payload);
       };
 
@@ -108,11 +126,19 @@ export class MagazineBarcodeScanner {
           return;
         }
 
+        const now = Date.now();
         if (!containsMainBarcode(result)) {
+          if (this.continuous && this.lastPayloadKey) {
+            if (!this.sceneClearSince) this.sceneClearSince = now;
+            if (now - this.sceneClearSince >= SCENE_CLEAR_RESET_MS) {
+              this.lastPayloadKey = "";
+              this.sceneClearSince = 0;
+            }
+          }
           return;
         }
 
-        const now = Date.now();
+        this.sceneClearSince = 0;
         if (now - this.lastInterimAt < INTERIM_MESSAGE_INTERVAL_MS) {
           return;
         }
@@ -150,6 +176,10 @@ export class MagazineBarcodeScanner {
 
     this.isRunning = false;
     this.isStarting = false;
+    this.continuous = false;
+    this.lastPayloadKey = "";
+    this.blockedUntil = 0;
+    this.sceneClearSince = 0;
     this.targetElement.querySelectorAll("video").forEach((video) => {
       const stream = video.srcObject;
       if (stream instanceof MediaStream) {

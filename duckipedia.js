@@ -46,7 +46,7 @@ export async function lookupDuckipediaMetadata(series, bandNumber, { signal, set
       const renderedCover = extractInfoboxCoverFromHtml(renderedHtml, pageUrl);
       coverUrl = renderedCover.coverUrl;
       coverFileName = renderedCover.coverFileName;
-      if (coverUrl) coverSource = "rendered-infobox";
+      if (coverUrl) coverSource = "infobox-html";
     }
 
     return {
@@ -107,11 +107,12 @@ async function fetchPageWikitext(pageName, signal) {
       const page = payload?.query?.pages?.[0];
       if (!page || page.missing) return null;
       const revision = page.revisions?.[0];
-      return revision?.slots?.main?.content
-        ?? revision?.slots?.main?.["*"]
+      return unwrapApiText(
+        revision?.slots?.main?.content
+        ?? revision?.slots?.main
         ?? revision?.content
-        ?? revision?.["*"]
-        ?? "";
+        ?? revision
+      );
     }
   }
 
@@ -136,7 +137,7 @@ async function fetchPageWikitext(pageName, signal) {
     if (String(parsePayload.error.code || "").toLowerCase().includes("missing")) return null;
     throw new Error(parsePayload.error.info || "Die Duckipedia-Seite konnte nicht gelesen werden.");
   }
-  return parsePayload?.parse?.wikitext?.["*"] || "";
+  return unwrapApiText(parsePayload?.parse?.wikitext);
 }
 
 async function fetchRenderedPageHtml(pageName, signal) {
@@ -288,6 +289,15 @@ export function extractCoverFileName(value) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 240);
+}
+
+
+function unwrapApiText(value) {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return "";
+  if (typeof value["*"] === "string") return value["*"];
+  if (typeof value.content === "string") return value.content;
+  return "";
 }
 
 function createNotFoundResult(pageUrl, reason) {
