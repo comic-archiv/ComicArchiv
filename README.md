@@ -1,10 +1,10 @@
-# Entenarchiv 4.1.0
+# Entenarchiv 4.1.1
 
 Entenarchiv ist eine private, mobile und offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderbänden.
 
-Version 4.1 macht aus der reinen Sammlungsverwaltung eine **digitale Bibliothek**. Reihen lassen sich als visuelle Regale öffnen, Lücken stehen direkt zwischen vorhandenen Bänden, intelligente Listen führen zu konkreten Aufgaben und mehrere Ausgaben können gemeinsam bearbeitet werden.
+Version 4.1.1 verfeinert die **digitale Bibliothek** für kleine iPhone-Displays: Der Reihenheader ist klar gegliedert, Regale lassen sich ohne Bandbereichswechsel kontinuierlich durchscrollen, Duckipedia-Cover werden zuverlässig nachgeladen und die Banddetailansicht bleibt kompakt und vollständig sichtbar.
 
-## Neu in Version 4.1
+## Verbessert in Version 4.1.1
 
 ### Digitale Regale
 
@@ -19,7 +19,9 @@ Band 4 · vorhanden
 
 Vorhandene Bände zeigen nach Möglichkeit das eigene lokale Cover oder die Duckipedia-Vorschau. Fehlt ein Bild, bleibt eine klar erkennbare, ruhige Platzhalterkarte sichtbar.
 
-Lange Reihen werden automatisch in handliche Bereiche von bis zu 60 Bandnummern aufgeteilt. Dadurch bleibt auch die Hauptreihe auf dem iPhone flüssig und übersichtlich.
+Duckipedia-Cover werden mit der für Comic-Cover notwendigen Bildlizenz-Option abgefragt. Bereits gespeicherte Bände ohne Cover können beim sichtbarkeitsnahen Laden im Hintergrund still aktualisiert werden.
+
+Lange Reihen erscheinen als ein durchgehendes Regal. Suche und Filter wirken auf die gesamte Reihe; Cover werden erst in der Nähe des sichtbaren Bereichs geladen, damit das Scrollen trotz vieler Bände flüssig bleibt.
 
 ### Hochwertige Reihenseiten
 
@@ -91,7 +93,7 @@ Eine Ausgabe kann beliebig viele physische Exemplare besitzen. Fehlbandberechnun
 
 ## Daten und Kompatibilität
 
-Version 4.1 verwendet weiterhin:
+Version 4.1.1 verwendet weiterhin:
 
 - Datenbank: `comicarchiv-db`
 - IndexedDB-Schema: `5`
@@ -140,7 +142,7 @@ npm run check
 npm run build
 ```
 
-`npm run check` validiert Projektstruktur und JavaScript und führt derzeit 51 automatisierte Tests aus. `npm run build` erstellt anschließend das bereinigte Produktionspaket in `dist/`.
+`npm run check` validiert Projektstruktur und JavaScript und führt derzeit 53 automatisierte Tests aus. `npm run build` erstellt anschließend das bereinigte Produktionspaket in `dist/`.
 
 ## Update
 

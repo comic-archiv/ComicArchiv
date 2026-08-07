@@ -507,7 +507,10 @@ async function initializeApp() {
     onOpenMissingDetail: (series, bandNumber) => openMissingDetailModal(series, bandNumber),
     onEditComic: startEditing,
     onManageCopies: openDuplicateModal,
-    onEnrichComic: (comic) => enrichSingleComic(comic, { force: true }),
+    onEnrichComic: (comic, options = {}) => enrichSingleComic(comic, {
+      force: options.force ?? true,
+      silent: options.silent ?? false
+    }),
     onBulkSave: saveShelfBulkComics,
     onOpenProgress: openProgressForSeries,
     onToast: showToast
@@ -3699,6 +3702,8 @@ async function enrichSingleComic(comic, { force = false, silent = false } = {}) 
 
     if (changed) {
       await saveComic(updatedComic);
+      const stateIndex = state.comics.findIndex((entry) => entry.id === comic.id);
+      if (stateIndex >= 0) state.comics[stateIndex] = updatedComic;
       if (!silent) await recordDataChange(1);
     }
 
@@ -3708,7 +3713,7 @@ async function enrichSingleComic(comic, { force = false, silent = false } = {}) 
       showToast(metadata.found ? "Duckipedia-Daten wurden aktualisiert." : (metadata.reason || "Keine Duckipedia-Daten gefunden."), metadata.found ? "success" : "info");
     }
 
-    return { changed, found: metadata.found };
+    return { changed, found: metadata.found, comic: changed ? updatedComic : comic, metadata };
   } catch (error) {
     console.error("Metadaten konnten nicht aktualisiert werden:", error);
     if (!silent) showToast(`Duckipedia-Aktualisierung fehlgeschlagen: ${error.message}`, "error");

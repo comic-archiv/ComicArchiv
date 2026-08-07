@@ -62,15 +62,16 @@ test("Version 4.1, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet", 
     read("service-worker.js")
   ]);
   const versionData = JSON.parse(version);
-  assert.equal(versionData.appVersion, "4.1.0");
+  assert.equal(versionData.appVersion, "4.1.1");
   assert.equal(versionData.dataFormatVersion, 9);
   assert.equal(versionData.archiveModelVersion, 1);
-  assert.match(config, /appVersion:\s*"4\.1\.0"/);
+  assert.match(config, /appVersion:\s*"4\.1\.1"/);
   assert.match(config, /dataFormatVersion:\s*9/);
   assert.match(storage, /const DATABASE_VERSION = 5/);
-  assert.match(recovery, /const APP_VERSION = "4\.1\.0"/);
+  assert.match(recovery, /const APP_VERSION = "4\.1\.1"/);
   assert.match(recovery, /const DATA_FORMAT_VERSION = 9/);
-  assert.match(serviceWorker, /const APP_VERSION = "4\.1\.0"/);
+  assert.match(serviceWorker, /const APP_VERSION = "4\.1\.1"/);
+  assert.match(serviceWorker, /CACHE_NAME = `\$\{CACHE_PREFIX\}v4-1-1`/);
 });
 
 test("Service Worker hält den Archivkern im kritischen Offline-Paket", async () => {
@@ -83,22 +84,28 @@ test("Service Worker hält den Archivkern im kritischen Offline-Paket", async ()
 
 
 test("Digitales Regal, Reihenbibliothek und Sammelbearbeitung sind eingebunden", async () => {
-  const [html, app, shelf, shelfUi, serviceWorker] = await Promise.all([
+  const [html, app, shelf, shelfUi, serviceWorker, css] = await Promise.all([
     read("index.html"),
     read("app.js"),
     read("shelf.js"),
     read("shelf-ui.js"),
-    read("service-worker.js")
+    read("service-worker.js"),
+    read("style.css")
   ]);
   assert.match(html, /id="library-page"/);
   assert.match(html, /id="series-page"/);
   assert.match(html, /id="series-bulk-bar"/);
   assert.match(html, /id="issue-detail-modal"/);
+  assert.match(html, /id="issue-detail-facts"/);
+  assert.doesNotMatch(html, /id="series-range"/);
   assert.match(app, /createShelfUI/);
   assert.match(shelf, /buildShelfSlots/);
   assert.match(shelf, /applyBulkPatch/);
   assert.match(shelfUi, /openSeries/);
   assert.match(shelfUi, /getAllCoverMediaKeys/);
   assert.match(shelfUi, /initialSnapshot\.localCoverIds/);
+  assert.match(shelfUi, /buildShelfSlots\(summary\.comics, \{ target: maximumBand, startBand: 1, maximumBand \}\)/);
+  assert.match(shelfUi, /requestCoverRepair/);
+  assert.match(css, /\.issue-detail-cover\s*\{[\s\S]*?position:\s*relative/);
   assert.match(serviceWorker, /\.\/shelf-ui\.js/);
 });

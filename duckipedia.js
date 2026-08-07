@@ -25,6 +25,7 @@ export async function lookupDuckipediaMetadata(series, bandNumber, { signal, set
     apiUrl.searchParams.set("rvprop", "content");
     apiUrl.searchParams.set("rvslots", "main");
     apiUrl.searchParams.set("piprop", "thumbnail|original");
+    apiUrl.searchParams.set("pilicense", "any");
     apiUrl.searchParams.set("pithumbsize", "720");
     apiUrl.searchParams.set("format", "json");
     apiUrl.searchParams.set("formatversion", "2");
@@ -60,7 +61,8 @@ export async function lookupDuckipediaMetadata(series, bandNumber, { signal, set
       ?? revision?.["*"]
       ?? "";
     const parsedMetadata = parseDuckipediaWikitext(wikitext);
-    const coverUrl = normalizeImageUrl(page.thumbnail?.source || page.original?.source || "");
+    let coverUrl = normalizeImageUrl(page.thumbnail?.source || page.original?.source || "");
+    if (!coverUrl) coverUrl = await lookupCoverViaImagesApi(pageName, controller.signal);
 
     return {
       found: true,
@@ -112,14 +114,93 @@ async function lookupViaParseApi(pageName, pageUrl, signal) {
   if (payload?.error) return createNotFoundResult(pageUrl, payload.error.info || "Die Bandseite wurde nicht gefunden.");
   const wikitext = payload?.parse?.wikitext?.["*"] || "";
   const parsedMetadata = parseDuckipediaWikitext(wikitext);
+  const coverUrl = await lookupCoverViaImagesApi(pageName, signal);
   return {
     found: true,
     ...parsedMetadata,
-    coverUrl: "",
+    coverUrl,
     pageUrl,
     fetchedAt: new Date().toISOString(),
     reason: ""
   };
+}
+
+async function lookupCoverViaImagesApi(pageName, signal) {
+  try {
+    const imagesUrl = new URL(`${APP_CONFIG.duckipediaBase}api.php`);
+    imagesUrl.searchParams.set("action", "query");
+    imagesUrl.searchParams.set("prop", "images");
+    imagesUrl.searchParams.set("titles", pageName);
+    imagesUrl.searchParams.set("imlimit", "50");
+    imagesUrl.searchParams.set("format", "json");
+    imagesUrl.searchParams.set("formatversion", "2");
+    imagesUrl.searchParams.set("origin", "*");
+
+    const imagesResponse = await fetch(imagesUrl, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal
+    });
+    if (!imagesResponse.ok) return "";
+    const imagesPayload = await imagesResponse.json();
+    const imageTitles = (imagesPayload?.query?.pages?.[0]?.images || [])
+      .map((entry) => String(entry?.title || ""))
+      .filter(Boolean)
+      .sort((first, second) => scoreCoverImageTitle(second, pageName) - scoreCoverImageTitle(first, pageName));
+
+    for (const imageTitle of imageTitles.slice(0, 6)) {
+      if (scoreCoverImageTitle(imageTitle, pageName) <= 0) continue;
+      const infoUrl = new URL(`${APP_CONFIG.duckipediaBase}api.php`);
+      infoUrl.searchParams.set("action", "query");
+      infoUrl.searchParams.set("prop", "imageinfo");
+      infoUrl.searchParams.set("titles", imageTitle);
+      infoUrl.searchParams.set("iiprop", "url");
+      infoUrl.searchParams.set("iiurlwidth", "720");
+      infoUrl.searchParams.set("format", "json");
+      infoUrl.searchParams.set("formatversion", "2");
+      infoUrl.searchParams.set("origin", "*");
+      const infoResponse = await fetch(infoUrl, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+        signal
+      });
+      if (!infoResponse.ok) continue;
+      const infoPayload = await infoResponse.json();
+      const info = infoPayload?.query?.pages?.[0]?.imageinfo?.[0];
+      const source = normalizeImageUrl(info?.thumburl || info?.url || "");
+      if (source) return source;
+    }
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    console.warn("Duckipedia-Cover-Fallback ist fehlgeschlagen:", error);
+  }
+  return "";
+}
+
+function scoreCoverImageTitle(imageTitle, pageName) {
+  const title = normalizeLookupText(imageTitle);
+  const page = normalizeLookupText(pageName);
+  const number = page.match(/\d+/)?.[0] || "";
+  let score = 0;
+  if (/\.(?:jpe?g|png|webp)$/i.test(title)) score += 10;
+  if (title.includes("cover")) score += 70;
+  if (title.includes("ltb")) score += 55;
+  if (number && new RegExp(`(^|[^0-9])0*${escapeRegExp(number)}([^0-9]|$)`).test(title)) score += 100;
+  if (page && title.includes(page.replace(/_/g, " "))) score += 80;
+  if (/logo|icon|button|pfeil|arrow|flagge|symbol|comicforum|inducks/.test(title)) score -= 180;
+  if (/variant|vorschau|seite/.test(title)) score -= 35;
+  return score;
+}
+
+function normalizeLookupText(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/^datei:|^file:/i, "")
+    .replace(/[_-]+/g, " ")
+    .toLowerCase();
 }
 
 export function parseDuckipediaWikitext(wikitext) {

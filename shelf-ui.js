@@ -1,14 +1,12 @@
 import { APP_CONFIG, DEFAULT_CONDITION_CODE, getConditionLabel, getConditionRank } from "./config.js";
 import { getComicCopies, normalizeSeriesLookup } from "./archive-model.js";
 import {
-  SHELF_PAGE_SIZE,
   SMART_LIST_DEFINITIONS,
   applyBulkPatch,
   buildSeriesSummaries,
   buildShelfSlots,
   buildSmartListCounts,
   filterSeriesComics,
-  getShelfRanges,
   sortSeriesComics,
   sortSeriesSummaries
 } from "./shelf.js";
@@ -40,14 +38,19 @@ export function createShelfUI({
     seriesView: "shelf",
     seriesFilter: "all",
     seriesSearch: "",
-    seriesRangeIndex: 0,
     selectionMode: false,
     selectedIssueIds: new Set(),
     bulkUndo: null,
     coverObjectUrls: new Set(),
     issueDetailId: "",
     issueDetailObjectUrl: "",
-    coverLoadSequence: 0
+    coverLoadSequence: 0,
+    coverObserver: null,
+    coverTasks: new WeakMap(),
+    coverRepairQueue: [],
+    coverRepairActive: 0,
+    coverRepairPromises: new Map(),
+    coverRepairAttempted: new Set()
   };
 
   populateConditionSelect(elements.seriesBulkCondition);
@@ -145,7 +148,6 @@ export function createShelfUI({
     state.seriesView = "shelf";
     state.seriesFilter = "all";
     state.seriesSearch = "";
-    state.seriesRangeIndex = 0;
     state.selectionMode = false;
     state.selectedIssueIds.clear();
     state.bulkUndo = null;
@@ -319,7 +321,6 @@ export function createShelfUI({
     renderSeriesHeroCovers(summary);
     renderSeriesMetrics(summary);
     renderNextRelease(summary);
-    renderRangeOptions(summary);
     renderSeriesContent(summary);
     renderBulkBar();
   }
@@ -331,7 +332,7 @@ export function createShelfUI({
       const slot = document.createElement("span");
       slot.className = "series-hero-cover";
       const comic = candidates[index];
-      if (comic) appendCoverToSlot(slot, comic, summary.series, comic.volumeNumber);
+      if (comic) appendCoverToSlot(slot, comic, summary.series, comic.volumeNumber, { eager: true });
       else {
         slot.classList.add("is-fallback");
         slot.textContent = index === 0 ? getSeriesAbbreviation(summary.series) : "•";
@@ -370,58 +371,19 @@ export function createShelfUI({
     elements.seriesNextRelease.classList.toggle("hidden", !next);
     if (!next) return;
     elements.seriesNextReleaseTitle.textContent = next.title || "Neuerscheinung";
-    elements.seriesNextReleaseDate.textContent = formatShortDate(next.startDate);
+    elements.seriesNextReleaseDate.textContent = formatReleaseDate(next.startDate);
     elements.seriesNextReleaseDate.setAttribute("datetime", next.startDate);
   }
 
-  function renderRangeOptions(summary) {
-    const maximumBand = summary.target || summary.highestOwned;
-    const ranges = getShelfRanges(maximumBand, SHELF_PAGE_SIZE);
-    const previousValue = state.seriesRangeIndex;
-    elements.seriesRange.replaceChildren();
-
-    if (!ranges.length) {
-      const option = document.createElement("option");
-      option.value = "0";
-      option.textContent = "Alle Ausgaben";
-      elements.seriesRange.append(option);
-      state.seriesRangeIndex = 0;
-      elements.seriesRange.disabled = true;
-      return;
-    }
-
-    ranges.forEach((range, index) => {
-      const option = document.createElement("option");
-      option.value = String(index);
-      option.textContent = `Band ${range.label}`;
-      elements.seriesRange.append(option);
-    });
-    state.seriesRangeIndex = Math.min(previousValue, ranges.length - 1);
-    elements.seriesRange.value = String(state.seriesRangeIndex);
-    elements.seriesRange.disabled = ranges.length <= 1;
-  }
-
   function renderSeriesContent(summary) {
-    const range = getCurrentRange(summary);
     const filter = state.seriesFilter === "multiple" ? "duplicates" : state.seriesFilter;
-    const rawSearch = state.seriesSearch.trim();
-    const normalizedSearch = normalizeText(rawSearch);
-    const exactBandSearch = parsePositiveInteger(rawSearch);
-    const globalTextSearch = Boolean(normalizedSearch && !exactBandSearch);
-    const rangeContent = range
-      ? buildShelfSlots(summary.comics, { target: range.end, startBand: range.start, maximumBand: range.end })
+    const normalizedSearch = normalizeText(state.seriesSearch.trim());
+    const maximumBand = summary.target || summary.highestOwned;
+    const shelfContent = maximumBand > 0
+      ? buildShelfSlots(summary.comics, { target: maximumBand, startBand: 1, maximumBand })
       : { slots: [], nonNumericComics: summary.comics.filter((comic) => !comic.numericBandNumber) };
-    const slots = globalTextSearch
-      ? sortSeriesComics(summary.comics, "volume-asc").map((comic) => ({
-          type: "owned",
-          bandNumber: comic.numericBandNumber || comic.volumeNumber,
-          comic
-        }))
-      : rangeContent.slots;
-    const nonNumericComics = globalTextSearch ? [] : rangeContent.nonNumericComics;
-    if (globalTextSearch) elements.seriesRange.disabled = true;
 
-    let visibleSlots = slots.filter((slot) => {
+    let visibleSlots = shelfContent.slots.filter((slot) => {
       if (state.seriesFilter === "owned" && slot.type !== "owned") return false;
       if (state.seriesFilter === "missing" && slot.type !== "missing") return false;
       if (!["all", "owned", "missing"].includes(state.seriesFilter)) {
@@ -434,8 +396,11 @@ export function createShelfUI({
         : comicMatchesSearch(slot.comic, normalizedSearch);
     });
 
-    let visibleNonNumeric = filterSeriesComics(nonNumericComics, ["all", "owned", "missing"].includes(state.seriesFilter) ? "all" : filter, state.localCoverIds)
-      .filter((comic) => !normalizedSearch || comicMatchesSearch(comic, normalizedSearch));
+    let visibleNonNumeric = filterSeriesComics(
+      shelfContent.nonNumericComics,
+      ["all", "owned", "missing"].includes(state.seriesFilter) ? "all" : filter,
+      state.localCoverIds
+    ).filter((comic) => !normalizedSearch || comicMatchesSearch(comic, normalizedSearch));
     if (state.seriesFilter === "missing") visibleNonNumeric = [];
     visibleNonNumeric = sortSeriesComics(visibleNonNumeric, "volume-asc");
 
@@ -452,7 +417,10 @@ export function createShelfUI({
     }
 
     const visibleCount = visibleSlots.length + visibleNonNumeric.length;
-    elements.seriesVisibleCount.textContent = `${visibleCount} ${visibleCount === 1 ? "Eintrag" : "Einträge"} sichtbar`;
+    const totalCount = shelfContent.slots.length + shelfContent.nonNumericComics.length;
+    elements.seriesVisibleCount.textContent = normalizedSearch || state.seriesFilter !== "all"
+      ? `${visibleCount} von ${totalCount} Einträgen`
+      : `${visibleCount} ${visibleCount === 1 ? "Eintrag" : "Einträge"}`;
     elements.seriesEmpty.classList.toggle("hidden", visibleCount > 0);
     elements.seriesShelfView.classList.toggle("hidden", state.seriesView !== "shelf" || visibleCount === 0);
     elements.seriesListView.classList.toggle("hidden", state.seriesView !== "list" || visibleCount === 0);
@@ -696,6 +664,7 @@ export function createShelfUI({
     state.issueDetailId = issueId;
     revokeIssueDetailObjectUrl();
 
+    const copies = getComicCopies(comic);
     elements.issueDetailSeries.textContent = comic.series;
     elements.issueDetailTitle.textContent = comic.title || `Band ${comic.volumeNumber}`;
     elements.issueDetailMeta.textContent = `Band ${comic.volumeNumber}${comic.publicationYear ? ` · ${comic.publicationYear}` : ""}`;
@@ -705,9 +674,15 @@ export function createShelfUI({
     elements.issueDetailDuckipedia.classList.toggle("hidden", !hasDuckipediaLink);
     if (hasDuckipediaLink) elements.issueDetailDuckipedia.href = comic.duckipediaPageUrl;
     else elements.issueDetailDuckipedia.removeAttribute("href");
+
+    elements.issueDetailFacts.replaceChildren(
+      createDetailFact("Jahr", comic.publicationYear || "–"),
+      createDetailFact("Exemplare", copies.length),
+      createDetailFact("Gelesen", `${copies.filter((copy) => copy.isRead).length}/${copies.length}`)
+    );
     elements.issueDetailCopies.replaceChildren();
 
-    getComicCopies(comic).forEach((copy, index) => {
+    copies.forEach((copy, index) => {
       const card = document.createElement("article");
       card.className = "issue-detail-copy";
       const heading = document.createElement("div");
@@ -730,10 +705,12 @@ export function createShelfUI({
     elements.issueDetailCoverFallback.classList.remove("hidden");
     const fallbackStrong = elements.issueDetailCoverFallback.querySelector("strong");
     if (fallbackStrong) fallbackStrong.textContent = String(comic.volumeNumber || "–");
-    hydrateDetailCover(comic);
 
+    elements.issueDetailCard.scrollTop = 0;
     elements.issueDetailModal.classList.remove("hidden");
     document.body.classList.add("modal-open");
+    window.requestAnimationFrame?.(() => { elements.issueDetailCard.scrollTop = 0; });
+    void hydrateDetailCover(comic);
     if (!preserveFocus) window.setTimeout(() => elements.closeIssueDetail.focus({ preventScroll: true }), 0);
   }
 
@@ -745,9 +722,17 @@ export function createShelfUI({
         const objectUrl = URL.createObjectURL(local.blob);
         state.issueDetailObjectUrl = objectUrl;
         showDetailCover(objectUrl, comic);
-      } else if (comic.duckipediaCoverUrl) {
-        showDetailCover(comic.duckipediaCoverUrl, comic);
+        return;
       }
+      if (comic.duckipediaCoverUrl) {
+        showDetailCover(comic.duckipediaCoverUrl, comic);
+        return;
+      }
+      if (!shouldRepairDuckipediaCover(comic)) return;
+      const result = await requestCoverRepair(comic);
+      if (state.issueDetailId !== comic.id || !isVisible(elements.issueDetailModal)) return;
+      const repairedComic = result?.comic || comic;
+      if (repairedComic.duckipediaCoverUrl) showDetailCover(repairedComic.duckipediaCoverUrl, repairedComic);
     } catch (error) {
       console.warn("Cover konnte im Detail nicht geladen werden:", error);
     }
@@ -810,17 +795,9 @@ export function createShelfUI({
     elements.seriesViewButtons.forEach((button) => button.addEventListener("click", () => setSeriesView(button.dataset.seriesView)));
     elements.seriesSearch.addEventListener("input", () => {
       state.seriesSearch = elements.seriesSearch.value;
-      const exact = parsePositiveInteger(state.seriesSearch.trim());
-      const summary = findSummary(state.selectedSeriesId);
-      if (exact && summary) {
-        const ranges = getShelfRanges(summary.target || summary.highestOwned, SHELF_PAGE_SIZE);
-        const rangeIndex = ranges.findIndex((range) => exact >= range.start && exact <= range.end);
-        if (rangeIndex >= 0) state.seriesRangeIndex = rangeIndex;
-      }
       renderSeries();
     });
     elements.seriesFilter.addEventListener("change", () => { state.seriesFilter = elements.seriesFilter.value; renderSeries(); });
-    elements.seriesRange.addEventListener("change", () => { state.seriesRangeIndex = Number(elements.seriesRange.value) || 0; renderSeries(); });
     elements.seriesSelectMode.addEventListener("click", () => toggleSelectionMode());
     elements.seriesTargetButton.addEventListener("click", () => {
       const summary = findSummary(state.selectedSeriesId);
@@ -889,14 +866,16 @@ export function createShelfUI({
     else openIssueDetail(issueId);
   }
 
-  function appendCoverToSlot(slot, comic, series, bandNumber) {
+  function appendCoverToSlot(slot, comic, series, bandNumber, { eager = false } = {}) {
     const image = document.createElement("img");
     image.alt = "";
+    image.decoding = "async";
+    image.loading = eager ? "eager" : "lazy";
     const fallback = document.createElement("span");
     fallback.className = "series-cover-mini-fallback";
     fallback.textContent = String(bandNumber || getSeriesAbbreviation(series));
     slot.append(fallback, image);
-    hydrateCoverImage(image, fallback, comic);
+    scheduleCoverHydration(image, fallback, comic, { eager });
   }
 
   function appendMiniFallback(slot, series, label) {
@@ -916,8 +895,35 @@ export function createShelfUI({
     fallback.append(label, number);
     const image = document.createElement("img");
     image.alt = `Cover von ${series}, Band ${bandNumber}`;
+    image.decoding = "async";
+    image.loading = "lazy";
     container.append(fallback, image);
-    hydrateCoverImage(image, fallback, comic);
+    scheduleCoverHydration(image, fallback, comic);
+  }
+
+  function scheduleCoverHydration(image, fallback, comic, { eager = false } = {}) {
+    if (eager || typeof IntersectionObserver !== "function") {
+      void hydrateCoverImage(image, fallback, comic);
+      return;
+    }
+
+    const observer = ensureCoverObserver();
+    state.coverTasks.set(fallback, { image, fallback, comic });
+    observer.observe(fallback);
+  }
+
+  function ensureCoverObserver() {
+    if (state.coverObserver) return state.coverObserver;
+    state.coverObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting && entry.intersectionRatio <= 0) return;
+        const task = state.coverTasks.get(entry.target);
+        state.coverObserver?.unobserve(entry.target);
+        state.coverTasks.delete(entry.target);
+        if (task) void hydrateCoverImage(task.image, task.fallback, task.comic);
+      });
+    }, { rootMargin: "480px 0px" });
+    return state.coverObserver;
   }
 
   async function hydrateCoverImage(image, fallback, comic) {
@@ -928,12 +934,75 @@ export function createShelfUI({
         const objectUrl = URL.createObjectURL(local.blob);
         state.coverObjectUrls.add(objectUrl);
         setImageSource(image, fallback, objectUrl);
-      } else if (comic.duckipediaCoverUrl) {
-        setImageSource(image, fallback, comic.duckipediaCoverUrl);
+        return;
       }
+
+      if (comic.duckipediaCoverUrl) {
+        setImageSource(image, fallback, comic.duckipediaCoverUrl);
+        return;
+      }
+
+      if (!shouldRepairDuckipediaCover(comic)) return;
+      const result = await requestCoverRepair(comic);
+      if (!image.isConnected) return;
+      const repairedComic = result?.comic || comic;
+      if (repairedComic.duckipediaCoverUrl) setImageSource(image, fallback, repairedComic.duckipediaCoverUrl);
     } catch (error) {
       console.warn("Cover konnte nicht geladen werden:", error);
     }
+  }
+
+  function shouldRepairDuckipediaCover(comic) {
+    return Boolean(
+      comic?.id
+      && comic.numericBandNumber
+      && !comic.duckipediaCoverUrl
+      && state.snapshot.settings.duckipediaAutoEnrich !== false
+      && typeof navigator !== "undefined"
+      && navigator.onLine === true
+      && typeof onEnrichComic === "function"
+      && !state.coverRepairAttempted.has(comic.id)
+    );
+  }
+
+  function requestCoverRepair(comic) {
+    if (state.coverRepairPromises.has(comic.id)) return state.coverRepairPromises.get(comic.id);
+    state.coverRepairAttempted.add(comic.id);
+    const promise = new Promise((resolve) => {
+      state.coverRepairQueue.push({ comic, resolve });
+      pumpCoverRepairQueue();
+    }).finally(() => state.coverRepairPromises.delete(comic.id));
+    state.coverRepairPromises.set(comic.id, promise);
+    return promise;
+  }
+
+  function pumpCoverRepairQueue() {
+    while (state.coverRepairActive < 2 && state.coverRepairQueue.length) {
+      const job = state.coverRepairQueue.shift();
+      state.coverRepairActive += 1;
+      Promise.resolve(onEnrichComic?.(job.comic, { force: true, silent: true }))
+        .then((result) => {
+          if (result?.comic) updateSnapshotComic(result.comic);
+          job.resolve(result || null);
+        })
+        .catch((error) => {
+          console.warn("Duckipedia-Cover konnte nicht nachgeladen werden:", error);
+          job.resolve(null);
+        })
+        .finally(() => {
+          state.coverRepairActive -= 1;
+          pumpCoverRepairQueue();
+        });
+    }
+  }
+
+  function updateSnapshotComic(updatedComic) {
+    const index = state.snapshot.comics.findIndex((comic) => comic.id === updatedComic.id);
+    if (index >= 0) state.snapshot.comics[index] = updatedComic;
+    state.summaries.forEach((summary) => {
+      const comicIndex = summary.comics.findIndex((comic) => comic.id === updatedComic.id);
+      if (comicIndex >= 0) summary.comics[comicIndex] = updatedComic;
+    });
   }
 
   function setImageSource(image, fallback, source) {
@@ -948,12 +1017,6 @@ export function createShelfUI({
     image.src = source;
   }
 
-  function getCurrentRange(summary) {
-    const ranges = getShelfRanges(summary.target || summary.highestOwned, SHELF_PAGE_SIZE);
-    if (!ranges.length) return null;
-    return ranges[Math.min(state.seriesRangeIndex, ranges.length - 1)] || ranges[0];
-  }
-
   function findSummary(seriesIdOrName) {
     const needle = String(seriesIdOrName || "");
     return state.summaries.find((entry) => (entry.seriesId || entry.series) === needle)
@@ -962,6 +1025,9 @@ export function createShelfUI({
   }
 
   function clearCoverObjectUrls() {
+    state.coverObserver?.disconnect();
+    state.coverObserver = null;
+    state.coverTasks = new WeakMap();
     state.coverObjectUrls.forEach((url) => URL.revokeObjectURL(url));
     state.coverObjectUrls.clear();
   }
@@ -1023,7 +1089,6 @@ function collectElements() {
     seriesViewButtons: [...document.querySelectorAll("[data-series-view]")],
     seriesSearch: byId("series-search"),
     seriesFilter: byId("series-filter"),
-    seriesRange: byId("series-range"),
     seriesVisibleCount: byId("series-visible-count"),
     seriesSelectMode: byId("series-select-mode"),
     seriesShelfView: byId("series-shelf-view"),
@@ -1042,12 +1107,14 @@ function collectElements() {
     seriesBulkCancel: byId("series-bulk-cancel"),
 
     issueDetailModal: byId("issue-detail-modal"),
+    issueDetailCard: byId("issue-detail-card"),
     closeIssueDetail: byId("close-issue-detail"),
     issueDetailSeries: byId("issue-detail-series"),
     issueDetailTitle: byId("issue-detail-title"),
     issueDetailMeta: byId("issue-detail-meta"),
     issueDetailCoverImage: byId("issue-detail-cover-image"),
     issueDetailCoverFallback: byId("issue-detail-cover-fallback"),
+    issueDetailFacts: byId("issue-detail-facts"),
     issueDetailCopies: byId("issue-detail-copies"),
     issueDetailNotes: byId("issue-detail-notes"),
     issueDetailDuckipedia: byId("issue-detail-duckipedia"),
@@ -1109,6 +1176,16 @@ function populateConditionSelect(select) {
     if (condition.code === DEFAULT_CONDITION_CODE) option.selected = true;
     select.append(option);
   });
+}
+
+function createDetailFact(label, value) {
+  const item = document.createElement("span");
+  const strong = document.createElement("strong");
+  strong.textContent = String(value);
+  const small = document.createElement("small");
+  small.textContent = label;
+  item.append(strong, small);
+  return item;
 }
 
 function createMiniTag(label) {
@@ -1195,10 +1272,10 @@ function clampPercent(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
 }
 
-function formatShortDate(value) {
+function formatReleaseDate(value) {
   const date = new Date(`${value}T12:00:00`);
   if (Number.isNaN(date.getTime())) return String(value || "");
-  return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+  return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
 }
 
 function toIsoDate(date) {

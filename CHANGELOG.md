@@ -1,5 +1,26 @@
 # Änderungsprotokoll
 
+## 4.1.1 – Regal- und Cover-Hotfix
+
+### Verbessert
+
+- Reihenheader auf dem iPhone neu gegliedert, ohne Überlagerung von Cover-Collage, Titel und Fortschritt
+- nächste Neuerscheinung mit eigenem Kalender-Icon, klarer Titelzeile und kompakter Datumsdarstellung
+- Bandbereiche aus der Oberfläche entfernt; alle Bände und Lücken lassen sich kontinuierlich durchscrollen
+- Cover werden sichtbarkeitsnah geladen, damit lange Regale performant bleiben
+- Duckipedia-Abfrage berücksichtigt nicht freie PageImages und besitzt zusätzlich einen Dateilisten-Fallback
+- fehlende Duckipedia-Cover werden für sichtbare Ausgaben im Hintergrund nachgeladen
+- Banddetailansicht zeigt Jahr, Exemplare und Lesestatus direkt neben einem kompakten Cover
+- Detailfenster startet bei jedem Öffnen wieder am Anfang und hält alle Aktionen scrollbar erreichbar
+
+### Kompatibilität
+
+- Datenbank bleibt `comicarchiv-db`
+- IndexedDB-Schema bleibt Version 5
+- Datenformat bleibt Version 9
+- Archivmodell bleibt Version 1
+- keine Datenmigration erforderlich
+
 ## 4.1.0 – Digitale Regale
 
 ### Neu

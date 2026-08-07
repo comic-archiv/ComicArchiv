@@ -1,6 +1,6 @@
 {
   "name": "entenarchiv",
-  "version": "4.1.0",
+  "version": "4.1.1",
   "private": true,
   "type": "module",
   "description": "Private, offlinefähige PWA mit digitalem Regal und stabilem Archivkern für LTB-Sammlungen.",

@@ -117,7 +117,7 @@ test("Reihenbibliothek und digitales Regal rendern mit echten Modulaufrufen", as
   const source = await readFile(new URL("../shelf-ui.js", import.meta.url), "utf8");
   const ids = [...source.matchAll(/byId\("([A-Za-z0-9_-]+)"\)/g)].map((match) => match[1]);
   const elements = new Map(ids.map((id) => [id, new FakeElement("div", id)]));
-  const selectIds = ["library-sort", "series-filter", "series-range", "series-bulk-condition"];
+  const selectIds = ["library-sort", "series-filter", "series-bulk-condition"];
   selectIds.forEach((id) => { elements.set(id, new FakeElement("select", id)); });
   const buttonIds = ids.filter((id) => /^(close-|library-all-list|series-select-mode|series-target-button|series-bulk-|issue-detail-)/.test(id));
   buttonIds.forEach((id) => {
@@ -197,8 +197,8 @@ test("Reihenbibliothek und digitales Regal rendern mit echten Modulaufrufen", as
   snapshot.settings.knownHighestBandBySeries["Lustiges Taschenbuch"] = 80;
   snapshot.missingGroups[0].missingBands = [2, 4, 5, 6, 7, 8, 9, 10];
   ui.refresh(snapshot);
+  assert.equal(elements.get("series-shelf-grid").children.length, 80, "Das Regal muss alle Bandnummern kontinuierlich rendern");
   elements.get("series-search").value = "Titel 75";
   elements.get("series-search").dispatchEvent({ type: "input" });
-  assert.equal(elements.get("series-shelf-grid").children.length, 1, "Titelsuche muss alle Bandbereiche durchsuchen");
-  assert.equal(elements.get("series-range").disabled, true, "Bandbereich ist während einer globalen Titelsuche nicht maßgeblich");
+  assert.equal(elements.get("series-shelf-grid").children.length, 1, "Titelsuche muss das gesamte kontinuierliche Regal durchsuchen");
 });

@@ -5663,3 +5663,492 @@ html[data-storage-mode="test"] .app-header {
   min-width: 0;
   gap: 12px;
 }
+
+/* Entenarchiv 4.1.1: ruhiger Reihenheader, kontinuierliches Regal und kompakte Banddetails */
+.series-hero {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  min-height: 0;
+  padding: 18px;
+  overflow: hidden;
+}
+
+.series-hero-top {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.series-hero-covers {
+  width: 132px;
+  min-height: 154px;
+}
+
+.series-hero-cover {
+  top: 5px;
+  left: 29px;
+  width: 76px;
+  height: 118px;
+}
+
+.series-hero-cover:nth-child(1) {
+  transform: translateY(13px);
+}
+
+.series-hero-cover:nth-child(2) {
+  transform: translate(-23px, 1px) rotate(-8deg);
+}
+
+.series-hero-cover:nth-child(3) {
+  transform: translate(23px, 1px) rotate(8deg);
+}
+
+.series-hero-main {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+}
+
+.series-hero-main > .eyebrow {
+  margin: 0;
+}
+
+.series-hero-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.series-hero-heading h3 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.series-hero-heading > strong {
+  align-self: end;
+  white-space: nowrap;
+}
+
+.series-hero-progress-copy {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.series-hero-progress-bar {
+  margin-block: 7px 0;
+}
+
+.series-hero-metrics {
+  position: relative;
+  z-index: 1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.series-hero-metrics > div {
+  min-width: 0;
+  padding: 9px 6px;
+}
+
+.series-next-release {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-top: 0;
+  padding: 10px 12px;
+}
+
+.series-next-release-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--secondary) 18%, var(--surface));
+  color: var(--secondary);
+}
+
+.series-next-release-icon svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.series-next-release-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.series-next-release-copy small {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 760;
+  letter-spacing: 0.02em;
+}
+
+.series-next-release-copy strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.78rem;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.series-next-release time {
+  justify-self: end;
+  color: var(--secondary);
+  font-size: 0.78rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.series-hero-actions {
+  position: relative;
+  z-index: 1;
+  margin-top: 0;
+}
+
+.series-toolbar-grid {
+  grid-template-columns: 1fr;
+}
+
+.shelf-grid {
+  align-items: start;
+}
+
+.shelf-tile {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 235px;
+}
+
+.shelf-cover img,
+.series-cover-collage-slot img,
+.series-hero-cover img,
+.issue-detail-cover img {
+  object-fit: contain;
+  object-position: center;
+}
+
+#issue-detail-modal {
+  align-items: center;
+  padding-top: max(16px, env(safe-area-inset-top));
+}
+
+.issue-detail-card {
+  width: min(100%, 620px);
+  max-height: min(88dvh, 760px);
+  overscroll-behavior: contain;
+  scroll-behavior: auto;
+}
+
+.issue-detail-card > .section-heading {
+  position: sticky;
+  z-index: 4;
+  top: -18px;
+  margin: -18px -18px 14px;
+  padding: 18px 18px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.issue-detail-layout {
+  grid-template-columns: 138px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.issue-detail-cover {
+  position: relative;
+  width: 138px;
+  max-height: 205px;
+  aspect-ratio: 0.69;
+  align-self: start;
+}
+
+.issue-detail-cover .shelf-cover-fallback {
+  padding: 13px 11px;
+}
+
+.issue-detail-cover .shelf-cover-fallback > strong {
+  font-size: 2rem;
+}
+
+.issue-detail-content {
+  align-content: start;
+}
+
+.issue-detail-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.issue-detail-facts > span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+  padding: 8px 5px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  text-align: center;
+}
+
+.issue-detail-facts strong {
+  overflow: hidden;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-detail-facts small {
+  color: var(--text-muted);
+  font-size: 0.6rem;
+  font-weight: 750;
+}
+
+.issue-detail-copy {
+  padding: 9px 10px;
+}
+
+.issue-detail-actions {
+  margin-top: 14px;
+}
+
+@media (max-width: 620px) {
+  .series-hero {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 15px;
+  }
+
+  .series-hero-top {
+    grid-template-columns: 104px minmax(0, 1fr);
+    gap: 13px;
+  }
+
+  .series-hero-covers {
+    width: 104px;
+    min-height: 130px;
+  }
+
+  .series-hero-cover {
+    left: 23px;
+    width: 60px;
+    height: 94px;
+  }
+
+  .series-hero-cover:nth-child(1) {
+    transform: translateY(12px);
+  }
+
+  .series-hero-cover:nth-child(2) {
+    transform: translate(-18px, 1px) rotate(-8deg);
+  }
+
+  .series-hero-cover:nth-child(3) {
+    transform: translate(18px, 1px) rotate(8deg);
+  }
+
+  .series-hero-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .series-next-release {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+  }
+
+  .series-next-release-copy strong {
+    font-size: 0.75rem;
+  }
+
+  .series-next-release time {
+    grid-column: auto;
+    font-size: 0.72rem;
+  }
+}
+
+@media (max-width: 430px) {
+  .series-hero-top {
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .series-hero-covers {
+    width: 88px;
+    min-height: 116px;
+  }
+
+  .series-hero-cover {
+    left: 20px;
+    width: 50px;
+    height: 79px;
+  }
+
+  .series-hero-cover:nth-child(1) {
+    transform: translateY(10px);
+  }
+
+  .series-hero-cover:nth-child(2) {
+    transform: translate(-15px, 1px) rotate(-8deg);
+  }
+
+  .series-hero-cover:nth-child(3) {
+    transform: translate(15px, 1px) rotate(8deg);
+  }
+
+  .series-hero-heading {
+    gap: 8px;
+  }
+
+  .series-hero-heading h3 {
+    font-size: 1.1rem;
+  }
+
+  .series-hero-heading > strong {
+    font-size: 1rem;
+  }
+
+  .series-next-release {
+    gap: 8px;
+    padding: 9px 10px;
+  }
+
+  .series-next-release-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .series-next-release-copy small {
+    font-size: 0.6rem;
+  }
+
+  .series-next-release-copy strong,
+  .series-next-release time {
+    font-size: 0.68rem;
+  }
+
+  #issue-detail-modal {
+    align-items: end;
+    padding: 10px 8px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .issue-detail-card {
+    max-height: min(86dvh, 720px);
+    padding: 14px;
+    border-radius: 21px;
+  }
+
+  .issue-detail-card > .section-heading {
+    top: -14px;
+    margin: -14px -14px 12px;
+    padding: 14px 14px 10px;
+  }
+
+  .issue-detail-layout {
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .issue-detail-cover {
+    width: 88px;
+    max-height: 132px;
+  }
+
+  .issue-detail-cover .shelf-cover-fallback {
+    padding: 9px 7px;
+  }
+
+  .issue-detail-cover .shelf-cover-fallback > span {
+    font-size: 0.55rem;
+  }
+
+  .issue-detail-cover .shelf-cover-fallback > strong {
+    font-size: 1.35rem;
+  }
+
+  .issue-detail-content {
+    gap: 8px;
+  }
+
+  .issue-detail-facts {
+    gap: 4px;
+  }
+
+  .issue-detail-facts > span {
+    padding: 6px 3px;
+  }
+
+  .issue-detail-facts strong {
+    font-size: 0.72rem;
+  }
+
+  .issue-detail-facts small {
+    font-size: 0.52rem;
+  }
+
+  .issue-detail-copy {
+    padding: 7px 8px;
+  }
+
+  .issue-detail-copy p,
+  .issue-detail-copy small {
+    font-size: 0.67rem;
+  }
+
+  .issue-detail-actions {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+}
+
+@media (max-width: 350px) {
+  .series-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .series-hero-top {
+    grid-template-columns: 74px minmax(0, 1fr);
+  }
+
+  .series-hero-covers {
+    display: block;
+    width: 74px;
+    min-height: 104px;
+  }
+
+  .series-hero-cover {
+    left: 17px;
+    width: 43px;
+    height: 68px;
+  }
+
+  .series-next-release {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .series-next-release time {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
