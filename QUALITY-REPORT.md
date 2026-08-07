@@ -1,116 +1,87 @@
-# Qualitätsbericht Entenarchiv 4.0.0
+# Qualitätsbericht Entenarchiv 4.1.0
 
 Prüfdatum: 7. August 2026
 
 ## Ergebnis
 
-Das ausgelieferte Projekt hat alle automatisierten Struktur-, Syntax- und Logikprüfungen bestanden. Zusätzlich wurden der normale App-Start und die vollständige Migration einer alten IndexedDB in einem realen Chromium-Browser ausgeführt.
+Das ausgelieferte Quellprojekt hat die automatisierte Struktur-, Syntax- und Logikprüfung bestanden. Das Produktionspaket wurde aus denselben geprüften Quellen erzeugt.
+
+Der abschließende reale Praxistest von Darstellung, Touch-Verhalten, Kamera, iOS-Teilen-Menü und Service-Worker-Wechsel muss nach der Veröffentlichung auf dem konkreten iPhone erfolgen.
 
 ## Automatisierte Projektprüfung
 
 Erfolgreich geprüft wurden:
 
-- 26 erforderliche Projekt- und Laufzeitdateien,
-- konsistente App-Version `4.0.0`, Datenformat-Version `9` und Archivmodell-Version `1`,
-- 358 eindeutige HTML-IDs,
-- 300 statische JavaScript-Ziele auf vorhandene HTML-Elemente,
-- 26 vom Service Worker referenzierte Offline-Dateien,
-- Syntax von 40 JavaScript-Dateien,
+- 28 erforderliche Projekt- und Laufzeitdateien,
+- konsistente App-Version `4.1.0`,
+- unverändertes Datenformat `9`,
+- unverändertes IndexedDB-Schema `5`,
+- unverändertes Archivmodell `1`,
+- 423 eindeutige HTML-IDs,
+- 365 statische JavaScript-Ziele auf vorhandene HTML-Elemente,
+- 28 vom Service Worker referenzierte Offline-Dateien,
+- Syntax aller 28 Quell-JavaScript-Dateien,
 - bedarfsgeladenes Scanner- und PDF-Modul,
-- Diagnose, sicherer Modus und getrennte Testdatenbank,
-- Einbindung von Archivkern, Migrationsbericht und Version-4-Backupformat,
-- erfolgreiches Produktionspaket mit 22 Laufzeit-Einträgen,
-- HTTP-Abruf aller 31 erzeugten Dateien des Produktionspakets ohne Fehler.
+- sicherer Modus, Diagnose und getrennte Testdatenbank,
+- Archivkern und Version-4-Backupformat,
+- Einbindung von `shelf.js` und `shelf-ui.js`,
+- digitale Regale, Reihenbibliothek, Banddetails und Sammelbearbeitung,
+- lokale Covererkennung über Schlüssel statt vollständigem Laden aller Bildblobs,
+- parsebares HTML mit 423 ID-tragenden Elementen,
+- parsebares CSS mit 1.588 Top-Level-Einträgen und 0 Parserfehlern.
 
-## 40 automatisierte Logiktests
+## 51 automatisierte Tests
 
-Alle 40 Tests wurden erfolgreich abgeschlossen. Abgedeckt sind insbesondere:
+Alle 51 Tests wurden erfolgreich abgeschlossen. Zusätzlich zu den bisherigen Archiv-, Backup-, Kalender-, Scanner- und Fehlbandtests deckt Version 4.1 insbesondere ab:
 
-- Migration alter Comic-Datensätze in Reihen, Ausgaben und Exemplare,
-- stabile IDs für Standardreihen und eigene Reihen,
-- Ausgabeidentität über Reihen-ID und normalisierte Bandnummer,
-- Zusammenführung mehrfach angelegter Ausgaben,
-- Erhalt beliebig vieler physischer Exemplare,
-- eindeutige Exemplar-IDs auch bei identischem Zustand,
-- Schutz vor verwaisten Exemplaren und Ausgaben ohne Exemplar,
-- Erhalt dritter und weiterer Exemplare beim Bearbeiten,
-- CSV-Export mit einer Zeile pro physischem Exemplar,
-- Version-4-Backups mit validiertem Archivkern,
-- Import älterer Backups ohne Archivkern,
-- Ablehnung eines unbekannten neueren Archivmodells,
-- Cover-ID-Zuordnung beim Zusammenführen,
-- Fehlbandberechnung mit mehrfachen Exemplaren,
-- Kalenderimport mit 100 Verlagsterminen,
-- Schutz vor ungültigem Kalenderjahr `0`,
-- Apple-Kalender-Erinnerungen,
-- Zustandstransformation des früheren Rasters,
-- Duckipedia-Pfade mit Umlauten,
-- Barcode-Zusatzcodes `03` und `00239`,
-- Service-Worker-Struktur und kritisches Offline-Paket.
+- Erzeugung der Reihenbibliothek mit echten Modulaufrufen,
+- Öffnen der Hauptreihe als digitales Regal,
+- Mischung aus vorhandenen und fehlenden Bandplätzen,
+- Aufteilung langer Reihen in 60er-Bereiche,
+- Reihenfortschritt aus Ziel, vorhandenen Ausgaben und Lücken,
+- Hauptreihe an erster Stelle,
+- intelligente Listen für ungelesene, mehrfache, folierte und unvollständige Datensätze,
+- korrekte Erkennung lokaler Cover-IDs,
+- Reihenfilter für ungelesen, foliert, mehrfach vorhanden und schwächere Zustände,
+- natürliche Sortierung der Bandnummern `1`, `2`, `10`,
+- kompakte Zusammenfassung zusammenhängender Lücken,
+- Sammelbearbeitung ausschließlich ausgewählter Ausgaben,
+- Änderung aller physischen Exemplare einer ausgewählten Ausgabe.
 
-## Reale Browserprüfung der Migration
+## Sicherheitsprüfung der Oberfläche
 
-In einem frischen Chromium-Profil wurde eine Datenbank im bisherigen Schema 4 angelegt und mit folgenden Altdaten befüllt:
+Die neue Regaloberfläche erstellt nutzerabhängige Inhalte über DOM-Knoten und `textContent`. Nutzereingaben werden nicht über `innerHTML` oder `insertAdjacentHTML` ausgegeben.
 
-- zwei Datensätze für dieselbe Ausgabe `LTB 239`,
-- insgesamt drei physische Exemplare,
-- ein eigenes Coverbild,
-- bestehende Einstellungen.
+Lokale Cover werden nur für sichtbare Karten aus IndexedDB geladen. Die Übersicht verwendet zunächst lediglich die Cover-IDs. Objekt-URLs werden beim Wechsel der Ansicht wieder freigegeben.
 
-Beim Laden von Version 4 wurde erfolgreich geprüft:
+## Build und Offline-Paket
 
-- Upgrade der IndexedDB auf Schema 5,
-- Zusammenführung zu genau einer Ausgabe,
-- Erhalt aller drei physischen Exemplare,
-- Zuordnung zur stabilen Reihen-ID `ltb-main`,
-- Anlage eines lokalen Rückfall-Schnappschusses,
-- Umhängung des Coverbildes auf die neue Ausgaben-ID,
-- erneutes Erfassen von LTB 239 als viertes Exemplar ohne zweite Ausgabe.
+Der Produktions-Build umfasst 24 Laufzeit-Einträge und erzeugt 33 tatsächlich auslieferbare Dateien. Sämtliche 33 Dateien wurden über einen lokalen HTTP-Server angefordert und mit Status `200` beantwortet. `shelf.js` und `shelf-ui.js` liegen im kritischen Offline-Paket des Service Workers, sodass Bibliothek und Regale nach einem erfolgreichen ersten Laden ohne Internetverbindung starten können.
 
-Ergebnis des Browserlaufs:
+Quagga2 und jsPDF bleiben bedarfsgeladene Module und vergrößern den normalen App-Start nicht unnötig.
 
-```json
-{
-  "ok": true,
-  "issueId": "legacy-239-a",
-  "seriesId": "ltb-main",
-  "issues": 1,
-  "copies": 4,
-  "remappedCovers": 1,
-  "snapshot": true
-}
-```
+## Prüfung des finalen Pakets
 
-## Reale Browserprüfung des normalen Starts
+Das endgültige ZIP wurde nach der Erstellung erneut in ein leeres Verzeichnis entpackt. Dort wurden:
 
-Die vollständige App wurde aus dem erzeugten `dist/`-Produktionspaket in einem neuen Browserprofil mit leerer Testdatenbank geladen. Erfolgreich geprüft wurden:
+- sämtliche im Paket hinterlegten SHA-256-Prüfsummen erfolgreich kontrolliert,
+- `npm run ci` erneut vollständig ausgeführt,
+- alle 51 Tests erneut bestanden,
+- das Produktionspaket neu erzeugt,
+- alle 33 erzeugten Produktionsdateien über einen lokalen HTTP-Server mit Status 200 abgerufen.
 
-- sichtbare Versionsnummer `v4.0.0`,
-- abgeschlossener App-Start,
-- kein geöffneter sicherer Modus,
-- keine JavaScript-Ausnahme,
-- kein Fehler im Browserprotokoll,
-- erfolgreicher Aufbau eines leeren Archivkerns mit `0 Ausgaben · 0 Exemplare · 28 Reihen`.
+Das ZIP enthält keinen vorgebauten `dist`-Ordner. GitHub Actions erzeugt ihn aus den geprüften Quellen, sodass keine veralteten Produktionsdateien hochgeladen werden.
 
-## Sicherheitsverhalten
+## Nicht automatisierbare Restprüfung
 
-- Vor der ersten Migration wird ein lokaler Daten-Schnappschuss angelegt.
-- Der neue Archivgraph wird vor der Aktivierung vollständig validiert.
-- Unsicher zuordenbare Altdaten werden nicht still verworfen.
-- Ein fehlerhafter Archivkern fällt auf den kompatiblen Legacy-Speicher zurück.
-- JSON-Backups enthalten weiterhin eine lesbare Kompatibilitätsdarstellung und zusätzlich den validierten Archivkern.
-- Der sichere Modus kann Notfall-Backups auch bei gestörtem normalen App-Start erzeugen.
+Folgende Punkte sind nach dem Upload auf dem Zielgerät zu prüfen:
 
-## Noch auf dem Zielgerät zu prüfen
+- visuelle Darstellung auf dem konkreten iPhone-Modell,
+- Verhalten mit realen lokalen und externen Coverbildern,
+- Touch-Auswahl bei der Sammelbearbeitung,
+- Zurück-Navigation zwischen Startseite, Bibliothek, Reihe und klassischer Liste,
+- Offline-Start der bereits installierten Home-Screen-PWA,
+- Aktivierung des neuen Service Workers,
+- iOS-spezifische Kamera- und Teilen-Funktionen.
 
-Folgende Funktionen hängen vom konkreten iPhone, der installierten iOS-Version und dem tatsächlichen Home-Screen-PWA-Kontext ab und müssen nach der Veröffentlichung praktisch getestet werden:
-
-- IndexedDB-Migration der realen Sammlung,
-- Wechsel des Service Workers von Version 3.9 auf 4.0,
-- Kamera und Serien-Scanner,
-- iOS-Teilen-Menü für JSON, CSV, PDF und Kalenderdateien,
-- Aufnahme und Anzeige eigener Coverbilder,
-- Offline-Start der installierten Home-Screen-App,
-- Verhalten bei Speicherdruck auf dem Gerät.
-
-Dafür liegt eine konkrete Prüfliste in der separaten Update-Anleitung bei.
+Es wurde keine Aussage getroffen, dass diese gerätespezifischen Punkte bereits in Mobile Safari ausgeführt wurden.

@@ -1,168 +1,147 @@
-# Entenarchiv 4.0.0
+# Entenarchiv 4.1.0
 
 Entenarchiv ist eine private, mobile und offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderbänden.
 
-Version 4.0.0 führt den neuen **Archivkern** ein. Reihen, Ausgaben und physische Exemplare werden intern nicht mehr als ein einziger Datensatz behandelt, sondern sauber voneinander getrennt. Die gewohnte Oberfläche bleibt dabei erhalten.
+Version 4.1 macht aus der reinen Sammlungsverwaltung eine **digitale Bibliothek**. Reihen lassen sich als visuelle Regale öffnen, Lücken stehen direkt zwischen vorhandenen Bänden, intelligente Listen führen zu konkreten Aufgaben und mehrere Ausgaben können gemeinsam bearbeitet werden.
 
-## Das neue Archivmodell
+## Neu in Version 4.1
 
-### Reihen
+### Digitale Regale
 
-Jede Reihe besitzt eine dauerhafte interne ID. Der sichtbare Name kann geändert werden, ohne dass Verknüpfungen zu Ausgaben verloren gehen.
-
-Beispiel:
+Ein Klick auf **Lustige Taschenbücher** öffnet die Hauptreihe direkt als Regal. Vorhandene und fehlende Bandnummern erscheinen in der richtigen Reihenfolge:
 
 ```text
-Reihen-ID: ltb-main
-Name: Lustiges Taschenbuch
-Duckipedia-Muster: LTB_{band}
+Band 1 · vorhanden
+Band 2 · vorhanden
+Band 3 · fehlt
+Band 4 · vorhanden
 ```
 
-Eigene Reihen erhalten ebenfalls eine stabile ID. Aliase und frühere Schreibweisen können dem gleichen Reiheneintrag zugeordnet werden.
+Vorhandene Bände zeigen nach Möglichkeit das eigene lokale Cover oder die Duckipedia-Vorschau. Fehlt ein Bild, bleibt eine klar erkennbare, ruhige Platzhalterkarte sichtbar.
 
-### Ausgaben
+Lange Reihen werden automatisch in handliche Bereiche von bis zu 60 Bandnummern aufgeteilt. Dadurch bleibt auch die Hauptreihe auf dem iPhone flüssig und übersichtlich.
 
-Eine Ausgabe beschreibt den eigentlichen Band:
+### Hochwertige Reihenseiten
 
-- Reihe
-- Bandnummer
-- Titel
-- Erscheinungsjahr
-- Duckipedia-Daten
-- Coververknüpfung
+Jede Reihe erhält eine eigene Detailansicht mit:
 
-Die Kombination aus Reihen-ID und Bandnummer ist eindeutig. Schreibweisen wie `1`, `01` und `001` werden bei rein numerischen Bandnummern als dieselbe Ausgabe erkannt.
+- Vollständigkeit und Fortschrittsbalken,
+- Zahl der Ausgaben und physischen Exemplare,
+- ungelesenen und mehrfach vorhandenen Bänden,
+- nächster erkannter Neuerscheinung aus dem Kalender,
+- visueller Regal- und kompakter Listenansicht,
+- Suche innerhalb der Reihe,
+- Filter für vorhanden, fehlend, ungelesen, mehrfach vorhanden und schwächere Zustände,
+- direktem Zugriff auf das Sammlungsziel.
 
-### Physische Exemplare
+Fehlende Bände sind im Regal anklickbar und öffnen die bestehende Fehlbandverwaltung. Vorhandene Bände öffnen eine kompakte Detailansicht mit allen physischen Exemplaren, Zuständen und Aktionen.
 
-Zustand, gelesen, foliert und exemplarbezogene Notizen liegen jetzt am jeweiligen physischen Exemplar. Eine Ausgabe kann beliebig viele Exemplare besitzen.
+### Reihenbibliothek
+
+**Sonderbände & weitere Reihen** öffnet jetzt eine eigene Reihenbibliothek. Jede Reihe wird mit Cover-Collage, Vollständigkeit, Ausgaben, Exemplaren und relevanten Hinweisen dargestellt.
+
+Die Bibliothek lässt sich suchen und sortieren nach:
+
+- Vollständigkeit,
+- Name,
+- Größe,
+- ungelesenen Bänden,
+- letzter Änderung.
+
+Die Hauptreihe bleibt in der Gesamtansicht immer an erster Stelle.
+
+### Intelligente Listen
+
+Entenarchiv stellt automatisch acht praktische Listen zusammen:
+
+- Neu im Archiv
+- Noch ungelesen
+- Mehrfach vorhanden
+- Folierte Exemplare
+- Zustand 3 oder schwächer
+- Daten ergänzen
+- Ohne Cover
+- Aktueller Jahrgang
+
+Ein Klick öffnet die bereits bekannte Sammlungsansicht mit passendem Filter. Die aktive Liste wird dort sichtbar angezeigt und lässt sich mit einem Klick wieder verlassen.
+
+### Sammelbearbeitung
+
+In einer Reihenseite kann über **Auswählen** eine Mehrfachauswahl gestartet werden. Für alle ausgewählten Ausgaben lassen sich anschließend gemeinsam ändern:
+
+- gelesen oder ungelesen,
+- foliert oder entfoliert,
+- Zustand aller Exemplare.
+
+Die letzte Sammeländerung kann direkt wieder rückgängig gemacht werden.
+
+## Archivkern aus Version 4.0
+
+Entenarchiv unterscheidet weiterhin sauber zwischen:
 
 ```text
-LTB 239
-├── Exemplar 1 · Zustand 1 · gelesen
-├── Exemplar 2 · Zustand 2 · foliert
-└── Exemplar 3 · Zustand 3 · Tauschbestand
+Reihe
+└── Ausgabe
+    ├── Exemplar 1
+    ├── Exemplar 2
+    └── weitere Exemplare
 ```
 
-Fehlbandberechnung, Reihenfortschritt und Ausgabenzähler zählen den Band weiterhin nur einmal. Statistiken zu physischen Büchern können dagegen alle Exemplare berücksichtigen.
+Eine Ausgabe kann beliebig viele physische Exemplare besitzen. Fehlbandberechnung und Reihenfortschritt zählen die Ausgabe nur einmal; exemplarbezogene Statistiken berücksichtigen alle Bücher.
 
-## Verlustfreie Umstellung
+## Daten und Kompatibilität
 
-Beim ersten Start nach dem Update:
+Version 4.1 verwendet weiterhin:
 
-1. wird der bisherige Datenstand gelesen,
-2. wird lokal ein Rückfall-Schnappschuss angelegt,
-3. erhalten Reihen stabile IDs,
-4. werden doppelte Datensätze derselben Ausgabe zusammengeführt,
-5. werden vorhandene Doppelstücke in einzelne Exemplare überführt,
-6. werden eigene Cover auf die neue Ausgaben-ID umgehängt,
-7. wird der neue Archivgraph validiert,
-8. wird die kompatible Projektion für die bisherige Oberfläche erstellt.
-
-Kann auch nur ein Eintrag nicht sicher zugeordnet werden, wird die Umstellung abgebrochen. Die bisherige Sammlung bleibt dann im Legacy-Speicher verfügbar und kann über den sicheren Modus exportiert werden.
-
-Nach erfolgreicher Umstellung zeigt Entenarchiv einmalig einen Migrationsbericht. Er kann später unter **Export & Backup → Technische Speicherdetails** erneut geöffnet werden und enthält:
-
-- bisherigen Einträgen,
-- eindeutigen Ausgaben,
-- physischen Exemplaren,
-- verwendeten Reihen,
-- zusammengeführten Altdubletten,
-- übernommenen zusätzlichen Exemplaren.
-
-## Exemplare verwalten
-
-Über das Einstellungsmenü einer Comic-Karte steht **Exemplare verwalten** zur Verfügung. Dort lassen sich:
-
-- beliebig viele Exemplare hinzufügen,
-- Zustand pro Exemplar pflegen,
-- gelesen und foliert pro Exemplar setzen,
-- exemplarbezogene Notizen hinterlegen,
-- zusätzliche Exemplare wieder entfernen.
-
-Mindestens ein Exemplar bleibt immer erhalten.
-
-## Schutz vor doppelten Ausgaben
-
-Scanner, manuelle Erfassung, Flohmarkt-Modus und Backup-Import verwenden dieselbe Ausgabenidentität. Wird ein bereits vorhandener Band erneut erfasst, entsteht keine zweite Ausgabe. Stattdessen kann ein weiteres physisches Exemplar an die vorhandene Ausgabe angehängt werden.
-
-## Backups in Version 4
-
-JSON- und Medien-Backups enthalten nun zwei Darstellungen:
-
-1. eine kompatible Comic-Liste für ältere Entenarchiv-Versionen und normale JSON-Werkzeuge,
-2. den validierten Archivkern mit Reihen, Ausgaben und Exemplaren.
-
-Beim Import ist der Archivkern die maßgebliche Darstellung. Backups aus älteren Versionen ohne Archivkern bleiben kompatibel und werden beim Import automatisch übertragen.
-
-Medien-Backups enthalten weiterhin zusätzlich die eigenen Coverbilder.
-
-## Diagnose und sicherer Modus
-
-Die Sicherheitsfunktionen aus Version 3.9 bleiben vollständig enthalten. Die Diagnose zeigt jetzt getrennt:
-
-- Anzahl Reihen,
-- Anzahl Ausgaben,
-- Anzahl physischer Exemplare,
-- Zustand des Archivkerns,
-- Archivmodell-Version,
-- mögliche verwaiste oder doppelte Datensätze.
-
-Der sichere Modus kann Version-4-Notfall-Backups direkt aus den neuen IndexedDB-Speichern erzeugen.
-
-## Technische Daten
-
-- App-Version: `4.0.0`
+- Datenbank: `comicarchiv-db`
+- IndexedDB-Schema: `5`
 - Datenformat: `9`
 - Archivmodell: `1`
-- IndexedDB-Schema: `5`
-- produktive Datenbank: `comicarchiv-db`
-- Testdatenbank: `comicarchiv-db-test`
 
-Neue IndexedDB-Speicher:
+Es ist **keine neue Datenbankmigration** erforderlich. Die in Version 4.0 übertragenen Reihen, Ausgaben, Exemplare, Cover, Ziele, Kalendertermine und Flohmarktmarkierungen bleiben erhalten.
 
-```text
-seriesCatalog
-issues
-copies
-archiveMeta
-migrationSnapshots
-```
+Die Coverübersicht liest nur lokale Cover-IDs und lädt nicht vorsorglich alle Bilddateien in den Arbeitsspeicher. Die eigentlichen Bilder werden erst sichtbarkeitsnah pro Band geladen.
 
-Der bisherige Speicher `comics` bleibt als kompatible Projektion bestehen. Das reduziert das Risiko bei der Umstellung und erlaubt der bestehenden Oberfläche einen kontrollierten Übergang zur neuen Architektur.
+## Datenschutz
 
-## Projektstruktur
+Die private Sammlung bleibt lokal in IndexedDB auf dem verwendeten Gerät. GitHub Pages veröffentlicht nur den Programmcode und statische Kalenderdateien. Eigene Comics, Zustände, Notizen und Cover werden nicht automatisch zu GitHub übertragen.
+
+Duckipedia wird nur für optionale bibliografische Zusatzdaten und externe Covervorschauen kontaktiert.
+
+## Wichtige Projektdateien
 
 ```text
 Entenarchiv/
-├── archive-model.js       # reines Datenmodell, Migration und Validierung
-├── storage.js             # IndexedDB und kompatible Projektion
-├── app.js                 # bestehende Oberfläche und Funktionssteuerung
-├── export.js              # CSV, PDF, JSON und Archivkern-Backups
-├── recovery.js            # sicherer Modus und Notfall-Backups
-├── tests/                 # automatisierte Logik- und Strukturtests
-└── .github/workflows/     # geprüfte GitHub-Pages-Veröffentlichung
+├── index.html
+├── style.css
+├── app.js
+├── archive-model.js
+├── shelf.js
+├── shelf-ui.js
+├── storage.js
+├── missing.js
+├── export.js
+├── scanner.js
+├── calendar.js
+├── service-worker.js
+├── tests/
+├── scripts/
+└── .github/workflows/deploy-pages.yml
 ```
+
+`shelf.js` enthält die testbare Fachlogik für Regale, Reihenübersichten, intelligente Listen und Sammeländerungen. `shelf-ui.js` kapselt die neue Bibliotheks- und Regaloberfläche.
 
 ## Qualitätsprüfung
 
-```text
+Lokal oder in GitHub Actions:
+
+```bash
 npm run check
-```
-
-prüft Struktur, Syntax, Datenmodell, Migration, Backup-Kompatibilität, Scannerlogik, Kalender und Offline-Dateien. Version 4.0.0 umfasst 40 automatisierte Logiktests. Zusätzlich wurde die vollständige Migration einer alten IndexedDB sowie der normale App-Start in einem realen Chromium-Browser geprüft.
-
-```text
 npm run build
 ```
 
-erzeugt das bereinigte GitHub-Pages-Paket in `dist/`.
+`npm run check` validiert Projektstruktur und JavaScript und führt derzeit 51 automatisierte Tests aus. `npm run build` erstellt anschließend das bereinigte Produktionspaket in `dist/`.
 
-Für die normale Nutzung und Bearbeitung im GitHub-Browsereditor ist keine lokale Node.js-Installation erforderlich.
+## Update
 
-
-Ausführliche Informationen:
-
-- `MIGRATION-V4.md` – Ablauf, Übertragungsregeln, Bericht und Wiederherstellung
-- `QUALITY-REPORT.md` – automatisierte und reale Browserprüfungen
-- `GITHUB-ACTIONS-SETUP.md` – geprüfte Veröffentlichung über GitHub Pages
+Die vollständige Anleitung befindet sich in `UPDATE-ANLEITUNG.md`. Vor jedem größeren Update sollte weiterhin ein aktuelles JSON-Backup und bei eigenen Coverbildern zusätzlich ein Medien-Backup erstellt werden.

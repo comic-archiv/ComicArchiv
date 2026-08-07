@@ -750,6 +750,14 @@ export async function getAllCoverMedia() {
   return records;
 }
 
+export async function getAllCoverMediaKeys() {
+  const database = await getDatabase();
+  const transaction = database.transaction(COVER_STORE, "readonly");
+  const keys = await requestToPromise(transaction.objectStore(COVER_STORE).getAllKeys());
+  await transactionDone(transaction);
+  return keys.map((key) => String(key));
+}
+
 export async function replaceAllCoverMedia(records) {
   const database = await getDatabase();
   const transaction = database.transaction(COVER_STORE, "readwrite");

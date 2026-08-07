@@ -21,6 +21,7 @@ import {
   deleteCoverMedia,
   getAllComics,
   getAllCoverMedia,
+  getAllCoverMediaKeys,
   getAllMetadataCache,
   getAppSettings,
   getArchiveCoreStatus,
@@ -97,9 +98,21 @@ import {
   normalizeCopy,
   normalizeSeriesLookup
 } from "./archive-model.js";
+import { createShelfUI } from "./shelf-ui.js";
+import { matchesSmartList, sortSmartList } from "./shelf.js";
 
 const THEME_STORAGE_KEY = "comicarchiv-theme";
 const IS_TEST_MODE = new URLSearchParams(window.location.search).get("testmode") === "1";
+const SMART_LIST_DEFINITIONS_LOOKUP = Object.freeze({
+  recent: { title: "Neu im Archiv", description: "Zuletzt hinzugefügte oder aktualisierte Bände" },
+  unread: { title: "Noch ungelesen", description: "Bände, von denen noch kein Exemplar gelesen wurde" },
+  duplicates: { title: "Mehrfach vorhanden", description: "Ausgaben mit mindestens zwei physischen Exemplaren" },
+  sealed: { title: "Folierte Exemplare", description: "Ausgaben mit mindestens einem folierten Exemplar" },
+  "needs-care": { title: "Zustand 3 oder schwächer", description: "Bände, die genauer geprüft oder ersetzt werden könnten" },
+  metadata: { title: "Daten ergänzen", description: "Titel, Jahr oder Duckipedia-Verknüpfung fehlen" },
+  "no-cover": { title: "Ohne Cover", description: "Noch ohne eigenes oder geladenes Coverbild" },
+  "current-year": { title: "Aktueller Jahrgang", description: "Bände aus dem laufenden Kalenderjahr" }
+});
 
 const state = {
   comics: [],
@@ -131,6 +144,9 @@ const state = {
   metadataLookupTimer: null,
   enrichmentRunning: false,
   collectionScope: "main",
+  collectionPreset: {},
+  collectionReturnTarget: "home",
+  localCoverIds: new Set(),
   missingScope: "main",
   openMissingSeries: new Set(),
   missingLookupSequence: 0,
@@ -213,6 +229,10 @@ const elements = {
   filterResult: document.querySelector("#filter-result"),
   filterSummary: document.querySelector("#filter-summary"),
   filterPanel: document.querySelector("#filter-panel"),
+  smartListBanner: document.querySelector("#smart-list-banner"),
+  smartListTitle: document.querySelector("#smart-list-title"),
+  smartListDescription: document.querySelector("#smart-list-description"),
+  clearSmartList: document.querySelector("#clear-smart-list"),
   statTotal: document.querySelector("#stat-total"),
   statSeries: document.querySelector("#stat-series"),
   statRead: document.querySelector("#stat-read"),
@@ -458,6 +478,7 @@ const elements = {
 let toastTimer;
 let importInProgress = false;
 let barcodeScanner;
+let shelfUI;
 
 initializeApp().catch((error) => {
   console.error(error);
@@ -473,6 +494,24 @@ async function initializeApp() {
   applyStoredTheme();
   configureTestMode();
   bindEvents();
+  shelfUI = createShelfUI({
+    getSnapshot: () => ({
+      comics: state.comics,
+      missingGroups: state.missingGroups,
+      settings: state.settings,
+      localCoverIds: state.localCoverIds
+    }),
+    getCoverMedia,
+    getAllCoverMediaKeys,
+    onOpenCollection: (options = {}) => openCollectionPage(options.scope || "all", options),
+    onOpenMissingDetail: (series, bandNumber) => openMissingDetailModal(series, bandNumber),
+    onEditComic: startEditing,
+    onManageCopies: openDuplicateModal,
+    onEnrichComic: (comic) => enrichSingleComic(comic, { force: true }),
+    onBulkSave: saveShelfBulkComics,
+    onOpenProgress: openProgressForSeries,
+    onToast: showToast
+  });
   elements.appVersion.textContent = `v${APP_CONFIG.appVersion}`;
 
   try {
@@ -864,8 +903,8 @@ function bindEvents() {
   elements.progressTargetForm.addEventListener("submit", handleProgressTargetSubmit);
   elements.progressSeries.addEventListener("change", syncProgressTargetInput);
   elements.progressRemove.addEventListener("click", handleRemoveProgressTarget);
-  elements.openMainCollection.addEventListener("click", () => openCollectionPage("main"));
-  elements.openOtherCollection.addEventListener("click", () => openCollectionPage("other"));
+  elements.openMainCollection.addEventListener("click", () => shelfUI?.openSeries("ltb-main", { returnTarget: "home" }));
+  elements.openOtherCollection.addEventListener("click", () => shelfUI?.openLibrary("other"));
   elements.closeCollection.addEventListener("click", closeCollectionPage);
   elements.openMainMissing.addEventListener("click", () => openMissingPage("main"));
   elements.openOtherMissing.addEventListener("click", () => openMissingPage("other"));
@@ -950,6 +989,10 @@ function bindEvents() {
   });
 
   elements.resetFilters.addEventListener("click", resetFilters);
+  elements.clearSmartList.addEventListener("click", () => {
+    state.collectionPreset = {};
+    resetFilters({ keepPageOpen: true, clearPreset: false });
+  });
   elements.exportJson.addEventListener("click", handleJsonExport);
   elements.exportCsv.addEventListener("click", handleCollectionCsvExport);
   elements.exportMissingCsv.addEventListener("click", handleMissingCsvExport);
@@ -1113,7 +1156,9 @@ function openAddPage() {
 function closeAddPage({ returnFocus = true } = {}) {
   elements.addPage.classList.add("hidden");
   elements.addPage.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("app-page-open");
+  const anotherPageOpen = [...document.querySelectorAll(".app-page")]
+    .some((page) => !page.classList.contains("hidden"));
+  document.body.classList.toggle("app-page-open", anotherPageOpen);
   if (returnFocus) window.setTimeout(() => elements.navAdd.focus({ preventScroll: true }), 0);
 }
 
@@ -1142,7 +1187,7 @@ function handleDashboardStatClick(event) {
     return;
   }
   if (action === "series") {
-    openStatisticsPage();
+    shelfUI?.openLibrary("all");
     return;
   }
   const presets = {
@@ -1708,7 +1753,14 @@ function migrateLegacyComicConditions(comics) {
 
 async function refreshCollection() {
   try {
-    const storedComics = await getAllComics();
+    const [storedComics, coverKeys] = await Promise.all([
+      getAllComics(),
+      getAllCoverMediaKeys().catch((error) => {
+        console.warn("Cover-IDs konnten nicht geladen werden:", error);
+        return [];
+      })
+    ]);
+    state.localCoverIds = new Set(coverKeys);
     const migration = migrateLegacyComicConditions(storedComics);
     state.comics = migration.comics;
 
@@ -1723,6 +1775,7 @@ async function refreshCollection() {
     );
     renderCollectionHub();
     renderMissingHub();
+    shelfUI?.refresh({ comics: state.comics, missingGroups: state.missingGroups, settings: state.settings, localCoverIds: state.localCoverIds });
     renderCollection();
     renderStats();
     renderMissingBands();
@@ -1764,6 +1817,30 @@ async function recordDataChange(changeAmount = 1) {
   }
 }
 
+async function saveShelfBulkComics(updatedComics, { action = "bulk" } = {}) {
+  const entries = Array.isArray(updatedComics) ? updatedComics : [];
+  if (!entries.length) return;
+  for (const comic of entries) {
+    await saveComic(comic);
+  }
+  await recordDataChange(entries.length);
+  await refreshCollection();
+  await refreshArchiveCoreStatus({ showReport: false });
+  if (action !== "undo") await refreshMediaStatus().catch(() => {});
+}
+
+function openProgressForSeries(seriesName) {
+  openProgressPage();
+  const optionExists = [...elements.progressSeries.options].some((option) => option.value === seriesName);
+  if (optionExists) {
+    elements.progressSeries.value = seriesName;
+    syncProgressTargetInput();
+  }
+  elements.progressTargetPanel.open = true;
+  window.setTimeout(() => elements.progressTarget.focus({ preventScroll: true }), 0);
+}
+
+
 function syncCollectionSeriesFilter(availableSeries = getAvailableSeries(state.settings, state.comics), preferredValue = elements.filterSeries.value) {
   const mainSeries = "Lustiges Taschenbuch";
   const options = state.collectionScope === "main"
@@ -1798,8 +1875,13 @@ function renderCollectionHub() {
 
 function openCollectionPage(scope, presets = {}) {
   state.collectionScope = scope === "other" ? "other" : scope === "all" ? "all" : "main";
-  resetFilters({ keepPageOpen: true });
+  state.collectionReturnTarget = presets.returnTarget || (
+    shelfUI?.isSeriesOpen() ? "series" : shelfUI?.isLibraryOpen() ? "library" : "home"
+  );
+  state.collectionPreset = { ...presets };
+  resetFilters({ keepPageOpen: true, clearPreset: false });
   syncCollectionSeriesFilter(getAvailableSeries(state.settings, state.comics));
+
   if (presets.series && [...elements.filterSeries.options].some((option) => option.value === presets.series)) {
     elements.filterSeries.value = presets.series;
   }
@@ -1807,11 +1889,15 @@ function openCollectionPage(scope, presets = {}) {
   if (presets.sealed) elements.filterSealed.checked = true;
   if (presets.duplicate) elements.filterDuplicate.checked = true;
   if (presets.search) elements.search.value = String(presets.search);
-  elements.collectionPageTitle.textContent = state.collectionScope === "main"
-    ? "Lustige Taschenbücher"
-    : state.collectionScope === "other"
-      ? "Sonderbände & weitere Reihen"
-      : "Alle Comics";
+  if (presets.smartList === "recent") elements.sortBy.value = "recent";
+
+  elements.collectionPageTitle.textContent = presets.title || (
+    state.collectionScope === "main"
+      ? "Lustige Taschenbücher"
+      : state.collectionScope === "other"
+        ? "Sonderbände & weitere Reihen"
+        : "Alle Comics"
+  );
   renderCollection();
   elements.collectionPage.classList.remove("hidden");
   elements.collectionPage.setAttribute("aria-hidden", "false");
@@ -1823,17 +1909,27 @@ function openCollectionPage(scope, presets = {}) {
 function closeCollectionPage({ returnFocus = true } = {}) {
   elements.collectionPage.classList.add("hidden");
   elements.collectionPage.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("app-page-open");
-  if (returnFocus) {
-    window.setTimeout(() => {
-      const target = state.collectionScope === "main"
-        ? elements.openMainCollection
-        : state.collectionScope === "other"
-          ? elements.openOtherCollection
-          : elements.dashboardStats;
-      target.focus({ preventScroll: true });
-    }, 0);
-  }
+  const anotherPageOpen = [...document.querySelectorAll(".app-page")]
+    .some((page) => !page.classList.contains("hidden"));
+  document.body.classList.toggle("app-page-open", anotherPageOpen);
+
+  if (!returnFocus) return;
+  window.setTimeout(() => {
+    if (state.collectionReturnTarget === "series" && shelfUI?.isSeriesOpen()) {
+      document.querySelector("#close-series-page")?.focus({ preventScroll: true });
+      return;
+    }
+    if (state.collectionReturnTarget === "library" && shelfUI?.isLibraryOpen()) {
+      document.querySelector("#close-library")?.focus({ preventScroll: true });
+      return;
+    }
+    const target = state.collectionScope === "main"
+      ? elements.openMainCollection
+      : state.collectionScope === "other"
+        ? elements.openOtherCollection
+        : elements.dashboardStats;
+    target?.focus({ preventScroll: true });
+  }, 0);
 }
 
 function getScopedMissingGroups() {
@@ -2241,8 +2337,13 @@ function openProgressPage() {
 function closeProgressPage() {
   elements.progressPage.classList.add("hidden");
   elements.progressPage.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("app-page-open");
-  window.setTimeout(() => elements.openProgress.focus({ preventScroll: true }), 0);
+  const anotherPageOpen = [...document.querySelectorAll(".app-page")]
+    .some((page) => !page.classList.contains("hidden"));
+  document.body.classList.toggle("app-page-open", anotherPageOpen);
+  window.setTimeout(() => {
+    if (shelfUI?.isSeriesOpen()) document.querySelector("#series-target-button")?.focus({ preventScroll: true });
+    else elements.openProgress.focus({ preventScroll: true });
+  }, 0);
 }
 
 function openMediaPage() {
@@ -2503,6 +2604,7 @@ async function handleProgressTargetSubmit(event) {
     renderMissingBands();
     renderStats();
     renderSeriesProgress();
+    shelfUI?.refresh({ comics: state.comics, missingGroups: state.missingGroups, settings: state.settings, localCoverIds: state.localCoverIds });
     syncProgressTargetInput();
     elements.progressMessage.textContent = rawTarget
       ? `Ziel für „${series}“ gespeichert.`
@@ -2536,6 +2638,7 @@ async function handleRemoveProgressTarget() {
     renderMissingBands();
     renderStats();
     renderSeriesProgress();
+    shelfUI?.refresh({ comics: state.comics, missingGroups: state.missingGroups, settings: state.settings, localCoverIds: state.localCoverIds });
     syncProgressTargetInput();
     elements.progressMessage.textContent = `Festes Ziel für „${series}“ entfernt.`;
     elements.progressMessage.dataset.type = "success";
@@ -2688,6 +2791,14 @@ function renderSeriesProgress() {
 
 function renderCollection() {
   state.filteredComics = getFilteredAndSortedComics();
+  const smartDefinition = state.collectionPreset.smartList
+    ? SMART_LIST_DEFINITIONS_LOOKUP[state.collectionPreset.smartList]
+    : null;
+  elements.smartListBanner.classList.toggle("hidden", !smartDefinition);
+  if (smartDefinition) {
+    elements.smartListTitle.textContent = smartDefinition.title;
+    elements.smartListDescription.textContent = smartDefinition.description;
+  }
   clearCardCoverObjectUrls();
   elements.comicList.replaceChildren();
 
@@ -2729,50 +2840,48 @@ function getFilteredAndSortedComics() {
   const onlyDuplicate = elements.filterDuplicate.checked;
 
   const filtered = getScopedComics().filter((comic) => {
+    if (state.collectionPreset.smartList && !matchesSmartList(comic, state.collectionPreset.smartList, {
+      localCoverIds: state.localCoverIds
+    })) {
+      return false;
+    }
+    if (state.collectionPreset.publicationYear && Number(comic.publicationYear) !== Number(state.collectionPreset.publicationYear)) {
+      return false;
+    }
+    if (state.collectionPreset.series && comic.series !== state.collectionPreset.series) {
+      return false;
+    }
     if (selectedSeries !== "all" && comic.series !== selectedSeries) {
       return false;
     }
 
     const copies = getComicCopies(comic);
-    if (
-      selectedCondition !== "all" &&
-      !copies.some((copy) => copy.condition === selectedCondition)
-    ) {
-      return false;
-    }
-
-    if (readFilter === "read" && !copies.some((copy) => copy.isRead)) {
-      return false;
-    }
-
-    if (readFilter === "unread" && copies.some((copy) => copy.isRead)) {
-      return false;
-    }
-
-    if (onlySealed && !copies.some((copy) => copy.isSealed)) {
-      return false;
-    }
-
-    if (onlyDuplicate && copies.length < 2) {
-      return false;
-    }
+    if (selectedCondition !== "all" && !copies.some((copy) => copy.condition === selectedCondition)) return false;
+    if (readFilter === "read" && !copies.some((copy) => copy.isRead)) return false;
+    if (readFilter === "unread" && copies.some((copy) => copy.isRead)) return false;
+    if (onlySealed && !copies.some((copy) => copy.isSealed)) return false;
+    if (onlyDuplicate && copies.length < 2) return false;
 
     if (searchTerm) {
       const searchableText = normalizeSearchText([
         comic.title,
         comic.series,
         comic.volumeNumber,
-        comic.notes
+        comic.publicationYear,
+        comic.notes,
+        ...copies.map((copy) => copy.notes)
       ].join(" "));
-
-      if (!searchableText.includes(searchTerm)) {
-        return false;
-      }
+      if (!searchableText.includes(searchTerm)) return false;
     }
 
     return true;
   });
 
+  if (state.collectionPreset.smartList) {
+    return sortSmartList(filtered, state.collectionPreset.smartList).sort(
+      elements.sortBy.value === "recent" ? getSortComparator("recent") : getSortComparator(elements.sortBy.value)
+    );
+  }
   return filtered.sort(getSortComparator(elements.sortBy.value));
 }
 
@@ -2787,9 +2896,17 @@ function getSortComparator(sortBy) {
 
   if (sortBy === "condition") {
     return (first, second) => {
-      const rankDifference = getConditionRank(first.condition) - getConditionRank(second.condition);
-      return rankDifference || compareSeriesAndBand(first, second);
+      const firstWorst = Math.max(...getComicCopies(first).map((copy) => getConditionRank(copy.condition)), 0);
+      const secondWorst = Math.max(...getComicCopies(second).map((copy) => getConditionRank(copy.condition)), 0);
+      return firstWorst - secondWorst || compareSeriesAndBand(first, second);
     };
+  }
+
+  if (sortBy === "recent") {
+    return (first, second) => (
+      (Date.parse(second.updatedAt || second.createdAt || "") || 0)
+      - (Date.parse(first.updatedAt || first.createdAt || "") || 0)
+    ) || compareSeriesAndBand(first, second);
   }
 
   return compareSeriesAndBand;
@@ -3711,7 +3828,7 @@ function resetForm() {
   showFormMessage("");
 }
 
-function resetFilters({ keepPageOpen = false } = {}) {
+function resetFilters({ keepPageOpen = false, clearPreset = true } = {}) {
   elements.search.value = "";
   syncCollectionSeriesFilter(getAvailableSeries(state.settings, state.comics));
   elements.filterCondition.value = "all";
@@ -3719,6 +3836,7 @@ function resetFilters({ keepPageOpen = false } = {}) {
   elements.filterSealed.checked = false;
   elements.filterDuplicate.checked = false;
   elements.sortBy.value = "series";
+  if (clearPreset) state.collectionPreset = {};
   renderCollection();
   elements.filterPanel.open = false;
   if (!keepPageOpen) elements.search.blur();
@@ -3732,7 +3850,10 @@ function getActiveFilterCount() {
     elements.filterRead.value !== "all",
     elements.filterSealed.checked,
     elements.filterDuplicate.checked,
-    elements.sortBy.value !== "series"
+    elements.sortBy.value !== "series",
+    Boolean(state.collectionPreset.smartList),
+    Boolean(state.collectionPreset.publicationYear),
+    Boolean(state.collectionPreset.series)
   ].filter(Boolean).length;
 }
 

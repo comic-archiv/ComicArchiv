@@ -67,13 +67,13 @@
 <div class="collection-hub-grid">
 <button class="collection-hub-card" id="open-main-collection" type="button">
 <span aria-hidden="true" class="collection-hub-icon">LTB</span>
-<span class="collection-hub-copy"><strong>Lustige Taschenbücher</strong><small>Nur die Hauptreihe</small></span>
+<span class="collection-hub-copy"><strong>Lustige Taschenbücher</strong><small>Digitales Regal der Hauptreihe</small></span>
 <span class="collection-hub-count" id="main-collection-count">0</span>
 <svg aria-hidden="true" viewbox="0 0 24 24"><path d="M9 6l6 6-6 6"></path></svg>
 </button>
 <button class="collection-hub-card" id="open-other-collection" type="button">
 <span aria-hidden="true" class="collection-hub-icon collection-hub-icon-alt">＋</span>
-<span class="collection-hub-copy"><strong>Sonderbände &amp; weitere Reihen</strong><small>Alle Reihen außer der Hauptreihe</small></span>
+<span class="collection-hub-copy"><strong>Sonderbände &amp; weitere Reihen</strong><small>Alle digitalen Regale entdecken</small></span>
 <span class="collection-hub-count" id="other-collection-count">0</span>
 <svg aria-hidden="true" viewbox="0 0 24 24"><path d="M9 6l6 6-6 6"></path></svg>
 </button>
@@ -124,7 +124,7 @@
 </div>
 <p aria-live="polite" class="form-message" id="export-message" role="status"></p>
 <p class="backup-help">JSON sichert deine Daten. Eigene Coverbilder sicherst du separat unter „Medien &amp; Metadaten“.</p>
-<p class="app-version-footer">Entenarchiv <span id="app-version">v4.0.0</span></p></section>
+<p class="app-version-footer">Entenarchiv <span id="app-version">v4.1.0</span></p></section>
 </main>
 <nav aria-label="Hauptnavigation" class="bottom-nav"><button class="bottom-nav-item" id="nav-calendar" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 8.5h15M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path></svg><span>Kalender</span></button><button class="bottom-nav-item bottom-nav-primary" id="nav-add" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg><span>Hinzufügen</span></button><button class="bottom-nav-item" id="nav-statistics" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"></path></svg><span>Statistiken</span></button></nav><section aria-hidden="true" aria-labelledby="add-page-title" class="app-page hidden" id="add-page">
 <header class="app-page-header">
@@ -256,6 +256,84 @@
 </section></div>
 </div>
 </section>
+<section aria-hidden="true" aria-labelledby="library-title" class="app-page hidden" id="library-page">
+<header class="app-page-header">
+<button aria-label="Zurück zur Übersicht" class="app-page-back" id="close-library" type="button">
+<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"></path></svg><span>Zurück</span>
+</button>
+<div class="app-page-title"><p class="eyebrow">Digitale Bibliothek</p><h2 id="library-title">Sonderbände &amp; weitere Reihen</h2></div>
+<span class="count-badge" id="library-series-count">0 Reihen</span>
+</header>
+<div class="app-page-content library-page-content">
+<section class="panel library-intro-panel">
+<div><p class="eyebrow">Schnellzugriff</p><h3>Deine Sammlung neu entdecken</h3><p class="muted-copy">Öffne eine Reihe als digitales Regal oder springe direkt in eine intelligente Liste.</p></div>
+<button class="secondary-button compact-button" id="library-all-list" type="button">Alle Bände als Liste</button>
+</section>
+<section aria-labelledby="library-smart-list-title" class="library-smart-lists">
+<div class="subsection-heading"><div><p class="eyebrow">Automatisch zusammengestellt</p><h3 id="library-smart-list-title">Intelligente Listen</h3></div></div>
+<div class="smart-list-grid" id="smart-list-grid"></div>
+</section>
+<section aria-labelledby="series-library-title">
+<div class="subsection-heading"><div><p class="eyebrow">Nach Reihen stöbern</p><h3 id="series-library-title">Reihenbibliothek</h3></div></div>
+<div class="panel library-controls">
+<label class="field field-full"><span>Reihe suchen</span><input id="library-search" placeholder="Name der Reihe" type="search"/></label>
+<label class="field"><span>Sortierung</span><select id="library-sort"><option value="completion">Vollständigkeit</option><option value="name">Name</option><option value="size">Größe</option><option value="unread">Ungelesene Bände</option><option value="recent">Zuletzt geändert</option></select></label>
+</div>
+<div class="panel empty-state hidden" id="library-empty"><div aria-hidden="true" class="empty-icon">⌕</div><h3>Keine Reihe gefunden</h3><p>Ändere die Suche oder ergänze zuerst Comics.</p></div>
+<div class="series-library-grid" id="series-library-grid"></div>
+</section>
+</div>
+</section>
+
+<section aria-hidden="true" aria-labelledby="series-page-title" class="app-page hidden" id="series-page">
+<header class="app-page-header">
+<button aria-label="Zurück" class="app-page-back" id="close-series-page" type="button">
+<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"></path></svg><span>Zurück</span>
+</button>
+<div class="app-page-title"><p class="eyebrow">Digitales Regal</p><h2 id="series-page-title">Reihe</h2></div>
+<span class="count-badge" id="series-page-count">0 Bände</span>
+</header>
+<div class="app-page-content series-page-content">
+<section class="series-hero">
+<div aria-hidden="true" class="series-hero-covers" id="series-hero-covers"></div>
+<div class="series-hero-main">
+<div class="series-hero-heading"><p class="eyebrow" id="series-hero-eyebrow">Deine Reihe</p><h3 id="series-hero-title">Reihe</h3><strong id="series-hero-progress">0 %</strong></div>
+<p class="series-hero-progress-copy" id="series-hero-progress-copy">Noch kein Fortschritt berechenbar.</p>
+<div aria-label="Reihenfortschritt" aria-valuemax="100" aria-valuemin="0" aria-valuenow="0" class="progress-bar series-hero-progress-bar" id="series-hero-progress-bar" role="progressbar"><span id="series-hero-progress-fill"></span></div>
+<div class="series-hero-metrics" id="series-hero-metrics"></div>
+<div class="series-next-release hidden" id="series-next-release"><span><small>Nächste Neuerscheinung</small><strong id="series-next-release-title"></strong></span><time id="series-next-release-date"></time></div>
+<div class="series-hero-actions"><button class="secondary-button compact-button" id="series-target-button" type="button">Sammlungsziel verwalten</button></div>
+</div>
+</section>
+<section class="panel series-toolbar">
+<div aria-label="Ansicht wählen" class="segmented-control"><button class="is-active" data-series-view="shelf" type="button">Regal</button><button data-series-view="list" type="button">Liste</button></div>
+<div class="series-toolbar-grid">
+<label class="field field-full"><span>In dieser Reihe suchen</span><input id="series-search" placeholder="Bandnummer oder Titel" type="search"/></label>
+<label class="field"><span>Ansicht filtern</span><select id="series-filter"><option value="all">Alle Bände &amp; Lücken</option><option value="owned">Nur vorhanden</option><option value="missing">Nur fehlend</option><option value="unread">Nur ungelesen</option><option value="multiple">Mehrfach vorhanden</option><option value="needs-care">Zustand 3 oder schwächer</option></select></label>
+<label class="field"><span>Bandbereich</span><select id="series-range"></select></label>
+</div>
+<div class="series-toolbar-footer"><span class="muted-copy" id="series-visible-count">0 sichtbar</span><button class="text-button" id="series-select-mode" type="button">Auswählen</button></div>
+</section>
+<div aria-live="polite" class="series-shelf-view" id="series-shelf-view">
+<div class="shelf-grid" id="series-shelf-grid"></div>
+<section class="hidden" id="series-nonnumeric-section"><div class="subsection-heading"><h3>Weitere Ausgaben</h3></div><div class="shelf-grid" id="series-nonnumeric"></div></section>
+</div>
+<div class="hidden" id="series-list-view"><div class="series-comic-list" id="series-comic-list"></div></div>
+<div class="panel empty-state hidden" id="series-empty"><div aria-hidden="true" class="empty-icon">⌕</div><h3>Keine passenden Bände</h3><p>Ändere Suche, Filter oder Bandbereich.</p></div>
+</div>
+<div class="series-bulk-bar hidden" id="series-bulk-bar">
+<div class="series-bulk-summary"><strong id="series-bulk-count">0 ausgewählt</strong><small>Die Aktion gilt für alle Exemplare der gewählten Bände.</small></div>
+<div class="series-bulk-actions" id="series-bulk-actions">
+<button class="secondary-button compact-button" data-bulk-action="read" type="button">Gelesen</button>
+<button class="secondary-button compact-button" data-bulk-action="unread" type="button">Ungelesen</button>
+<button class="secondary-button compact-button" data-bulk-action="seal" type="button">Foliert</button>
+<button class="secondary-button compact-button" data-bulk-action="unseal" type="button">Entfoliert</button>
+</div>
+<div class="series-bulk-condition-row"><select aria-label="Zustand für alle Exemplare" id="series-bulk-condition"></select><button class="primary-button compact-button" id="series-bulk-condition-apply" type="button">Zustand anwenden</button></div>
+<div class="series-bulk-footer"><button class="text-button hidden" id="series-bulk-undo" type="button">Letzte Änderung rückgängig</button><button class="text-button" id="series-bulk-cancel" type="button">Auswahl beenden</button></div>
+</div>
+</section>
+
 <section aria-hidden="true" aria-labelledby="collection-page-title" class="app-page hidden" id="collection-page">
 <header class="app-page-header">
 <button aria-label="Zurück zur Sammlungsauswahl" class="app-page-back" id="close-collection" type="button">
@@ -266,6 +344,10 @@
 <span class="count-badge" id="collection-count">0 Einträge</span>
 </header>
 <div class="app-page-content collection-page-content">
+<section class="smart-list-banner hidden" id="smart-list-banner" aria-live="polite">
+<div><p class="eyebrow">Smarte Liste</p><h3 id="smart-list-title">Auswahl</h3><p id="smart-list-description"></p></div>
+<button class="text-button compact-button" id="clear-smart-list" type="button">Liste verlassen</button>
+</section>
 <details class="panel filter-panel collapsible-panel" id="filter-panel">
 <summary>
 <span><strong>Suchen &amp; filtern</strong><small id="filter-summary">Standardansicht</small></span>
@@ -278,7 +360,7 @@
 <label class="field" id="filter-series-field"><span>Reihe</span><select id="filter-series"></select></label>
 <label class="field"><span>Zustand</span><select id="filter-condition"></select></label>
 <label class="field"><span>Lesestatus</span><select id="filter-read"><option value="all">Alle</option><option value="read">Nur gelesen</option><option value="unread">Nur ungelesen</option></select></label>
-<label class="field"><span>Sortierung</span><select id="sort-by"><option value="series">Reihe &amp; Bandnummer</option><option value="volume">Bandnummer</option><option value="title">Titel</option><option value="condition">Zustand</option></select></label>
+<label class="field"><span>Sortierung</span><select id="sort-by"><option value="series">Reihe &amp; Bandnummer</option><option value="volume">Bandnummer</option><option value="title">Titel</option><option value="condition">Zustand</option><option value="recent">Zuletzt geändert</option></select></label>
 </div>
 <div class="filter-toggles">
 <label class="check-row compact-check"><input id="filter-sealed" type="checkbox"/><span>Nur foliert</span></label>
@@ -476,6 +558,18 @@
 </section>
 </div>
 </section>
+<div aria-labelledby="issue-detail-title" aria-modal="true" class="modal hidden" id="issue-detail-modal" role="dialog">
+<div class="modal-backdrop" data-close-issue-detail=""></div>
+<section class="modal-card issue-detail-card">
+<div class="section-heading"><div><p class="eyebrow" id="issue-detail-series">Ausgabe</p><h2 id="issue-detail-title">Band</h2><p class="muted-copy" id="issue-detail-meta"></p></div><button aria-label="Details schließen" class="icon-button small-icon-button" id="close-issue-detail" type="button">×</button></div>
+<div class="issue-detail-layout">
+<figure class="issue-detail-cover" id="issue-detail-cover"><img alt="" class="hidden" id="issue-detail-cover-image"/><div class="shelf-cover-fallback" id="issue-detail-cover-fallback"><span>Band</span><strong>–</strong></div></figure>
+<div class="issue-detail-content"><div class="issue-detail-copies" id="issue-detail-copies"></div><p class="comic-notes hidden" id="issue-detail-notes"></p><a class="duckipedia-link" id="issue-detail-duckipedia" rel="noopener noreferrer" target="_blank">In Duckipedia nachschlagen ↗</a></div>
+</div>
+<div class="issue-detail-actions"><button class="primary-button" id="issue-detail-edit" type="button">Comic bearbeiten</button><button class="secondary-button" id="issue-detail-copies-button" type="button">Exemplare verwalten</button><button class="secondary-button" id="issue-detail-enrich" type="button">Duckipedia-Daten laden</button></div>
+</section>
+</div>
+
 <div aria-labelledby="scanner-modal-title" aria-modal="true" class="modal hidden" id="scanner-modal" role="dialog">
 <div class="modal-backdrop" data-close-scanner=""></div>
 <section class="modal-card scanner-modal-card">

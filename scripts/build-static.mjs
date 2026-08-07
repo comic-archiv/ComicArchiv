@@ -21,6 +21,8 @@ const runtimeEntries = [
   "missing.js",
   "recovery.js",
   "scanner.js",
+  "shelf.js",
+  "shelf-ui.js",
   "service-worker.js",
   "storage.js",
   "version.json",

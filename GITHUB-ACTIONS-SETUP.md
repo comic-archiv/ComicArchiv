@@ -23,7 +23,7 @@ Der Workflow führt bei jedem Commit auf `main` aus:
 5. das geprüfte Verzeichnis `dist/` als Pages-Artefakt hochladen,
 6. GitHub Pages veröffentlichen.
 
-## Update auf 4.0.0
+## Weitere Entenarchiv-Updates
 
 1. JSON-Backup erstellen.
 2. Bei eigenen Coverbildern zusätzlich ein Medien-Backup erstellen.
@@ -31,7 +31,7 @@ Der Workflow führt bei jedem Commit auf `main` aus:
 4. Den vollständigen sichtbaren Projektinhalt in das bestehende Repository hochladen.
 5. Vorhandene Dateien ersetzen.
 6. Darauf achten, dass insbesondere `archive-model.js`, `scripts`, `tests`, `package.json` und `version.json` vorhanden sind.
-7. Mit beispielsweise `Entenarchiv Version 4.0.0` committen.
+7. Mit beispielsweise `Entenarchiv Version 4.1.0` committen.
 8. Unter **Actions** den Lauf **Entenarchiv prüfen und veröffentlichen** öffnen.
 9. Erst nach einem vollständig grünen Workflow die App auf dem iPhone neu öffnen.
 

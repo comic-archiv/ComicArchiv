@@ -1,9 +1,9 @@
 {
   "name": "entenarchiv",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "private": true,
   "type": "module",
-  "description": "Private, offlinefähige PWA mit stabilem Archivkern für LTB-Sammlungen.",
+  "description": "Private, offlinefähige PWA mit digitalem Regal und stabilem Archivkern für LTB-Sammlungen.",
   "scripts": {
     "validate": "node scripts/validate-project.mjs",
     "test": "node --test tests/*.test.mjs",

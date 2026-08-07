@@ -1,5 +1,42 @@
 # Änderungsprotokoll
 
+## 4.1.0 – Digitale Regale
+
+### Neu
+
+- digitale Regalansicht mit vorhandenen Bänden und sichtbaren Lücken in numerischer Reihenfolge
+- hochwertige Detailseite für jede Reihe
+- Reihenbibliothek für Sonderbände und eigene Reihen
+- acht automatisch zusammengestellte intelligente Listen
+- kompakte Banddetailansicht mit allen physischen Exemplaren
+- direkte Verbindung fehlender Regalplätze zur Fehlbandverwaltung
+- Reihensuche, Filter und Sortierung
+- Bandbereiche für lange Reihen
+- Sammelbearbeitung für gelesen, foliert und Zustand
+- direktes Rückgängigmachen der letzten Sammeländerung
+- Anzeige der nächsten passenden Neuerscheinung aus dem Kalender
+- neue Module `shelf.js` und `shelf-ui.js`
+
+### Verbessert
+
+- Hauptreihe öffnet sich vom Startbildschirm direkt als digitales Regal
+- Sonderreihen werden visuell statt als lange Gesamtliste erschlossen
+- Dashboard-Kennzahl „Reihen“ führt in die neue Bibliothek
+- lokale Cover werden über Schlüssel erkannt, ohne alle Bilddateien vorab zu laden
+- eigene und Duckipedia-Cover werden zentriert und proportional dargestellt
+- lange Hauptreihen werden auf dem iPhone in überschaubare 60er-Bereiche gegliedert
+- Lücken, Exemplarzahlen, ungelesene und mehrfache Bände werden direkt an der Reihe sichtbar
+- redundante Version-4.1-Stile wurden bereinigt
+
+### Kompatibilität
+
+- Datenbank bleibt `comicarchiv-db`
+- IndexedDB-Schema bleibt Version 5
+- Datenformat bleibt Version 9
+- Archivmodell bleibt Version 1
+- keine neue Datenmigration erforderlich
+- bestehende Version-4-Backups bleiben unverändert kompatibel
+
 ## 4.0.0 – Archivkern
 
 ### Neu

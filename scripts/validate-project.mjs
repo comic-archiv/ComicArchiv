@@ -18,6 +18,8 @@ const requiredFiles = [
   "missing.js",
   "export.js",
   "scanner.js",
+  "shelf.js",
+  "shelf-ui.js",
   "duckipedia.js",
   "media.js",
   "calendar.js",
@@ -41,9 +43,10 @@ for (const file of requiredFiles) {
   if (!existsSync(join(root, file))) errors.push(`Pflichtdatei fehlt: ${file}`);
 }
 
-const [html, appSource, configSource, storageSource, archiveModelSource, exportSource, recoverySource, serviceWorkerSource, styleSource, packageJson, versionJson, manifest] = await Promise.all([
+const [html, appSource, shelfUiSource, configSource, storageSource, archiveModelSource, exportSource, recoverySource, serviceWorkerSource, styleSource, packageJson, versionJson, manifest] = await Promise.all([
   readText("index.html"),
   readText("app.js"),
+  readText("shelf-ui.js"),
   readText("config.js"),
   readText("storage.js"),
   readText("archive-model.js"),
@@ -82,7 +85,9 @@ const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
 const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
 if (duplicateIds.length) errors.push(`Doppelte HTML-IDs: ${[...new Set(duplicateIds)].join(", ")}`);
 const idSet = new Set(ids);
-const queriedIds = [...appSource.matchAll(/document\.querySelector\("#([A-Za-z0-9_-]+)"\)/g)].map((match) => match[1]);
+const queriedIds = [...`${appSource}\n${shelfUiSource}`.matchAll(/document\.querySelector\("#([A-Za-z0-9_-]+)"\)/g)].map((match) => match[1]);
+const queriedElementIds = [...shelfUiSource.matchAll(/byId\("([A-Za-z0-9_-]+)"\)/g)].map((match) => match[1]);
+queriedIds.push(...queriedElementIds);
 const missingIds = [...new Set(queriedIds.filter((id) => !idSet.has(id)))];
 if (missingIds.length) errors.push(`app.js referenziert fehlende HTML-IDs: ${missingIds.join(", ")}`);
 
@@ -94,8 +99,9 @@ const appIndex = html.indexOf('<script src="./app.js" type="module"></script>');
 if (recoveryIndex < 0 || appIndex < 0 || recoveryIndex > appIndex) {
   errors.push("recovery.js muss vor app.js eingebunden werden.");
 }
-if (/\.innerHTML\s*=|insertAdjacentHTML\s*\(/.test(appSource)) {
-  errors.push("app.js verwendet eine unsichere HTML-Einfügung. Nutzereingaben müssen über textContent/DOM-Knoten ausgegeben werden.");
+const uiSource = `${appSource}\n${shelfUiSource}`;
+if (/\.innerHTML\s*=|insertAdjacentHTML\s*\(/.test(uiSource)) {
+  errors.push("Die App-Oberfläche verwendet eine unsichere HTML-Einfügung. Nutzereingaben müssen über textContent/DOM-Knoten ausgegeben werden.");
 }
 if (!html.includes('id="recovery-panel"') || !html.includes('id="diagnostics-modal"')) {
   errors.push("Sicherer Modus oder Diagnoseoberfläche fehlt in index.html.");
@@ -162,7 +168,7 @@ if (errors.length) {
   console.log(`✓ ${syntaxFiles.length} JavaScript-Dateien syntaktisch geprüft`);
   console.log("✓ Scanner und PDF-Modul werden erst bei Bedarf geladen");
   console.log("✓ Diagnose, sicherer Modus und Testmodus sind eingebunden");
-  console.log("✓ Archivkern, Migrationsbericht und Version-4-Backupformat sind eingebunden");
+  console.log("✓ Archivkern, digitales Regal und Version-4-Backupformat sind eingebunden");
   notes.forEach((entry) => console.log(`Hinweis: ${entry}`));
 }
 
@@ -207,7 +213,7 @@ async function walk(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
-    if ([".git", "node_modules"].includes(entry.name)) continue;
+    if ([".git", "node_modules", "dist"].includes(entry.name)) continue;
     const fullPath = join(directory, entry.name);
     if (entry.isDirectory()) files.push(...await walk(fullPath));
     else files.push(fullPath);

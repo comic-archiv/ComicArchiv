@@ -53,7 +53,7 @@ test("Archivkern, Migrationsbericht und getrennte physische Exemplare sind einge
 });
 
 
-test("Version 4, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet", async () => {
+test("Version 4.1, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet", async () => {
   const [config, storage, recovery, version, serviceWorker] = await Promise.all([
     read("config.js"),
     read("storage.js"),
@@ -62,15 +62,15 @@ test("Version 4, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet", as
     read("service-worker.js")
   ]);
   const versionData = JSON.parse(version);
-  assert.equal(versionData.appVersion, "4.0.0");
+  assert.equal(versionData.appVersion, "4.1.0");
   assert.equal(versionData.dataFormatVersion, 9);
   assert.equal(versionData.archiveModelVersion, 1);
-  assert.match(config, /appVersion:\s*"4\.0\.0"/);
+  assert.match(config, /appVersion:\s*"4\.1\.0"/);
   assert.match(config, /dataFormatVersion:\s*9/);
   assert.match(storage, /const DATABASE_VERSION = 5/);
-  assert.match(recovery, /const APP_VERSION = "4\.0\.0"/);
+  assert.match(recovery, /const APP_VERSION = "4\.1\.0"/);
   assert.match(recovery, /const DATA_FORMAT_VERSION = 9/);
-  assert.match(serviceWorker, /const APP_VERSION = "4\.0\.0"/);
+  assert.match(serviceWorker, /const APP_VERSION = "4\.1\.0"/);
 });
 
 test("Service Worker hält den Archivkern im kritischen Offline-Paket", async () => {
@@ -79,4 +79,26 @@ test("Service Worker hält den Archivkern im kritischen Offline-Paket", async ()
   assert.match(coreBlock, /\.\/archive-model\.js/);
   assert.match(coreBlock, /\.\/storage\.js/);
   assert.match(coreBlock, /\.\/export\.js/);
+});
+
+
+test("Digitales Regal, Reihenbibliothek und Sammelbearbeitung sind eingebunden", async () => {
+  const [html, app, shelf, shelfUi, serviceWorker] = await Promise.all([
+    read("index.html"),
+    read("app.js"),
+    read("shelf.js"),
+    read("shelf-ui.js"),
+    read("service-worker.js")
+  ]);
+  assert.match(html, /id="library-page"/);
+  assert.match(html, /id="series-page"/);
+  assert.match(html, /id="series-bulk-bar"/);
+  assert.match(html, /id="issue-detail-modal"/);
+  assert.match(app, /createShelfUI/);
+  assert.match(shelf, /buildShelfSlots/);
+  assert.match(shelf, /applyBulkPatch/);
+  assert.match(shelfUi, /openSeries/);
+  assert.match(shelfUi, /getAllCoverMediaKeys/);
+  assert.match(shelfUi, /initialSnapshot\.localCoverIds/);
+  assert.match(serviceWorker, /\.\/shelf-ui\.js/);
 });
