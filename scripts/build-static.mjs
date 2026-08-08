@@ -26,6 +26,7 @@ const runtimeEntries = [
   "scanner-pro.js",
   "shelf.js",
   "shelf-ui.js",
+  "statistics-dna.js",
   "service-worker.js",
   "storage.js",
   "version.json",
