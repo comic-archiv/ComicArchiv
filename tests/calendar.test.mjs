@@ -16,7 +16,9 @@ test("Der lokale Jahresplan 2026 lässt sich vollständig einlesen", async () =>
     sourceVersion: "v2",
     sourceName: "LTB Jahresplan 2026"
   });
-  assert.equal(events.length, 100);
+  const rawEventCount = (text.match(/^\s*BEGIN:VEVENT\s*$/gm) || []).length;
+  assert.ok(rawEventCount > 0);
+  assert.equal(events.length, rawEventCount);
   assert.ok(events.every((event) => event.source === "publisher"));
   assert.ok(events.every((event) => event.startDate.startsWith("2026-")));
 });

@@ -9,8 +9,9 @@
     "test": "node --test tests/*.test.mjs",
     "check": "npm run validate && npm test",
     "build": "node scripts/build-static.mjs",
-    "ci": "npm run check && npm run build",
-    "calendar:sync": "node scripts/sync-release-calendars.mjs"
+    "ci": "npm run check && npm run calendar:verify && npm run build",
+    "calendar:sync": "node scripts/sync-release-calendars.mjs",
+    "calendar:verify": "node scripts/verify-calendar-data.mjs"
   },
   "engines": {
     "node": ">=20"
