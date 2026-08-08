@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "updatedAt": "2026-07-23",
   "calendars": [
     {
@@ -13,5 +13,12 @@
       "active": true,
       "notes": "Offizieller Jahresplan 2026"
     }
-  ]
+  ],
+  "discovery": {
+    "pageUrl": "https://www.lustiges-taschenbuch.de/downloads",
+    "allowedHosts": [
+      "www.lustiges-taschenbuch.de",
+      "lustiges-taschenbuch.de"
+    ]
+  }
 }

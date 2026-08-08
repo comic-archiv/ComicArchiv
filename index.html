@@ -59,6 +59,13 @@
 
 
 </section>
+<section aria-labelledby="release-radar-home-title" class="release-radar-home section-anchor" id="release-radar-home">
+<button class="release-radar-home-card" id="open-release-radar-home" type="button">
+<span aria-hidden="true" class="release-radar-home-icon"><svg viewBox="0 0 24 24"><path d="M4 18h16M6 16V9a6 6 0 0 1 12 0v7M9 18a3 3 0 0 0 6 0M12 3V1M4.8 5.2 3.4 3.8M19.2 5.2l1.4-1.4"></path></svg></span>
+<span class="release-radar-home-copy"><span class="eyebrow">Neuerscheinungen im Blick</span><strong id="release-radar-home-title">Erscheinungsradar</strong><small id="release-radar-home-next">Kalenderdaten werden ausgewertet …</small><span class="release-radar-home-date" id="release-radar-home-date"></span></span>
+<span class="release-radar-home-side"><span class="release-radar-home-count" id="release-radar-home-count">0</span><small id="release-radar-home-meta">offen</small><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"></path></svg></span>
+</button>
+</section>
 
 <section aria-labelledby="collection-title" class="collection-section section-anchor" id="collection">
 <div class="section-heading collection-heading">
@@ -124,9 +131,9 @@
 </div>
 <p aria-live="polite" class="form-message" id="export-message" role="status"></p>
 <p class="backup-help">JSON sichert deine Daten. Eigene Coverbilder sicherst du separat unter „Medien &amp; Metadaten“.</p>
-<p class="app-version-footer">Entenarchiv <span id="app-version">v4.2.0</span></p></section>
+<p class="app-version-footer">Entenarchiv <span id="app-version">v4.3.0</span></p></section>
 </main>
-<nav aria-label="Hauptnavigation" class="bottom-nav"><button class="bottom-nav-item" id="nav-calendar" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 8.5h15M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path></svg><span>Kalender</span></button><button class="bottom-nav-item bottom-nav-primary" id="nav-add" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg><span>Hinzufügen</span></button><button class="bottom-nav-item" id="nav-statistics" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"></path></svg><span>Statistiken</span></button></nav><section aria-hidden="true" aria-labelledby="add-page-title" class="app-page hidden" id="add-page">
+<nav aria-label="Hauptnavigation" class="bottom-nav"><button class="bottom-nav-item" id="nav-calendar" type="button"><span class="bottom-nav-icon-wrap"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 8.5h15M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path></svg><span aria-label="0 neue Veröffentlichungen" class="bottom-nav-badge hidden" id="calendar-nav-badge">0</span></span><span>Kalender</span></button><button class="bottom-nav-item bottom-nav-primary" id="nav-add" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg><span>Hinzufügen</span></button><button class="bottom-nav-item" id="nav-statistics" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"></path></svg><span>Statistiken</span></button></nav><section aria-hidden="true" aria-labelledby="add-page-title" class="app-page hidden" id="add-page">
 <header class="app-page-header">
 <button aria-label="Zurück zur Übersicht" class="app-page-back" id="close-add-page" type="button">
 <svg aria-hidden="true" viewbox="0 0 24 24"><path d="M15 18l-6-6 6-6"></path></svg><span>Zurück</span>
@@ -461,6 +468,12 @@
 <span class="count-badge" id="calendar-page-summary">0 Termine</span>
 </header>
 <div class="app-page-content calendar-page-content">
+<button class="release-radar-launch" id="open-release-radar-calendar" type="button">
+<span aria-hidden="true" class="release-radar-launch-icon"><svg viewBox="0 0 24 24"><path d="M4 18h16M6 16V9a6 6 0 0 1 12 0v7M9 18a3 3 0 0 0 6 0M12 3V1M4.8 5.2 3.4 3.8M19.2 5.2l1.4-1.4"></path></svg></span>
+<span class="release-radar-launch-copy"><small>Erscheinungsradar</small><strong id="calendar-radar-title">Neuerscheinungen prüfen</strong><span id="calendar-radar-next">Jahrespläne werden ausgewertet.</span></span>
+<span class="release-radar-launch-count" id="calendar-radar-count">0 neu</span>
+<svg aria-hidden="true" class="release-radar-launch-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
 <section aria-label="Kalender steuern" class="panel calendar-toolbar">
 <div class="calendar-year-row">
 <button aria-label="Vorheriges Jahr" class="icon-button small-icon-button" id="calendar-prev-year" type="button">‹</button>
@@ -516,6 +529,41 @@
 <div class="calendar-event-list" id="calendar-event-list"></div>
 <div class="panel empty-state hidden" id="calendar-empty"><div aria-hidden="true" class="empty-icon">□</div><h3>Keine passenden Termine</h3><p>Ändere den Filter, lade einen Jahresplan oder füge einen eigenen Termin hinzu.</p></div>
 </section>
+</div>
+</section>
+<section aria-hidden="true" aria-labelledby="release-radar-title" class="app-page hidden" id="release-radar-page">
+<header class="app-page-header">
+<button aria-label="Zurück" class="app-page-back" id="close-release-radar" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"></path></svg><span>Zurück</span></button>
+<div class="app-page-title"><p class="eyebrow">Neuerscheinungen im Blick</p><h2 id="release-radar-title">Erscheinungsradar</h2></div>
+<span class="count-badge" id="release-radar-summary">0 offen</span>
+</header>
+<div class="app-page-content release-radar-page-content">
+<section aria-label="Radar-Zusammenfassung" class="release-radar-hero">
+<div class="release-radar-hero-copy"><p class="eyebrow">Deine Release-Inbox</p><h3 id="release-radar-next-title">Keine offenen Neuerscheinungen</h3><p id="release-radar-next-copy">Neue Verlagstermine erscheinen hier automatisch, sobald ein Jahresplan geladen wurde.</p></div>
+<div aria-label="Radar-Kennzahlen" class="release-radar-metrics">
+<button data-radar-filter="new" type="button"><strong id="release-radar-new-count">0</strong><span>neu</span></button>
+<button data-radar-filter="open" type="button"><strong id="release-radar-today-count">0</strong><span>heute</span></button>
+<button data-radar-filter="watch" type="button"><strong id="release-radar-watch-count">0</strong><span>vorgemerkt</span></button>
+<button data-radar-filter="ordered" type="button"><strong id="release-radar-ordered-count">0</strong><span>bestellt</span></button>
+</div>
+</section>
+<section aria-label="Erscheinungen filtern" class="panel release-radar-toolbar">
+<div aria-label="Radarfilter" class="release-radar-filter-tabs" id="release-radar-filter-tabs">
+<button class="active" data-radar-filter="open" type="button">Offen</button><button data-radar-filter="new" type="button">Neu</button><button data-radar-filter="watch" type="button">Vorgemerkt</button><button data-radar-filter="ordered" type="button">Bestellt</button><button data-radar-filter="ignored" type="button">Ignoriert</button><button data-radar-filter="all" type="button">Alle</button>
+</div>
+<div class="release-radar-toolbar-actions"><button class="secondary-button compact-button" id="release-radar-mark-seen" type="button">Sichtbare als gesehen</button><button class="secondary-button compact-button" id="release-radar-export" type="button">Vorgemerkte erinnern</button></div>
+</section>
+<div aria-live="polite" class="release-radar-list" id="release-radar-list"></div>
+<section class="panel empty-state hidden" id="release-radar-empty"><div aria-hidden="true" class="empty-icon">✓</div><h3>Hier ist alles erledigt</h3><p>Für diesen Filter gibt es aktuell keine Einträge.</p></section>
+<details class="panel release-radar-settings">
+<summary><span><strong>Automatik &amp; App-Badge</strong><small id="release-radar-badge-summary">Status wird geprüft</small></span><span aria-hidden="true" class="disclosure-icon">⌄</span></summary>
+<div class="collapsible-content">
+<label class="check-row"><input checked id="release-radar-badge-enabled" type="checkbox"/><span><strong>Zahl am Entenarchiv-Symbol</strong><small>Markiert neue und heute fällige Veröffentlichungen, sobald Entenarchiv geöffnet wird.</small></span></label>
+<div class="release-radar-setting-row"><div><strong>Automatische Jahrespläne</strong><p>Der GitHub-Workflow kann den offiziellen LTB-Downloadbereich wöchentlich prüfen und neue iCal-Jahrgänge unter derselben App-Adresse ergänzen.</p></div><span class="success-badge">vorbereitet</span></div>
+<p class="muted-copy compact-help">Für Mitteilungen bei vollständig geschlossener App bleibt der Export in Apple Kalender die zuverlässige Lösung ohne zusätzlichen Server.</p>
+<p aria-live="polite" class="form-message" id="release-radar-message" role="status"></p>
+</div>
+</details>
 </div>
 </section>
 <section aria-hidden="true" aria-labelledby="media-title" class="app-page hidden" id="media-page">

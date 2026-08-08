@@ -21,6 +21,7 @@ const runtimeEntries = [
   "media.js",
   "missing.js",
   "recovery.js",
+  "release-radar.js",
   "scanner.js",
   "scanner-pro.js",
   "shelf.js",

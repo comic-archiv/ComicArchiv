@@ -8014,3 +8014,695 @@ html[data-storage-mode="test"] .app-header {
 .assistant-choice-group .assistant-choice {
   grid-template-columns: auto minmax(0, 1fr);
 }
+
+/* --------------------------------------------------------------------------
+   Entenarchiv 4.3.0: sichere Seitenköpfe und Erscheinungsradar
+   -------------------------------------------------------------------------- */
+
+/*
+ * Die globale Kopfzeile liegt außerhalb des Stacking-Contexts der Vollseiten.
+ * Sobald eine Unterseite geöffnet ist, wird sie deshalb vollständig verborgen.
+ * So bleibt der jeweilige Zurück-Button immer sichtbar und erreichbar.
+ */
+body.app-page-open > .app-header {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.app-page-header {
+  z-index: 1000;
+}
+
+.app-page-header .app-page-back {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+}
+
+.bottom-nav-icon-wrap {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+
+.bottom-nav-icon-wrap > svg {
+  width: 24px;
+  height: 24px;
+}
+
+.bottom-nav-badge {
+  position: absolute;
+  top: -9px;
+  right: -12px;
+  display: grid;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  place-items: center;
+  border: 2px solid var(--page-bg);
+  border-radius: 999px;
+  background: var(--secondary);
+  color: var(--secondary-text);
+  font-size: 0.64rem;
+  font-weight: 950;
+  line-height: 1;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--secondary) 34%, transparent);
+}
+
+.release-radar-home {
+  margin-top: 0.2rem;
+}
+
+.release-radar-home-card,
+.release-radar-launch {
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--secondary) 48%, var(--border));
+  background:
+    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--secondary) 19%, transparent), transparent 42%),
+    linear-gradient(135deg, color-mix(in srgb, var(--surface) 94%, var(--secondary) 6%), var(--surface));
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.release-radar-home-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.9rem;
+  min-height: 102px;
+  padding: 1rem;
+  border-radius: var(--radius);
+  text-align: left;
+}
+
+.release-radar-home-card:hover,
+.release-radar-home-card:focus-visible,
+.release-radar-launch:hover,
+.release-radar-launch:focus-visible {
+  border-color: var(--secondary);
+  transform: translateY(-1px);
+}
+
+.release-radar-home-icon,
+.release-radar-launch-icon {
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: var(--secondary);
+  color: var(--secondary-text);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--secondary) 26%, transparent);
+}
+
+.release-radar-home-icon {
+  width: 54px;
+  height: 54px;
+}
+
+.release-radar-home-icon svg,
+.release-radar-launch-icon svg,
+.release-radar-home-side svg,
+.release-radar-launch-chevron {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.release-radar-home-icon svg,
+.release-radar-launch-icon svg {
+  width: 27px;
+  height: 27px;
+}
+
+.release-radar-home-copy,
+.release-radar-launch-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.18rem;
+}
+
+.release-radar-home-copy strong,
+.release-radar-launch-copy strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.release-radar-home-copy small,
+.release-radar-launch-copy > span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.release-radar-home-date {
+  color: var(--secondary-strong);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.release-radar-home-side {
+  display: grid;
+  grid-template-columns: auto 16px;
+  align-items: center;
+  column-gap: 0.45rem;
+  min-width: 58px;
+  text-align: center;
+}
+
+.release-radar-home-side svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+}
+
+.release-radar-home-count {
+  grid-row: 1;
+  min-width: 40px;
+  color: var(--secondary);
+  font-size: 1.65rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.release-radar-home-count.is-clear {
+  color: var(--success);
+}
+
+.release-radar-home-side small {
+  grid-column: 1;
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 750;
+}
+
+.release-radar-launch {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 78px;
+  margin-bottom: 1rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 18px;
+  text-align: left;
+}
+
+.release-radar-launch-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+}
+
+.release-radar-launch-copy small {
+  color: var(--secondary-strong);
+  font-size: 0.67rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.release-radar-launch-count {
+  min-width: max-content;
+  padding: 0.38rem 0.58rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--secondary) 18%, transparent);
+  color: var(--secondary-strong);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.release-radar-launch-count.is-clear {
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+}
+
+.release-radar-launch-chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+}
+
+.release-radar-page-content {
+  display: grid;
+  gap: 1rem;
+  padding-bottom: calc(48px + env(safe-area-inset-bottom));
+}
+
+.release-radar-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 0.75fr);
+  gap: 1rem;
+  align-items: stretch;
+  padding: 1.15rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--secondary) 48%, var(--border));
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 86% 8%, color-mix(in srgb, var(--secondary) 25%, transparent), transparent 15rem),
+    linear-gradient(145deg, color-mix(in srgb, var(--surface) 96%, var(--primary) 4%), var(--surface));
+  box-shadow: var(--shadow);
+}
+
+.release-radar-hero-copy {
+  align-self: center;
+}
+
+.release-radar-hero-copy h3 {
+  margin: 0.12rem 0 0.35rem;
+  font-size: clamp(1.25rem, 4vw, 1.8rem);
+}
+
+.release-radar-hero-copy p:last-child {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.release-radar-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.release-radar-metrics button {
+  display: grid;
+  min-height: 70px;
+  padding: 0.65rem;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-strong) 88%, transparent);
+  color: var(--text);
+}
+
+.release-radar-metrics button:hover,
+.release-radar-metrics button:focus-visible {
+  border-color: var(--primary);
+}
+
+.release-radar-metrics strong {
+  color: var(--secondary);
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.release-radar-metrics span {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.release-radar-toolbar {
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.85rem;
+}
+
+.release-radar-filter-tabs {
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+  padding-bottom: 0.15rem;
+  scrollbar-width: none;
+}
+
+.release-radar-filter-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.release-radar-filter-tabs button {
+  min-width: max-content;
+  min-height: 38px;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 850;
+}
+
+.release-radar-filter-tabs button.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-text);
+}
+
+.release-radar-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: flex-end;
+}
+
+.release-radar-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.release-radar-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) minmax(180px, auto);
+  gap: 0.9rem;
+  align-items: center;
+  padding: 0.85rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.release-radar-card.is-new::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  background: var(--secondary);
+  content: "";
+}
+
+.release-radar-card.is-owned {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+}
+
+.release-radar-card.is-ignored {
+  opacity: 0.72;
+}
+
+.release-radar-date {
+  display: grid;
+  min-height: 76px;
+  place-items: center;
+  align-content: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface-strong));
+}
+
+.release-radar-date strong {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.release-radar-date span {
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.release-radar-date small {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+}
+
+.release-radar-card-content {
+  min-width: 0;
+}
+
+.release-radar-card-content h3 {
+  margin: 0.35rem 0 0.25rem;
+  font-size: 1rem;
+}
+
+.release-radar-card-content > p {
+  margin: 0;
+}
+
+.release-radar-timing {
+  color: var(--secondary-strong);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.release-radar-card-content .muted-copy {
+  margin-top: 0.18rem;
+  font-size: 0.7rem;
+}
+
+.release-radar-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.release-radar-status-badge,
+.calendar-radar-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0.22rem 0.48rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 850;
+}
+
+.release-radar-status-badge.is-new,
+.calendar-radar-status.is-new {
+  border-color: color-mix(in srgb, var(--secondary) 55%, var(--border));
+  background: color-mix(in srgb, var(--secondary) 17%, var(--surface));
+  color: var(--secondary-strong);
+}
+
+.release-radar-status-badge.is-watch,
+.calendar-radar-status.is-watch,
+.release-radar-status-badge.is-missing {
+  border-color: color-mix(in srgb, var(--primary) 50%, var(--border));
+  background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+  color: var(--primary);
+}
+
+.release-radar-status-badge.is-ordered,
+.calendar-radar-status.is-ordered {
+  border-color: color-mix(in srgb, var(--secondary) 50%, var(--border));
+  background: color-mix(in srgb, var(--secondary) 14%, var(--surface));
+  color: var(--secondary-strong);
+}
+
+.release-radar-status-badge.is-owned {
+  border-color: color-mix(in srgb, var(--success) 50%, var(--border));
+  background: color-mix(in srgb, var(--success) 14%, var(--surface));
+  color: var(--success);
+}
+
+.release-radar-status-badge.is-ignored,
+.calendar-radar-status.is-ignored {
+  opacity: 0.78;
+}
+
+.release-radar-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-end;
+}
+
+.release-radar-card-actions .compact-button,
+.release-radar-card-actions .text-button {
+  min-height: 36px;
+  padding: 0.38rem 0.62rem;
+  font-size: 0.7rem;
+}
+
+.release-radar-details-link {
+  display: inline-flex;
+  align-items: center;
+}
+
+.release-radar-settings {
+  padding: 0;
+  overflow: hidden;
+}
+
+.release-radar-settings > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 58px;
+  padding: 0.8rem 0.95rem;
+  cursor: pointer;
+}
+
+.release-radar-settings > summary > span:first-child {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.release-radar-settings > summary small {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.release-radar-settings .collapsible-content {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0 0.95rem 0.95rem;
+}
+
+.release-radar-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-strong);
+}
+
+.release-radar-setting-row p {
+  margin: 0.18rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.success-badge {
+  flex: 0 0 auto;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+  font-size: 0.64rem;
+  font-weight: 900;
+}
+
+@media (max-width: 760px) {
+  .release-radar-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .release-radar-card {
+    grid-template-columns: 62px minmax(0, 1fr);
+  }
+
+  .release-radar-card-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    padding-left: 0;
+  }
+
+  .release-radar-date {
+    min-height: 68px;
+  }
+}
+
+@media (max-width: 430px) {
+  .release-radar-home-card {
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    gap: 0.65rem;
+    min-height: 92px;
+    padding: 0.8rem;
+  }
+
+  .release-radar-home-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 15px;
+  }
+
+  .release-radar-home-copy strong,
+  .release-radar-launch-copy strong {
+    font-size: 0.9rem;
+  }
+
+  .release-radar-home-copy small,
+  .release-radar-launch-copy > span {
+    font-size: 0.68rem;
+  }
+
+  .release-radar-home-date {
+    font-size: 0.64rem;
+  }
+
+  .release-radar-home-side {
+    min-width: 46px;
+  }
+
+  .release-radar-home-count {
+    font-size: 1.35rem;
+  }
+
+  .release-radar-launch {
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+  }
+
+  .release-radar-launch-chevron {
+    display: none;
+  }
+
+  .release-radar-launch-count {
+    font-size: 0.64rem;
+  }
+
+  .release-radar-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+
+  .release-radar-metrics button {
+    min-height: 58px;
+    padding: 0.4rem 0.2rem;
+  }
+
+  .release-radar-metrics strong {
+    font-size: 1.15rem;
+  }
+
+  .release-radar-metrics span {
+    font-size: 0.57rem;
+  }
+
+  .release-radar-card {
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 0.65rem;
+    padding: 0.7rem;
+    border-radius: 17px;
+  }
+
+  .release-radar-date {
+    min-height: 60px;
+    border-radius: 13px;
+  }
+
+  .release-radar-date strong {
+    font-size: 1.35rem;
+  }
+
+  .release-radar-card-content h3 {
+    font-size: 0.92rem;
+  }
+
+  .release-radar-card-actions {
+    gap: 0.35rem;
+  }
+
+  .release-radar-card-actions .compact-button,
+  .release-radar-card-actions .text-button {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-height: 38px;
+  }
+
+  .release-radar-setting-row {
+    align-items: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .release-radar-home-card,
+  .release-radar-launch {
+    transition: none;
+  }
+}

@@ -1,41 +1,52 @@
-# GitHub Pages mit Entenarchiv 4
+# GitHub Pages und automatische Jahrespläne in Entenarchiv 4.3
 
-Entenarchiv wird über den vorhandenen benutzerdefinierten GitHub-Actions-Workflow geprüft und veröffentlicht.
+Entenarchiv wird weiterhin über den benutzerdefinierten GitHub-Actions-Workflow geprüft und veröffentlicht.
 
-## Keine erneute Pages-Umstellung erforderlich
+## Pages-Einstellung
 
-Wenn unter **Settings → Pages → Source** bereits **GitHub Actions** ausgewählt ist und Version 3.9 erfolgreich veröffentlicht wurde, muss dort für Version 4 nichts geändert werden.
+Unter **Settings → Pages → Source** bleibt ausgewählt:
 
-Die beiden vorgeschlagenen Vorlagen **GitHub Pages Jekyll** und **Static HTML** dürfen nicht zusätzlich konfiguriert werden.
+```text
+GitHub Actions
+```
 
-## Vorhandene Workflow-Datei
+Die vorgeschlagenen Vorlagen **GitHub Pages Jekyll** und **Static HTML** werden nicht zusätzlich konfiguriert.
+
+## Workflow-Datei einmalig aktualisieren
+
+Version 4.3 erweitert den bestehenden Workflow um die automatische Suche nach offiziellen LTB-Jahresplänen. Die Datei liegt unter:
 
 ```text
 .github/workflows/deploy-pages.yml
 ```
 
-Der Workflow führt bei jedem Commit auf `main` aus:
+Da der versteckte Ordner `.github` im Browser-Upload häufig nicht sauber ersetzt wird:
+
+1. Im Repository `.github/workflows/deploy-pages.yml` öffnen.
+2. Das Stift-Symbol anklicken.
+3. Den gesamten Inhalt durch `deploy-pages-4.3.yml` ersetzen.
+4. Direkt nach `main` committen.
+
+## Ausführung
+
+Der Workflow startet:
+
+- bei jedem Commit auf `main`,
+- bei Pull Requests zur Qualitätsprüfung,
+- manuell über **Run workflow**,
+- automatisch montags um 04:17 Uhr UTC.
+
+Er führt aus:
 
 1. Projekt laden,
 2. Node.js bereitstellen,
-3. `npm run check`,
-4. `npm run build`,
-5. das geprüfte Verzeichnis `dist/` als Pages-Artefakt hochladen,
-6. GitHub Pages veröffentlichen.
+3. offizielle LTB-iCal-Dateien suchen und validieren,
+4. `npm run check`,
+5. `npm run build`,
+6. `dist/` als Pages-Artefakt hochladen,
+7. GitHub Pages veröffentlichen.
 
-## Weitere Entenarchiv-Updates
-
-1. JSON-Backup erstellen.
-2. Bei eigenen Coverbildern zusätzlich ein Medien-Backup erstellen.
-3. ZIP entpacken.
-4. Den vollständigen sichtbaren Projektinhalt in das bestehende Repository hochladen.
-5. Vorhandene Dateien ersetzen.
-6. Darauf achten, dass insbesondere `archive-model.js`, `scripts`, `tests`, `package.json` und `version.json` vorhanden sind.
-7. Mit beispielsweise `Entenarchiv Version 4.2.0` committen.
-8. Unter **Actions** den Lauf **Entenarchiv prüfen und veröffentlichen** öffnen.
-9. Erst nach einem vollständig grünen Workflow die App auf dem iPhone neu öffnen.
-
-Der versteckte Ordner `.github` muss nicht erneut hochgeladen werden, wenn der Workflow bereits aus Version 3.9 im Repository vorhanden ist. Die neue ZIP enthält ihn trotzdem vollständig für neue Installationen oder eine spätere Wiederherstellung.
+Kann der externe Downloadbereich vorübergehend nicht erreicht werden, verwendet die Synchronisierung den vorhandenen Stand und der Workflow setzt die Qualitätsprüfung fort.
 
 ## Woran eine erfolgreiche Veröffentlichung erkennbar ist
 
@@ -46,4 +57,4 @@ Qualitätsprüfung
 GitHub Pages veröffentlichen
 ```
 
-Erst danach wird die neue Version über die bestehende GitHub-Pages-Adresse ausgeliefert.
+Die GitHub-Pages-Adresse, das Home-Screen-Symbol und die lokale IndexedDB bleiben unverändert.

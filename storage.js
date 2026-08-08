@@ -7,6 +7,11 @@ import {
   normalizeDuckipediaPattern
 } from "./config.js";
 import {
+  normalizeKnownReleaseSignatures,
+  normalizeReleaseDecisionMap,
+  RELEASE_RADAR_FILTERS
+} from "./release-radar.js";
+import {
   buildSeriesCatalog,
   createCustomSeriesId,
   createSeriesDefinition,
@@ -949,6 +954,12 @@ function normalizeSettings(settings) {
     calendarReminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(source.calendarReminderTime || ""))
       ? String(source.calendarReminderTime)
       : DEFAULT_SETTINGS.calendarReminderTime,
+    releaseRadarDecisions: normalizeReleaseDecisionMap(source.releaseRadarDecisions),
+    releaseRadarKnownSignatures: normalizeKnownReleaseSignatures(source.releaseRadarKnownSignatures),
+    releaseRadarInitializedAt: isValidDateString(source.releaseRadarInitializedAt) ? source.releaseRadarInitializedAt : null,
+    releaseRadarLastOpenedAt: isValidDateString(source.releaseRadarLastOpenedAt) ? source.releaseRadarLastOpenedAt : null,
+    releaseRadarFilter: RELEASE_RADAR_FILTERS.includes(source.releaseRadarFilter) ? source.releaseRadarFilter : "open",
+    releaseRadarBadgeEnabled: source.releaseRadarBadgeEnabled !== false,
     archiveMigrationAcknowledgedAt: isValidDateString(source.archiveMigrationAcknowledgedAt)
       ? source.archiveMigrationAcknowledgedAt
       : null,

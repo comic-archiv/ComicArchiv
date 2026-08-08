@@ -1,35 +1,69 @@
-# Entenarchiv 4.2.0 – Update-, Bedienungs- und Testanleitung
+# Entenarchiv 4.3.0 – Update-, Bedienungs- und Testanleitung
 
 ## Was dieses Update verändert
 
-Version 4.2.0 ergänzt Scanner Pro, den geführten Zustandsassistenten und den Header-Hotfix. Datenbankname, IndexedDB-Schema, Datenformat und Archivmodell bleiben unverändert. Eine erneute Migration der Sammlung ist nicht erforderlich.
+Version 4.3.0 behebt die verdeckten Zurück-Buttons und ergänzt das Erscheinungsradar. Datenbankname, IndexedDB-Schema, Datenformat und Archivmodell bleiben unverändert. Eine erneute Migration der Sammlung ist nicht erforderlich.
 
 ## Vor dem Update
 
 1. Entenarchiv auf dem iPhone öffnen.
 2. Unter **Export & Backup** ein aktuelles JSON-Backup erstellen.
 3. Bei eigenen Coverbildern zusätzlich ein vollständiges Medien-Backup erstellen.
-4. In der Dateien-App prüfen, dass die Dateien vorhanden sind.
+4. In der Dateien-App prüfen, dass beide Dateien vorhanden sind.
 
-## Dateien bei GitHub hochladen
+# Teil 1: sichtbare Projektdateien hochladen
 
-1. `Entenarchiv-v4.2.0-Scanner-Pro-Zustandsassistent.zip` herunterladen.
+1. `Entenarchiv-v4.3.0-Erscheinungsradar.zip` herunterladen.
 2. ZIP auf dem Mac entpacken.
 3. Das bestehende GitHub-Repository öffnen.
 4. **Add file → Upload files** wählen.
 5. Den vollständigen sichtbaren Inhalt des entpackten Ordners `Entenarchiv` hochladen.
 6. Bestehende Dateien ersetzen.
-7. Besonders prüfen, dass diese neuen Dateien im Hauptverzeichnis liegen:
+7. Besonders prüfen, dass diese neuen Dateien vorhanden sind:
 
 ```text
-scanner-pro.js
-condition-assistant.js
+release-radar.js
+scripts/sync-release-calendars.mjs
 ```
 
-8. Beispielsweise mit `Entenarchiv Version 4.2.0` committen.
-9. Unter **Actions** warten, bis **Qualitätsprüfung** und **GitHub Pages veröffentlichen** grün sind.
+8. Beispielsweise mit `Entenarchiv Version 4.3.0` committen.
 
-Der bereits eingerichtete GitHub-Actions-Workflow muss nicht verändert werden.
+# Teil 2: Workflow einmalig aktualisieren
+
+Der vorhandene GitHub-Actions-Workflow aus Version 3.9 beziehungsweise 4.2 veröffentlicht die App weiterhin. Für die **automatische jährliche Kalendererkennung** muss die versteckte Workflow-Datei einmalig auf die neue Fassung gebracht werden.
+
+Da sich der Ordner `.github` über den normalen Browser-Upload oft nicht zuverlässig ersetzen lässt:
+
+1. Im Repository den Reiter **Code** öffnen.
+2. Zu `.github/workflows/deploy-pages.yml` navigieren.
+3. Das Stift-Symbol **Edit this file** anklicken.
+4. Den gesamten bisherigen Inhalt markieren und löschen.
+5. Den Inhalt der mitgelieferten Datei `deploy-pages-4.3.yml` einfügen.
+6. Mit `Workflow für automatische Jahrespläne aktualisieren` committen.
+
+Alternativ kann die Datei über **Add file → Create new file** mit diesem Pfad angelegt werden:
+
+```text
+.github/workflows/deploy-pages.yml
+```
+
+Die neue Workflow-Datei:
+
+- prüft die App bei jedem Commit,
+- prüft zusätzlich montags um 04:17 Uhr UTC den offiziellen LTB-Downloadbereich,
+- verwendet bei einem vorübergehenden Netzwerkfehler den vorhandenen Kalenderstand,
+- veröffentlicht anschließend das geprüfte Produktionspaket.
+
+## GitHub Actions abwarten
+
+1. Den Bereich **Actions** öffnen.
+2. Den Lauf **Entenarchiv prüfen und veröffentlichen** auswählen.
+3. Warten, bis beide Jobs grün sind:
+
+```text
+Qualitätsprüfung
+GitHub Pages veröffentlichen
+```
 
 ## Update auf dem iPhone aktivieren
 
@@ -40,101 +74,112 @@ Der bereits eingerichtete GitHub-Actions-Workflow muss nicht verändert werden.
 5. Im Backup-Bereich ganz unten kontrollieren:
 
 ```text
-Entenarchiv v4.2.0
+Entenarchiv v4.3.0
 ```
 
 Die Home-Screen-App darf installiert bleiben. Websitedaten müssen nicht gelöscht werden.
 
-# Scanner Pro verwenden
+# Erscheinungsradar verwenden
 
-## Scan & weiter
+## Radar öffnen
 
-Dieser Modus eignet sich für größere Stapel.
+Das Radar ist erreichbar über:
 
-1. **Hinzufügen → Serien-Scanner** öffnen.
-2. **Scan & weiter** wählen.
-3. Reihe und Standardwerte festlegen.
-4. Kamera erlauben und die vollständige weiße Barcodefläche in den Rahmen halten.
-5. Nach der grünen Bestätigung den Band aus dem Bild nehmen.
-6. Nächsten Band vor die Kamera halten.
+- die Karte **Erscheinungsradar** auf der Startseite,
+- die Karte **Neuerscheinungen prüfen** in der Kalenderansicht,
+- eine Zahl am Kalender-Icon, wenn neue oder heute fällige Veröffentlichungen vorliegen.
 
-Jeder akzeptierte Scan landet direkt in der Warteschlange. Duckipedia-Titel und Erscheinungsjahr werden unabhängig davon im Hintergrund geladen.
+## Bedeutung der Status
 
-## Vorher prüfen
+- **Im Besitz:** Die Ausgabe existiert bereits im Archiv.
+- **Fehlt:** Die Ausgabe liegt innerhalb des persönlichen Sammlungsziels.
+- **Nicht vorgemerkt:** Der Termin ist bekannt, aber noch nicht Teil eines Ziels.
+- **Vorgemerkt:** Die Ausgabe soll gesucht oder gekauft werden.
+- **Bestellt:** Die Ausgabe wurde bereits bestellt.
+- **Ignoriert:** Der Termin soll nicht mehr als offene Aufgabe erscheinen.
 
-Dieser Modus ist sinnvoll bei uneinheitlichen Reihen oder problematischen Barcodes.
+## Ausgabe vormerken
 
-1. **Vorher prüfen** wählen.
-2. Band scannen.
-3. Titel und Erscheinungsjahr kontrollieren.
-4. **Vormerken & weiter** antippen.
-5. Nächsten Band scannen.
+1. Bei einer Veröffentlichung **Vormerken** antippen.
+2. Entenarchiv erweitert das Sammlungsziel dieser Reihe bei Bedarf bis zur betreffenden Bandnummer.
+3. Der Band erscheint dadurch zusätzlich unter den fehlenden Bänden.
 
-## Mehrere Exemplare derselben Ausgabe
+## Ausgabe als bestellt markieren
 
-Wird derselbe Band erneut gescannt, bleibt es bei einer Ausgabe. In der Warteschlange erscheint ein weiteres physisches Exemplar. Für jedes Exemplar lassen sich separat pflegen:
+1. **Bestellt** antippen.
+2. Der Band bleibt Teil des Sammlungsziels, wird im Radar aber separat als bestellt geführt.
+3. Nach dem Erscheinen kann er über **Als vorhanden eintragen** zum Hinzufügen vorbereitet werden.
 
-- Zustand,
-- gelesen oder ungelesen,
-- foliert oder nicht foliert,
-- Notiz.
+## Ausgabe in die Sammlung übernehmen
 
-Über **+ Exemplar** kann ein weiteres Exemplar auch manuell ergänzt werden. Vorhandene Ausgaben können als zusätzliches Exemplar übernommen oder übersprungen werden.
+Bei einer bereits erschienenen Ausgabe:
 
-## Warteschlange speichern
+1. **Als vorhanden eintragen** antippen.
+2. Reihe, Bandnummer und Erscheinungsjahr werden in das Hinzufügen-Formular übernommen.
+3. Nur Zustand und persönliche Eigenschaften kontrollieren.
+4. Comic speichern.
 
-1. Treffer mit gelbem Hinweis öffnen und prüfen.
-2. Bei Bedarf Titel, Jahr oder Exemplardaten korrigieren.
-3. **Geprüfte Bände speichern** antippen.
+## Erinnerungen in Apple Kalender
 
-Erst dann werden die Daten dauerhaft in IndexedDB geschrieben.
+1. Gewünschte Ausgaben als **Vorgemerkt** oder **Bestellt** markieren.
+2. Im Radar **Vorgemerkte erinnern** antippen.
+3. Die erzeugte iCal-Datei über das iOS-Teilen-Menü mit Apple Kalender öffnen.
+4. Termine übernehmen.
 
-# Zustandsassistent verwenden
+So funktionieren Erinnerungen auch bei vollständig geschlossener Entenarchiv-App ohne zusätzlichen Push-Server.
 
-Neben einem Zustandsfeld gibt es jetzt **Assistent** und **Stufen**.
+## App-Badge aktivieren
 
-Der Assistent fragt nacheinander:
+1. Im Radar **Automatik & App-Badge** aufklappen.
+2. **Zahl am Entenarchiv-Symbol** aktivieren.
+3. Die von iOS angeforderte Mitteilungsberechtigung bestätigen.
 
-1. Ist der Comicteil vollständig?
-2. Ist der Umschlag vollständig?
-3. Wie wirkt der Band insgesamt?
-4. Welche konkreten Mängel sind vorhanden?
+Das Badge wird beim Öffnen von Entenarchiv aus den lokal bekannten Terminen berechnet. Es zählt jede neue oder heute fällige Ausgabe höchstens einmal.
 
-Danach erscheint eine begründete Empfehlung. Mit **Empfehlung übernehmen** wird die Stufe in das jeweilige Zustandsfeld geschrieben. Ist ein Notizfeld verfügbar, können die ausgewählten Mängel zusätzlich als Notiz gespeichert werden.
+# Automatische neue Kalenderjahre
 
-Wichtig: Die Empfehlung ist eine Orientierungshilfe. Grenzfälle, Restaurationen und ungewöhnliche Mängelkombinationen müssen weiterhin am konkreten Exemplar beurteilt werden.
+Sobald der Verlag im Downloadbereich eine neue `.ics`-Datei veröffentlicht, versucht der wöchentliche Workflow:
+
+1. den offiziellen Downloadbereich zu lesen,
+2. ausschließlich HTTPS-Dateien von `lustiges-taschenbuch.de` zu akzeptieren,
+3. iCal-Struktur und Kalenderjahr zu prüfen,
+4. bei mehreren Fassungen die höchste `v`-Version zu verwenden,
+5. die Datei als `data/ltb-JAHR.ics` in das veröffentlichte Pages-Paket aufzunehmen,
+6. `data/kalender-index.json` für die App zu aktualisieren.
+
+Die GitHub-Pages-Adresse bleibt dabei unverändert. Die App muss nicht neu installiert werden.
 
 # Konkrete Tests nach dem Update
 
-## Header
+## Zurück-Buttons
 
-1. Eine Reihenseite, Sammlungsliste oder Statistik öffnen.
-2. Nach unten scrollen.
-3. Kontrollieren, dass Karten und Auswahlleisten hinter der Kopfzeile verschwinden.
+1. Hauptreihe, Sonderreihenbibliothek, Kalender und Statistiken nacheinander öffnen.
+2. In jeder Ansicht scrollen.
+3. Prüfen, dass der jeweilige Zurück-Button sichtbar und anklickbar bleibt.
+4. Prüfen, dass die globale Startseiten-Kopfzeile während einer Unterseite nicht darüberliegt.
 
-## Scanner-Schnellmodus
+## Radar-Verknüpfung
 
-1. Zwei unterschiedliche Bände scannen.
-2. Ersten Band aus dem Bild nehmen und danach noch einmal scannen.
-3. Prüfen:
-   - zwei Ausgaben in der Warteschlange,
-   - beim doppelt gescannten Band zwei Exemplare,
-   - Kamera blieb zwischen den Scans aktiv.
+1. Erscheinungsradar öffnen.
+2. Eine Ausgabe wählen, die noch nicht vorhanden ist.
+3. **Vormerken** antippen.
+4. Fehlbandliste der betreffenden Reihe öffnen.
+5. Prüfen, dass die Bandnummer nun dort erscheint.
 
-## Vorhandener Band
+## Vorhandene Ausgabe
 
-1. Einen bereits gespeicherten Band scannen.
-2. Prüfen, dass **Als weiteres Exemplar speichern** angeboten wird.
-3. Zustand des neuen Exemplars setzen.
-4. Warteschlange speichern.
-5. In der Banddetailansicht kontrollieren, dass kein zweiter Bandeintrag entstanden ist.
+1. Einen Kalendertermin zu einem bereits gespeicherten Band suchen.
+2. Prüfen, dass **Im Besitz** angezeigt wird.
+3. **In Sammlung** antippen.
+4. Prüfen, dass die passende Ausgabe geöffnet beziehungsweise gefiltert wird.
 
-## Zustandsassistent
+## Badge
 
-1. Im normalen Hinzufügen auf **Assistent** tippen.
-2. Einen gepflegten Gesamteindruck und einen Riss bis etwa 5 cm wählen.
-3. Prüfen, dass die Empfehlung nicht besser als Zustand 2–3 ausfällt.
-4. Empfehlung übernehmen und kontrollieren, dass die Mängelnotiz ergänzt wurde.
+1. App-Badge aktivieren.
+2. Entenarchiv vollständig schließen und erneut öffnen.
+3. Prüfen, ob bei offenen neuen Terminen eine Zahl am Home-Screen-Symbol angezeigt wird.
+4. Neue Termine als gesehen markieren und App erneut öffnen.
+5. Prüfen, dass die Zahl sinkt oder verschwindet.
 
 ## Offline
 
@@ -142,18 +187,17 @@ Wichtig: Die Empfehlung ist eine Orientierungshilfe. Grenzfälle, Restaurationen
 2. App vollständig schließen.
 3. Flugmodus aktivieren.
 4. App erneut öffnen.
-5. Sammlung, Regale, Zustandsassistent und bereits vorgemerkte lokale Daten müssen erreichbar sein. Duckipedia-Anreicherung benötigt weiterhin Internet.
+5. Sammlung, Regale, bereits importierte Kalendertermine und Radarstatus müssen verfügbar bleiben. Neue Jahrespläne und Duckipedia-Daten benötigen weiterhin Internet.
 
 # Bestehende Daten
 
-Version 4.2.0 verändert nicht:
+Version 4.3.0 verändert nicht:
 
-- vorhandene Ausgaben,
-- physische Exemplare,
-- eigene Reihen,
-- Reihenziele,
-- fehlende Bände,
+- vorhandene Reihen,
+- Ausgaben und physische Exemplare,
+- Zustände und Notizen,
+- Reihenziele und fehlende Bände,
 - Flohmarkt-Markierungen,
-- Kalendertermine,
+- eigene Termine,
 - eigene Coverbilder,
 - bisherige Backups.

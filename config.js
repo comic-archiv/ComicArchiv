@@ -46,7 +46,7 @@ export const LEGACY_CONDITION_MAP = Object.freeze({
 });
 
 export const APP_CONFIG = Object.freeze({
-  appVersion: "4.2.0",
+  appVersion: "4.3.0",
   dataFormatVersion: 9,
   archiveModelVersion: ARCHIVE_MODEL_VERSION,
   minimumSupportedBackupVersion: 1,
@@ -153,6 +153,12 @@ export const DEFAULT_SETTINGS = Object.freeze({
   calendarSelectedYear: new Date().getFullYear(),
   calendarSelectedMonth: new Date().getMonth(),
   calendarReminderTime: "09:00",
+  releaseRadarDecisions: Object.freeze({}),
+  releaseRadarKnownSignatures: Object.freeze([]),
+  releaseRadarInitializedAt: null,
+  releaseRadarLastOpenedAt: null,
+  releaseRadarFilter: "open",
+  releaseRadarBadgeEnabled: true,
   archiveMigrationAcknowledgedAt: null,
   scannerMode: "fast"
 });

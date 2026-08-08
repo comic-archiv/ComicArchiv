@@ -115,6 +115,19 @@ import {
 } from "./archive-model.js";
 import { createShelfUI } from "./shelf-ui.js";
 import { matchesSmartList, sortSmartList } from "./shelf.js";
+import {
+  RELEASE_RADAR_FILTERS,
+  buildReleaseRadarItems as createReleaseRadarItems,
+  filterReleaseRadarItems,
+  getReleaseRadarBadgeCount,
+  getReleaseTimingLabel,
+  mergeKnownReleaseSignatures,
+  normalizeKnownReleaseSignatures,
+  normalizeReleaseDecisionMap,
+  normalizeReleaseSeriesCatalog,
+  resolveReleaseIdentity,
+  summarizeReleaseRadar
+} from "./release-radar.js";
 
 const THEME_STORAGE_KEY = "comicarchiv-theme";
 const IS_TEST_MODE = new URLSearchParams(window.location.search).get("testmode") === "1";
@@ -187,7 +200,9 @@ const state = {
   calendarSearch: "",
   latestDiagnosticReport: null,
   diagnosticsRunning: false,
-  shelfCoverResolutionPromises: new Map()
+  shelfCoverResolutionPromises: new Map(),
+  releaseRadarFilter: "open",
+  releaseRadarReturnTarget: "home"
 };
 
 const elements = {
@@ -335,6 +350,34 @@ const elements = {
   calendarEventReminder: document.querySelector("#calendar-event-reminder"),
   calendarEventDelete: document.querySelector("#calendar-event-delete"),
   calendarEventMessage: document.querySelector("#calendar-event-message"),
+  openReleaseRadarHome: document.querySelector("#open-release-radar-home"),
+  openReleaseRadarCalendar: document.querySelector("#open-release-radar-calendar"),
+  releaseRadarHomeTitle: document.querySelector("#release-radar-home-title"),
+  releaseRadarHomeNext: document.querySelector("#release-radar-home-next"),
+  releaseRadarHomeDate: document.querySelector("#release-radar-home-date"),
+  releaseRadarHomeCount: document.querySelector("#release-radar-home-count"),
+  releaseRadarHomeMeta: document.querySelector("#release-radar-home-meta"),
+  calendarRadarTitle: document.querySelector("#calendar-radar-title"),
+  calendarRadarNext: document.querySelector("#calendar-radar-next"),
+  calendarRadarCount: document.querySelector("#calendar-radar-count"),
+  calendarNavBadge: document.querySelector("#calendar-nav-badge"),
+  releaseRadarPage: document.querySelector("#release-radar-page"),
+  closeReleaseRadar: document.querySelector("#close-release-radar"),
+  releaseRadarSummary: document.querySelector("#release-radar-summary"),
+  releaseRadarNextTitle: document.querySelector("#release-radar-next-title"),
+  releaseRadarNextCopy: document.querySelector("#release-radar-next-copy"),
+  releaseRadarNewCount: document.querySelector("#release-radar-new-count"),
+  releaseRadarTodayCount: document.querySelector("#release-radar-today-count"),
+  releaseRadarWatchCount: document.querySelector("#release-radar-watch-count"),
+  releaseRadarOrderedCount: document.querySelector("#release-radar-ordered-count"),
+  releaseRadarFilterTabs: document.querySelector("#release-radar-filter-tabs"),
+  releaseRadarMarkSeen: document.querySelector("#release-radar-mark-seen"),
+  releaseRadarExport: document.querySelector("#release-radar-export"),
+  releaseRadarList: document.querySelector("#release-radar-list"),
+  releaseRadarEmpty: document.querySelector("#release-radar-empty"),
+  releaseRadarBadgeSummary: document.querySelector("#release-radar-badge-summary"),
+  releaseRadarBadgeEnabled: document.querySelector("#release-radar-badge-enabled"),
+  releaseRadarMessage: document.querySelector("#release-radar-message"),
   themeToggle: document.querySelector("#theme-toggle"),
   themeIcon: document.querySelector("#theme-icon"),
   appVersion: document.querySelector("#app-version"),
@@ -568,6 +611,10 @@ async function initializeApp() {
     elements.showCovers.checked = state.settings.showCovers !== false;
     elements.autoEnrich.checked = state.settings.duckipediaAutoEnrich !== false;
     state.scannerMode = normalizeScannerMode(state.settings.scannerMode);
+    state.releaseRadarFilter = RELEASE_RADAR_FILTERS.includes(state.settings.releaseRadarFilter)
+      ? state.settings.releaseRadarFilter
+      : "open";
+    elements.releaseRadarBadgeEnabled.checked = state.settings.releaseRadarBadgeEnabled !== false;
     persistThemeLocally(state.settings.theme);
   } catch (error) {
     console.warn("Einstellungen konnten nicht geladen werden:", error);
@@ -582,6 +629,8 @@ async function initializeApp() {
   renderScannerQueue();
   resetCoverEditorState();
   await refreshCollection();
+  await initializeReleaseRadarIfNeeded();
+  renderReleaseRadarIndicators();
   await refreshArchiveCoreStatus();
   renderBackupStatus();
   await Promise.allSettled([
@@ -968,6 +1017,13 @@ function bindEvents() {
   elements.fleaMarketClear.addEventListener("click", clearFleaMarketFinds);
   elements.openCalendar.addEventListener("click", openCalendarPage);
   elements.closeCalendar.addEventListener("click", closeCalendarPage);
+  elements.openReleaseRadarHome.addEventListener("click", () => openReleaseRadarPage({ returnTarget: "home" }));
+  elements.openReleaseRadarCalendar.addEventListener("click", () => openReleaseRadarPage({ returnTarget: "calendar" }));
+  elements.closeReleaseRadar.addEventListener("click", closeReleaseRadarPage);
+  elements.releaseRadarPage.addEventListener("click", handleReleaseRadarPageClick);
+  elements.releaseRadarMarkSeen.addEventListener("click", markVisibleReleaseRadarItemsSeen);
+  elements.releaseRadarExport.addEventListener("click", exportWatchedReleaseReminders);
+  elements.releaseRadarBadgeEnabled.addEventListener("change", handleReleaseRadarBadgeToggle);
   elements.calendarPrevYear.addEventListener("click", () => changeCalendarYear(-1));
   elements.calendarNextYear.addEventListener("click", () => changeCalendarYear(1));
   elements.calendarYearSelect.addEventListener("change", () => setCalendarYear(Number(elements.calendarYearSelect.value)));
@@ -1150,6 +1206,7 @@ function bindEvents() {
     if (!elements.missingPage.classList.contains("hidden")) return closeMissingPage();
     if (!elements.fleaMarketPage.classList.contains("hidden")) return closeFleaMarketPage();
     if (!elements.calendarEventModal.classList.contains("hidden")) return closeCalendarEventModal();
+    if (!elements.releaseRadarPage.classList.contains("hidden")) return closeReleaseRadarPage();
     if (!elements.calendarPage.classList.contains("hidden")) return closeCalendarPage();
     if (!elements.progressPage.classList.contains("hidden")) return closeProgressPage();
     if (!elements.mediaPage.classList.contains("hidden")) return closeMediaPage();
@@ -7076,7 +7133,7 @@ function getCalendarImportedSources() {
 }
 
 function renderCalendarOverview() {
-  // Die Kalenderübersicht lebt ab Version 3.7 ausschließlich in der Kalender-Unterseite.
+  renderReleaseRadarIndicators();
 }
 
 async function openCalendarPage() {
@@ -7127,6 +7184,7 @@ function renderCalendarPage() {
   renderCalendarMonthTabs(year, month, yearEvents);
   renderCalendarGrid(year, month, monthEvents);
   renderCalendarEventList(monthEvents);
+  renderReleaseRadarIndicators();
 }
 
 function renderCalendarYearOptions(selectedYear) {
@@ -7286,6 +7344,7 @@ function renderCalendarEventList(events) {
   elements.calendarEventList.replaceChildren();
   elements.calendarEmpty.classList.toggle("hidden", events.length > 0);
   if (!events.length) return;
+  const radarItemsByEventId = new Map(getReleaseRadarItems().map((item) => [item.event.id, item]));
 
   events.forEach((event) => {
     const article = document.createElement("article");
@@ -7315,6 +7374,18 @@ function renderCalendarEventList(events) {
       statusBadge.className = `calendar-collection-status calendar-collection-${status.type}`;
       statusBadge.textContent = status.label;
       badgeRow.append(statusBadge);
+    }
+    const radarItem = radarItemsByEventId.get(event.id);
+    if (radarItem?.isNew) {
+      const radarBadge = document.createElement("span");
+      radarBadge.className = "calendar-radar-status is-new";
+      radarBadge.textContent = "Neu";
+      badgeRow.append(radarBadge);
+    } else if (radarItem && ["watch", "ordered", "ignored"].includes(radarItem.effectiveStatus)) {
+      const radarBadge = document.createElement("span");
+      radarBadge.className = `calendar-radar-status is-${radarItem.effectiveStatus}`;
+      radarBadge.textContent = radarItem.effectiveStatus === "watch" ? "Vorgemerkt" : radarItem.effectiveStatus === "ordered" ? "Bestellt" : "Ignoriert";
+      badgeRow.append(radarBadge);
     }
 
     const title = document.createElement("h4");
@@ -7359,37 +7430,51 @@ function renderCalendarEventList(events) {
   });
 }
 
-function normalizeCalendarSeriesName(value) {
-  return String(value || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("de");
+function getReleaseSeriesCatalog() {
+  const customDefinitions = Array.isArray(state.settings.customSeriesConfigs)
+    ? state.settings.customSeriesConfigs.map((entry) => ({
+        id: entry.id || createCustomSeriesId(entry.name),
+        name: entry.name,
+        aliases: entry.aliases || []
+      }))
+    : [];
+  const configuredNames = new Set([
+    ...STANDARD_SERIES_DEFINITIONS.map((entry) => entry.name),
+    ...customDefinitions.map((entry) => entry.name)
+  ]);
+  const usedDefinitions = state.comics
+    .filter((comic) => comic?.series && !configuredNames.has(comic.series))
+    .map((comic) => ({
+      id: comic.seriesId || createCustomSeriesId(comic.series),
+      name: comic.series,
+      aliases: []
+    }));
+  return normalizeReleaseSeriesCatalog([
+    ...STANDARD_SERIES_DEFINITIONS,
+    ...customDefinitions,
+    ...usedDefinitions
+  ]);
 }
 
 function resolveCalendarRelease(event) {
-  if (event?.source !== "publisher" || event?.category !== "release") return null;
-  const match = String(event.title || "").trim().match(/^(.*?)\s+(\d+)$/);
-  if (!match) return null;
-  const prefix = match[1].trim();
-  const bandNumber = Number(match[2]);
-  if (!Number.isSafeInteger(bandNumber) || bandNumber < 1) return null;
-
-  const availableSeries = getAvailableSeries(state.settings, state.comics);
-  const aliases = [
-    { alias: "LTB", series: "Lustiges Taschenbuch" },
-    { alias: "Lustiges Taschenbuch", series: "Lustiges Taschenbuch" },
-    { alias: "LTB Frohe Ostern", series: "LTB Ostern" },
-    { alias: "LTB Ultimate", series: "LTB Ultimate Phantomias" },
-    { alias: "LTB Phantomias Collection", series: "LTB Phantomias Collection" },
-    ...availableSeries.map((series) => ({ alias: series, series }))
-  ].sort((a, b) => b.alias.length - a.alias.length);
-  const normalizedPrefix = normalizeCalendarSeriesName(prefix);
-  const matchAlias = aliases.find((entry) => normalizeCalendarSeriesName(entry.alias) === normalizedPrefix);
-  if (!matchAlias) return null;
-  return { series: matchAlias.series, bandNumber };
+  return resolveReleaseIdentity(event, getReleaseSeriesCatalog());
 }
 
-function getCalendarCollectionStatus({ series, bandNumber }) {
-  const owned = state.comics.some((comic) => comic.series === series && comic.numericBandNumber === bandNumber);
+function getCalendarCollectionStatus({ seriesId, series, bandNumber }) {
+  const normalizedSeriesId = String(seriesId || "").trim();
+  const owned = state.comics.some((comic) => {
+    const sameSeries = normalizedSeriesId
+      ? comic.seriesId === normalizedSeriesId
+      : comic.series === series;
+    return sameSeries && comic.numericBandNumber === bandNumber;
+  });
   if (owned) return { type: "owned", label: "Im Besitz" };
-  const missing = state.missingGroups.some((group) => group.series === series && group.missingBands.includes(bandNumber));
+  const missing = state.missingGroups.some((group) => {
+    const sameSeries = normalizedSeriesId && group.seriesId
+      ? group.seriesId === normalizedSeriesId
+      : group.series === series;
+    return sameSeries && group.missingBands.includes(bandNumber);
+  });
   if (missing) return { type: "missing", label: "Fehlt" };
   return { type: "planned", label: "Noch nicht vorgemerkt" };
 }
@@ -7425,6 +7510,434 @@ async function handleCalendarCollectionAction(button) {
   }
   await openMissingDetailModal(series, bandNumber);
 }
+
+function getReleaseRadarItems() {
+  return createReleaseRadarItems(getCalendarEvents(), {
+    seriesCatalog: getReleaseSeriesCatalog(),
+    comics: state.comics,
+    missingGroups: state.missingGroups,
+    decisions: state.settings.releaseRadarDecisions,
+    knownSignatures: state.settings.releaseRadarKnownSignatures
+  });
+}
+
+async function initializeReleaseRadarIfNeeded() {
+  if (state.settings.releaseRadarInitializedAt) return false;
+  const releaseEvents = getCalendarEvents().filter((event) => event.source === "publisher" && event.category === "release");
+  if (!releaseEvents.length) return false;
+
+  const today = getLocalDateKey();
+  const pastEvents = releaseEvents.filter((event) => event.startDate < today);
+  state.settings = await saveAppSettings({
+    ...state.settings,
+    releaseRadarKnownSignatures: mergeKnownReleaseSignatures([], pastEvents),
+    releaseRadarInitializedAt: new Date().toISOString(),
+    releaseRadarFilter: RELEASE_RADAR_FILTERS.includes(state.releaseRadarFilter) ? state.releaseRadarFilter : "open"
+  });
+  return true;
+}
+
+function getLocalDateKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function renderReleaseRadarIndicators() {
+  if (!elements.releaseRadarHomeCount) return;
+  const items = getReleaseRadarItems();
+  const summary = summarizeReleaseRadar(items);
+  const badgeCount = getReleaseRadarBadgeCount(items);
+  const badgeLabel = badgeCount === 1 ? "1 neu" : `${badgeCount} neu`;
+
+  elements.releaseRadarHomeCount.textContent = String(badgeCount);
+  elements.releaseRadarHomeCount.classList.toggle("is-clear", badgeCount === 0);
+  elements.releaseRadarHomeMeta.textContent = badgeCount > 0
+    ? (summary.todayCount > 0 ? `${summary.todayCount} heute` : "neu")
+    : `${summary.upcoming} geplant`;
+
+  if (summary.next) {
+    elements.releaseRadarHomeTitle.textContent = badgeCount > 0 ? "Erscheinungsradar" : "Nächste Neuerscheinung";
+    elements.releaseRadarHomeNext.textContent = summary.next.event.title;
+    elements.releaseRadarHomeDate.textContent = `${getReleaseTimingLabel(summary.next)} · ${formatCalendarDate(summary.next.event.startDate, { includeYear: true })}`;
+    elements.calendarRadarTitle.textContent = badgeCount > 0
+      ? `${badgeCount} Veröffentlichung${badgeCount === 1 ? "" : "en"} prüfen`
+      : "Alles im Blick";
+    elements.calendarRadarNext.textContent = `${summary.next.event.title} · ${getReleaseTimingLabel(summary.next)}`;
+  } else {
+    elements.releaseRadarHomeTitle.textContent = "Erscheinungsradar";
+    elements.releaseRadarHomeNext.textContent = "Keine kommende Veröffentlichung im geladenen Kalender";
+    elements.releaseRadarHomeDate.textContent = "Neue Jahrespläne werden automatisch einsortiert.";
+    elements.calendarRadarTitle.textContent = "Keine offenen Neuerscheinungen";
+    elements.calendarRadarNext.textContent = "Sobald ein neuer Jahresplan erscheint, wird er hier angezeigt.";
+  }
+
+  elements.calendarRadarCount.textContent = badgeCount > 0 ? badgeLabel : "aktuell";
+  elements.calendarRadarCount.classList.toggle("is-clear", badgeCount === 0);
+  elements.calendarNavBadge.textContent = String(badgeCount);
+  elements.calendarNavBadge.classList.toggle("hidden", badgeCount === 0);
+  elements.calendarNavBadge.setAttribute("aria-label", `${badgeCount} neue oder heute fällige Veröffentlichungen`);
+
+  updateReleaseRadarBadge(badgeCount).catch((error) => {
+    console.warn("App-Badge konnte nicht aktualisiert werden:", error);
+  });
+}
+
+function openReleaseRadarPage({ returnTarget = "home" } = {}) {
+  state.releaseRadarReturnTarget = returnTarget;
+  elements.releaseRadarPage.classList.remove("hidden");
+  elements.releaseRadarPage.setAttribute("aria-hidden", "false");
+  document.body.classList.add("app-page-open");
+  elements.releaseRadarPage.scrollTop = 0;
+  renderReleaseRadarPage();
+
+  saveAppSettings({
+    ...state.settings,
+    releaseRadarLastOpenedAt: new Date().toISOString()
+  }).then((settings) => {
+    state.settings = settings;
+  }).catch((error) => console.warn("Radar-Zeitpunkt konnte nicht gespeichert werden:", error));
+
+  window.setTimeout(() => elements.closeReleaseRadar.focus({ preventScroll: true }), 0);
+}
+
+function closeReleaseRadarPage({ returnFocus = true } = {}) {
+  if (elements.releaseRadarPage.classList.contains("hidden")) return;
+  elements.releaseRadarPage.classList.add("hidden");
+  elements.releaseRadarPage.setAttribute("aria-hidden", "true");
+  const anotherPageOpen = [...document.querySelectorAll(".app-page")]
+    .some((page) => !page.classList.contains("hidden"));
+  document.body.classList.toggle("app-page-open", anotherPageOpen);
+  if (!returnFocus) return;
+  const target = state.releaseRadarReturnTarget === "calendar" && !elements.calendarPage.classList.contains("hidden")
+    ? elements.openReleaseRadarCalendar
+    : elements.openReleaseRadarHome;
+  window.setTimeout(() => target?.focus({ preventScroll: true }), 0);
+}
+
+function renderReleaseRadarPage() {
+  const items = getReleaseRadarItems();
+  const summary = summarizeReleaseRadar(items);
+  const visibleItems = filterReleaseRadarItems(items, state.releaseRadarFilter);
+
+  elements.releaseRadarSummary.textContent = `${summary.upcoming} offen`;
+  elements.releaseRadarNewCount.textContent = String(summary.newCount);
+  elements.releaseRadarTodayCount.textContent = String(summary.todayCount);
+  elements.releaseRadarWatchCount.textContent = String(summary.watchedCount);
+  elements.releaseRadarOrderedCount.textContent = String(summary.orderedCount);
+
+  if (summary.next) {
+    elements.releaseRadarNextTitle.textContent = summary.next.event.title;
+    elements.releaseRadarNextCopy.textContent = `${getReleaseTimingLabel(summary.next)} · ${formatCalendarDate(summary.next.event.startDate, { includeYear: true })}`;
+  } else {
+    elements.releaseRadarNextTitle.textContent = "Keine offene Neuerscheinung";
+    elements.releaseRadarNextCopy.textContent = "Alle bekannten Termine sind erledigt oder es wurde noch kein Jahresplan geladen.";
+  }
+
+  elements.releaseRadarFilterTabs.querySelectorAll("button[data-radar-filter]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.radarFilter === state.releaseRadarFilter);
+  });
+  elements.releaseRadarList.replaceChildren();
+  elements.releaseRadarEmpty.classList.toggle("hidden", visibleItems.length > 0);
+  elements.releaseRadarMarkSeen.disabled = !visibleItems.some((item) => item.isNew);
+  elements.releaseRadarExport.disabled = !items.some((item) => ["watch", "ordered"].includes(item.effectiveStatus) && item.timing !== "past");
+
+  visibleItems.forEach((item) => elements.releaseRadarList.append(createReleaseRadarCard(item)));
+  renderReleaseRadarBadgeStatus(getReleaseRadarBadgeCount(items));
+  renderReleaseRadarIndicators();
+}
+
+function createReleaseRadarCard(item) {
+  const article = document.createElement("article");
+  article.className = `release-radar-card is-${item.effectiveStatus}${item.isNew ? " is-new" : ""}`;
+  article.dataset.radarKey = item.key;
+
+  const date = document.createElement("div");
+  date.className = "release-radar-date";
+  const day = document.createElement("strong");
+  day.textContent = String(Number(item.event.startDate.slice(8, 10)));
+  const month = document.createElement("span");
+  month.textContent = getMonthName(Number(item.event.startDate.slice(5, 7)) - 1).slice(0, 3);
+  const year = document.createElement("small");
+  year.textContent = item.event.startDate.slice(0, 4);
+  date.append(day, month, year);
+
+  const content = document.createElement("div");
+  content.className = "release-radar-card-content";
+  const badges = document.createElement("div");
+  badges.className = "release-radar-card-badges";
+  if (item.isNew) badges.append(createRadarBadge("Neu", "is-new"));
+  badges.append(createRadarBadge(getReleaseRadarStatusLabel(item), `is-${item.effectiveStatus}`));
+  badges.append(createRadarBadge(item.collection.label, `is-${item.collection.type}`));
+
+  const title = document.createElement("h3");
+  title.textContent = item.event.title;
+  const timing = document.createElement("p");
+  timing.className = "release-radar-timing";
+  timing.textContent = `${getReleaseTimingLabel(item)} · ${formatCalendarDate(item.event.startDate, { includeYear: true })}`;
+  const source = document.createElement("p");
+  source.className = "muted-copy";
+  source.textContent = item.identity
+    ? `${item.identity.series} · Band ${item.identity.bandNumber}`
+    : `${item.event.sourceName || "LTB Jahresplan"} · noch keiner Archivreihe zugeordnet`;
+  content.append(badges, title, timing, source);
+
+  const actions = document.createElement("div");
+  actions.className = "release-radar-card-actions";
+
+  if (item.collection.type === "owned" && item.identity) {
+    actions.append(createReleaseRadarAction("owned", "In Sammlung", item.key, "success-button compact-button"));
+  } else if (item.identity) {
+    actions.append(
+      createReleaseRadarAction("watch", item.effectiveStatus === "watch" ? "Vorgemerkt ✓" : "Vormerken", item.key, item.effectiveStatus === "watch" ? "primary-button compact-button" : "secondary-button compact-button"),
+      createReleaseRadarAction("ordered", item.effectiveStatus === "ordered" ? "Bestellt ✓" : "Bestellt", item.key, item.effectiveStatus === "ordered" ? "primary-button compact-button" : "secondary-button compact-button")
+    );
+    if (item.timing !== "upcoming") {
+      actions.append(createReleaseRadarAction("add", "Als vorhanden eintragen", item.key, "success-button compact-button"));
+    }
+  }
+
+  if (item.isNew) actions.append(createReleaseRadarAction("seen", "Gesehen", item.key, "text-button"));
+  if (item.decision) actions.append(createReleaseRadarAction("reset", "Status zurücksetzen", item.key, "text-button"));
+  if (item.effectiveStatus !== "ignored" && item.collection.type !== "owned") {
+    actions.append(createReleaseRadarAction("ignored", "Ignorieren", item.key, "text-button danger-text-button"));
+  }
+
+  const url = item.event.url || inferDuckipediaUrlFromCalendarTitle(item.event.title);
+  if (url) {
+    const link = document.createElement("a");
+    link.className = "text-button release-radar-details-link";
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "Details ↗";
+    actions.append(link);
+  }
+
+  article.append(date, content, actions);
+  return article;
+}
+
+function createRadarBadge(label, variant) {
+  const badge = document.createElement("span");
+  badge.className = `release-radar-status-badge ${variant}`;
+  badge.textContent = label;
+  return badge;
+}
+
+function getReleaseRadarStatusLabel(item) {
+  if (item.effectiveStatus === "owned") return "Im Besitz";
+  if (item.effectiveStatus === "watch") return "Vorgemerkt";
+  if (item.effectiveStatus === "ordered") return "Bestellt";
+  if (item.effectiveStatus === "ignored") return "Ignoriert";
+  return item.timing === "today" ? "Heute" : item.timing === "past" ? "Erschienen" : "Offen";
+}
+
+function createReleaseRadarAction(action, label, key, className) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = className;
+  button.dataset.radarAction = action;
+  button.dataset.radarKey = key;
+  button.textContent = label;
+  return button;
+}
+
+function handleReleaseRadarPageClick(event) {
+  const filterButton = event.target.closest("button[data-radar-filter]");
+  if (filterButton) {
+    state.releaseRadarFilter = RELEASE_RADAR_FILTERS.includes(filterButton.dataset.radarFilter)
+      ? filterButton.dataset.radarFilter
+      : "open";
+    saveAppSettings({ ...state.settings, releaseRadarFilter: state.releaseRadarFilter })
+      .then((settings) => { state.settings = settings; })
+      .catch((error) => console.warn("Radarfilter konnte nicht gespeichert werden:", error));
+    renderReleaseRadarPage();
+    return;
+  }
+
+  const actionButton = event.target.closest("button[data-radar-action]");
+  if (!actionButton) return;
+  handleReleaseRadarAction(actionButton).catch((error) => {
+    console.error("Erscheinungsstatus konnte nicht geändert werden:", error);
+    showReleaseRadarMessage(`Erscheinungsstatus konnte nicht geändert werden: ${error.message}`, "error");
+  });
+}
+
+async function handleReleaseRadarAction(button) {
+  const item = getReleaseRadarItems().find((entry) => entry.key === button.dataset.radarKey);
+  if (!item) return;
+  const action = button.dataset.radarAction;
+
+  if (action === "owned" && item.identity) {
+    closeReleaseRadarPage({ returnFocus: false });
+    if (!elements.calendarPage.classList.contains("hidden")) closeCalendarPage({ returnFocus: false });
+    openCollectionPage("all", { series: item.identity.series, search: item.identity.bandNumber });
+    return;
+  }
+  if (action === "add" && item.identity) {
+    prepareReleaseForAdd(item);
+    return;
+  }
+  if (action === "seen") {
+    await markReleaseItemsSeen([item]);
+    return;
+  }
+  if (["watch", "ordered"].includes(action) && item.identity) {
+    await ensureReleaseOnWishlist(item.identity);
+  }
+  await saveReleaseRadarDecision(item, action === "reset" ? "" : action);
+}
+
+async function saveReleaseRadarDecision(item, status) {
+  const decisions = normalizeReleaseDecisionMap(state.settings.releaseRadarDecisions);
+  if (!status) delete decisions[item.key];
+  else decisions[item.key] = { status, updatedAt: new Date().toISOString() };
+  const knownSignatures = status
+    ? mergeKnownReleaseSignatures(state.settings.releaseRadarKnownSignatures, [item])
+    : state.settings.releaseRadarKnownSignatures;
+  await saveMeaningfulSettings({
+    releaseRadarDecisions: decisions,
+    releaseRadarKnownSignatures: knownSignatures
+  }, 1);
+  renderReleaseRadarPage();
+  if (!elements.calendarPage.classList.contains("hidden")) renderCalendarPage();
+  showReleaseRadarMessage(status ? "Erscheinungsstatus gespeichert." : "Erscheinungsstatus zurückgesetzt.", "success");
+}
+
+async function markVisibleReleaseRadarItemsSeen() {
+  const items = filterReleaseRadarItems(getReleaseRadarItems(), state.releaseRadarFilter).filter((item) => item.isNew);
+  if (!items.length) {
+    showReleaseRadarMessage("In dieser Ansicht gibt es keine neuen Termine.", "info");
+    return;
+  }
+  await markReleaseItemsSeen(items);
+}
+
+async function markReleaseItemsSeen(items) {
+  const known = mergeKnownReleaseSignatures(state.settings.releaseRadarKnownSignatures, items);
+  await saveMeaningfulSettings({ releaseRadarKnownSignatures: known }, 1);
+  renderReleaseRadarPage();
+  if (!elements.calendarPage.classList.contains("hidden")) renderCalendarPage();
+  showReleaseRadarMessage(`${items.length} Termin${items.length === 1 ? "" : "e"} als gesehen markiert.`, "success");
+}
+
+async function ensureReleaseOnWishlist(identity) {
+  const nextTargets = { ...(state.settings.knownHighestBandBySeries || {}) };
+  const currentTarget = Number(nextTargets[identity.series]) || 0;
+  if (identity.bandNumber <= currentTarget) return;
+  nextTargets[identity.series] = identity.bandNumber;
+  await saveMeaningfulSettings({ knownHighestBandBySeries: nextTargets }, 1);
+  state.missingGroups = calculateMissingBands(state.comics, nextTargets);
+  renderMissingHub();
+  renderMissingBands();
+  renderStats();
+  renderSeriesProgress();
+  shelfUI?.refresh({ comics: state.comics, missingGroups: state.missingGroups, settings: state.settings, localCoverIds: state.localCoverIds });
+}
+
+function prepareReleaseForAdd(item) {
+  if (!item.identity) return;
+  closeReleaseRadarPage({ returnFocus: false });
+  if (!elements.calendarPage.classList.contains("hidden")) closeCalendarPage({ returnFocus: false });
+  resetForm();
+  elements.series.value = item.identity.series;
+  elements.volumeNumber.value = String(item.identity.bandNumber);
+  elements.publicationYear.value = item.event.startDate.slice(0, 4);
+  openAddPage();
+  showFormMessage(`${item.event.title} wurde vorbereitet. Prüfe nur noch Zustand und Eigenschaften.`, "success");
+  window.setTimeout(() => {
+    lookupFormMetadata({ force: false }).catch((error) => console.warn("Metadaten konnten nicht vorgeladen werden:", error));
+  }, 0);
+}
+
+async function exportWatchedReleaseReminders() {
+  const items = getReleaseRadarItems().filter((item) => ["watch", "ordered"].includes(item.effectiveStatus) && item.timing !== "past");
+  if (!items.length) {
+    showReleaseRadarMessage("Es gibt keine kommenden vorgemerkten oder bestellten Ausgaben.", "info");
+    return;
+  }
+
+  const reminderTime = state.settings.calendarReminderTime || "09:00";
+  const events = items.map((item) => ({ ...item.event, reminderEnabled: true }));
+  const content = buildCalendarIcs(events, {
+    calendarName: "Entenarchiv Erscheinungsradar",
+    reminderTime,
+    timedReleaseReminders: true
+  });
+  const result = await shareOrDownloadText({
+    content,
+    filename: createAppFilename("Entenarchiv-Erscheinungsradar", "ics"),
+    mimeType: "text/calendar;charset=utf-8",
+    title: "Entenarchiv Erscheinungsradar",
+    text: `${items.length} vorgemerkte oder bestellte Neuerscheinungen`
+  });
+  if (result.method !== "cancelled") showReleaseRadarMessage("Kalenderdatei wurde erstellt. Öffne sie mit Apple Kalender, um Erinnerungen zu aktivieren.", "success");
+}
+
+function showReleaseRadarMessage(message, type = "info") {
+  elements.releaseRadarMessage.textContent = message;
+  elements.releaseRadarMessage.dataset.type = type;
+}
+
+async function handleReleaseRadarBadgeToggle() {
+  elements.releaseRadarMessage.textContent = "";
+  if (!elements.releaseRadarBadgeEnabled.checked) {
+    state.settings = await saveAppSettings({ ...state.settings, releaseRadarBadgeEnabled: false });
+    if (typeof navigator.clearAppBadge === "function") await navigator.clearAppBadge().catch(() => {});
+    renderReleaseRadarBadgeStatus(getReleaseRadarBadgeCount(getReleaseRadarItems()));
+    showReleaseRadarMessage("Das App-Badge wurde ausgeschaltet.", "info");
+    return;
+  }
+
+  if (typeof navigator.setAppBadge !== "function") {
+    elements.releaseRadarBadgeEnabled.checked = false;
+    state.settings = await saveAppSettings({ ...state.settings, releaseRadarBadgeEnabled: false });
+    showReleaseRadarMessage("Dieses Gerät unterstützt kein App-Badge für die Web-App.", "info");
+    renderReleaseRadarBadgeStatus(0);
+    return;
+  }
+
+  if ("Notification" in window && Notification.permission === "default") {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      elements.releaseRadarBadgeEnabled.checked = false;
+      state.settings = await saveAppSettings({ ...state.settings, releaseRadarBadgeEnabled: false });
+      showReleaseRadarMessage(permission === "denied" ? "Die Berechtigung wurde abgelehnt. Du kannst sie in den iOS-Einstellungen ändern." : "Die Berechtigung wurde nicht erteilt.", "error");
+      renderReleaseRadarBadgeStatus(0);
+      return;
+    }
+  }
+
+  state.settings = await saveAppSettings({ ...state.settings, releaseRadarBadgeEnabled: true });
+  await updateReleaseRadarBadge(getReleaseRadarBadgeCount(getReleaseRadarItems()));
+  renderReleaseRadarBadgeStatus(getReleaseRadarBadgeCount(getReleaseRadarItems()));
+  showReleaseRadarMessage("Das App-Badge ist aktiviert.", "success");
+}
+
+function renderReleaseRadarBadgeStatus(count) {
+  const supported = typeof navigator.setAppBadge === "function" && typeof navigator.clearAppBadge === "function";
+  const permission = "Notification" in window ? Notification.permission : "unavailable";
+  const enabled = state.settings.releaseRadarBadgeEnabled !== false;
+  elements.releaseRadarBadgeEnabled.checked = enabled;
+  elements.releaseRadarBadgeEnabled.disabled = !supported || permission === "denied";
+
+  if (!supported) elements.releaseRadarBadgeSummary.textContent = "Auf diesem Gerät nicht verfügbar";
+  else if (permission === "denied") elements.releaseRadarBadgeSummary.textContent = "In den Systemeinstellungen gesperrt";
+  else if (!enabled) elements.releaseRadarBadgeSummary.textContent = "Ausgeschaltet";
+  else if (permission === "granted" || permission === "unavailable") elements.releaseRadarBadgeSummary.textContent = `${count} offene Markierung${count === 1 ? "" : "en"}`;
+  else elements.releaseRadarBadgeSummary.textContent = "Aktivierung benötigt einmalige Zustimmung";
+}
+
+async function updateReleaseRadarBadge(count = getReleaseRadarBadgeCount(getReleaseRadarItems())) {
+  if (typeof navigator.setAppBadge !== "function" || typeof navigator.clearAppBadge !== "function") return;
+  if (state.settings.releaseRadarBadgeEnabled === false) {
+    await navigator.clearAppBadge().catch(() => {});
+    return;
+  }
+  if ("Notification" in window && Notification.permission !== "granted") return;
+  if (count > 0) await navigator.setAppBadge(count);
+  else await navigator.clearAppBadge();
+}
+
 
 async function changeCalendarYear(delta) {
   const nextYear = Math.min(2100, Math.max(1900, getSafeCalendarYear() + delta));
@@ -7576,6 +8089,7 @@ async function importCalendarCatalogEntry(entry, { silent = false, selectYear = 
     };
     if (selectYear) patch.calendarSelectedYear = entry.year;
     state.settings = await saveMeaningfulSettings(patch, 1);
+    await initializeReleaseRadarIfNeeded();
     renderCalendarOverview();
     renderCalendarPage();
     if (!silent) showCalendarImportMessage(`${importedEvents.length} Termine aus ${entry.label} wurden geladen.`, "success");
@@ -7674,6 +8188,7 @@ async function importCalendarText(text, source = {}) {
     calendarLastImportAt: now,
     calendarSelectedYear: preferredYear
   }, 1);
+  await initializeReleaseRadarIfNeeded();
   renderCalendarOverview();
   renderCalendarPage();
 }

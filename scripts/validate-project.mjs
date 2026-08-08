@@ -28,6 +28,7 @@ const requiredFiles = [
   "asset-loader.js",
   "diagnostics.js",
   "recovery.js",
+  "release-radar.js",
   "service-worker.js",
   "manifest.webmanifest",
   "version.json",
@@ -38,14 +39,16 @@ const requiredFiles = [
   "vendor/quagga.min.js",
   "vendor/jspdf.umd.min.js",
   "data/kalender-index.json",
-  "data/ltb-2026.ics"
+  "data/ltb-2026.ics",
+  "scripts/sync-release-calendars.mjs",
+  ".github/workflows/deploy-pages.yml"
 ];
 
 for (const file of requiredFiles) {
   if (!existsSync(join(root, file))) errors.push(`Pflichtdatei fehlt: ${file}`);
 }
 
-const [html, appSource, shelfUiSource, configSource, storageSource, archiveModelSource, exportSource, recoverySource, serviceWorkerSource, styleSource, packageJson, versionJson, manifest] = await Promise.all([
+const [html, appSource, shelfUiSource, configSource, storageSource, archiveModelSource, exportSource, recoverySource, serviceWorkerSource, styleSource, releaseRadarSource, syncSource, workflowSource, calendarCatalog, packageJson, versionJson, manifest] = await Promise.all([
   readText("index.html"),
   readText("app.js"),
   readText("shelf-ui.js"),
@@ -56,6 +59,10 @@ const [html, appSource, shelfUiSource, configSource, storageSource, archiveModel
   readText("recovery.js"),
   readText("service-worker.js"),
   readText("style.css"),
+  readText("release-radar.js"),
+  readText("scripts/sync-release-calendars.mjs"),
+  readText(".github/workflows/deploy-pages.yml"),
+  readJson("data/kalender-index.json"),
   readJson("package.json"),
   readJson("version.json"),
   readJson("manifest.webmanifest")
@@ -126,6 +133,22 @@ if (!exportSource.includes("archiveCore")) {
   errors.push("JSON-Backups enthalten keinen expliziten Archivkern.");
 }
 
+if (!html.includes('id="release-radar-page"') || !html.includes('id="open-release-radar-home"')) {
+  errors.push("Erscheinungsradar oder Startseiten-Einstieg fehlt in index.html.");
+}
+if (!appSource.includes("createReleaseRadarItems") || !releaseRadarSource.includes("buildReleaseRadarItems")) {
+  errors.push("Erscheinungsradar ist nicht vollständig in App und Modul verdrahtet.");
+}
+if (!styleSource.includes("body.app-page-open > .app-header") || !styleSource.includes("visibility: hidden")) {
+  errors.push("Der Hotfix gegen verdeckte Unterseiten-Zurück-Buttons fehlt.");
+}
+if (!workflowSource.includes("npm run calendar:sync") || !workflowSource.includes("schedule:")) {
+  errors.push("GitHub Actions enthält keine automatische Jahresplan-Prüfung.");
+}
+if (!syncSource.includes("extractIcsLinks") || Number(calendarCatalog.schemaVersion) !== 2) {
+  errors.push("Kalender-Synchronisierung oder Kalenderindex Version 2 fehlt.");
+}
+
 const shellAssets = [
   ...extractArrayStrings(serviceWorkerSource, "CORE_SHELL"),
   ...extractArrayStrings(serviceWorkerSource, "OPTIONAL_SHELL"),
@@ -171,6 +194,7 @@ if (errors.length) {
   console.log("✓ Scanner und PDF-Modul werden erst bei Bedarf geladen");
   console.log("✓ Diagnose, sicherer Modus und Testmodus sind eingebunden");
   console.log("✓ Archivkern, digitales Regal und Version-4-Backupformat sind eingebunden");
+  console.log("✓ Erscheinungsradar, Zurück-Button-Hotfix und automatische Jahrespläne sind eingebunden");
   notes.forEach((entry) => console.log(`Hinweis: ${entry}`));
 }
 

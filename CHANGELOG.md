@@ -1,5 +1,38 @@
 # Änderungen
 
+## 4.3.0 – Erscheinungsradar und automatische Jahrespläne
+
+### Behoben
+
+- die globale App-Kopfzeile verdeckt keine Zurück-Buttons von Unterseiten mehr
+- Unterseiten-Kopfzeilen bleiben unabhängig von Regal-, Kalender- und Karteninhalten erreichbar
+
+### Neu
+
+- persönliche Release-Inbox aus offiziellen Verlagsterminen
+- automatische Zuordnung von Kalenderterminen zu stabilen Reihen- und Ausgaben-IDs
+- Status **Im Besitz**, **Fehlt**, **Nicht vorgemerkt**, **Vorgemerkt**, **Bestellt** und **Ignoriert**
+- direkte Verknüpfung mit Sammlung, Fehlbandverwaltung und Hinzufügen-Formular
+- Filter für offen, neu, vorgemerkt, bestellt, ignoriert und alle Termine
+- iCal-Export vorgemerkter und bestellter Veröffentlichungen
+- optionales App-Badge für neue und heute fällige Ausgaben
+- kompakte Radar-Karte auf der Startseite und zusätzlicher Einstieg im Kalender
+- wöchentliche Prüfung des offiziellen LTB-Downloadbereichs über GitHub Actions
+- automatische Auswahl der neuesten v1/v2-Version je Kalenderjahr
+- fehlertoleranter Fallback auf den bereits vorhandenen Kalenderbestand
+- neues Modul `release-radar.js`
+- neues Synchronisationsskript `scripts/sync-release-calendars.mjs`
+
+### Kompatibilität
+
+- Datenbank bleibt `comicarchiv-db`
+- IndexedDB-Schema bleibt Version 5
+- Datenformat bleibt Version 9
+- Archivmodell bleibt Version 1
+- keine Datenmigration erforderlich
+- bestehende Kalendertermine, Flohmärkte, Sammlung und Backups bleiben erhalten
+- 94 automatisierte Tests
+
 ## 4.2.0 – Scanner Pro und Zustandsassistent
 
 - Header-Ebenen korrigiert: scrollende Elemente laufen hinter der Kopfzeile durch.
