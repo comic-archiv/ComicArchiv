@@ -121,6 +121,20 @@ import {
   formatMissingRun
 } from "./statistics-dna.js";
 import {
+  WISHLIST_PRIORITIES,
+  buildCollectorMission,
+  buildMilestones,
+  compareWishlistEntries,
+  getWishlistPriorityDefinition,
+  normalizeMilestoneIds,
+  normalizeWishlistPriority
+} from "./collector-goals.js";
+import {
+  buildShareCardPayload,
+  canvasToPngBlob,
+  renderShareCard
+} from "./share-cards.js";
+import {
   RELEASE_RADAR_FILTERS,
   buildReleaseRadarItems as createReleaseRadarItems,
   createReleaseEventSignature,
@@ -213,7 +227,12 @@ const state = {
   shelfCoverResolutionPromises: new Map(),
   releaseRadarFilter: "open",
   releaseRadarReturnTarget: "home",
-  releaseLinkEventId: null
+  releaseLinkEventId: null,
+  collectorMission: null,
+  currentMilestones: [],
+  milestoneSyncPending: false,
+  milestoneCelebrationTimer: null,
+  shareCardRendering: false
 };
 
 const elements = {
@@ -236,6 +255,24 @@ const elements = {
   yearChartTotal: document.querySelector("#year-chart-total"),
   qualityChart: document.querySelector("#quality-chart"),
   seriesChart: document.querySelector("#series-chart"),
+  milestonePanel: document.querySelector("#milestone-panel"),
+  milestoneCount: document.querySelector("#milestone-count"),
+  milestoneList: document.querySelector("#milestone-list"),
+  collectorMission: document.querySelector("#collector-mission"),
+  collectorMissionEyebrow: document.querySelector("#collector-mission-eyebrow"),
+  collectorMissionTitle: document.querySelector("#collector-mission-title"),
+  collectorMissionText: document.querySelector("#collector-mission-text"),
+  openShareCard: document.querySelector("#open-share-card"),
+  shareCardModal: document.querySelector("#share-card-modal"),
+  closeShareCard: document.querySelector("#close-share-card"),
+  shareCardTemplate: document.querySelector("#share-card-template"),
+  shareCardCanvas: document.querySelector("#share-card-canvas"),
+  shareCardShare: document.querySelector("#share-card-share"),
+  shareCardMessage: document.querySelector("#share-card-message"),
+  milestoneCelebration: document.querySelector("#milestone-celebration"),
+  milestoneCelebrationTitle: document.querySelector("#milestone-celebration-title"),
+  milestoneCelebrationCopy: document.querySelector("#milestone-celebration-copy"),
+  milestoneCelebrationClose: document.querySelector("#milestone-celebration-close"),
   dashboardStats: document.querySelector(".stats-grid"),
   form: document.querySelector("#comic-form"),
   formTitle: document.querySelector("#form-title"),
@@ -317,6 +354,7 @@ const elements = {
   fleaMarketSelectedCount: document.querySelector("#flea-market-selected-count"),
   fleaMarketSearch: document.querySelector("#flea-market-search"),
   fleaMarketScope: document.querySelector("#flea-market-scope"),
+  fleaMarketPriorityFilter: document.querySelector("#flea-market-priority-filter"),
   fleaMarketDefaultCondition: document.querySelector("#flea-market-default-condition"),
   fleaMarketApplyCondition: document.querySelector("#flea-market-apply-condition"),
   fleaMarketEmpty: document.querySelector("#flea-market-empty"),
@@ -508,6 +546,7 @@ const elements = {
   missingDetailContext: document.querySelector("#missing-detail-context"),
   missingDetailName: document.querySelector("#missing-detail-name"),
   missingDetailYear: document.querySelector("#missing-detail-year"),
+  missingDetailPriority: document.querySelector("#missing-detail-priority"),
   missingDetailCondition: document.querySelector("#missing-detail-condition"),
   missingDetailUrl: document.querySelector("#missing-detail-url"),
   missingDetailNotes: document.querySelector("#missing-detail-notes"),
@@ -1018,6 +1057,15 @@ function bindEvents() {
   elements.navStatistics.addEventListener("click", openStatisticsPage);
   elements.closeStatistics.addEventListener("click", closeStatisticsPage);
   elements.dashboardStats.addEventListener("click", handleDashboardStatClick);
+  elements.collectorMission.addEventListener("click", handleCollectorMissionClick);
+  elements.openShareCard.addEventListener("click", openShareCardModal);
+  elements.closeShareCard.addEventListener("click", closeShareCardModal);
+  elements.shareCardTemplate.addEventListener("change", renderShareCardPreview);
+  elements.shareCardShare.addEventListener("click", handleShareCardShare);
+  elements.shareCardModal.addEventListener("click", (event) => {
+    if (event.target.closest("[data-close-share-card]")) closeShareCardModal();
+  });
+  elements.milestoneCelebrationClose.addEventListener("click", hideMilestoneCelebration);
   elements.coverFile.addEventListener("change", handleCoverFileSelection);
   elements.removeCover.addEventListener("click", handleRemoveCoverFromForm);
   elements.lookupMetadata.addEventListener("click", () => lookupFormMetadata({ force: true }));
@@ -1042,6 +1090,7 @@ function bindEvents() {
   elements.closeFleaMarket.addEventListener("click", closeFleaMarketPage);
   elements.fleaMarketSearch.addEventListener("input", renderFleaMarket);
   elements.fleaMarketScope.addEventListener("change", renderFleaMarket);
+  elements.fleaMarketPriorityFilter.addEventListener("change", renderFleaMarket);
   elements.fleaMarketList.addEventListener("change", handleFleaMarketListChange);
   elements.fleaMarketApplyCondition.addEventListener("click", applyFleaMarketDefaultCondition);
   elements.fleaMarketSave.addEventListener("click", saveFleaMarketFinds);
@@ -1052,6 +1101,7 @@ function bindEvents() {
   elements.openReleaseRadarCalendar.addEventListener("click", () => openReleaseRadarPage({ returnTarget: "calendar" }));
   elements.closeReleaseRadar.addEventListener("click", closeReleaseRadarPage);
   elements.releaseRadarPage.addEventListener("click", handleReleaseRadarPageClick);
+  elements.releaseRadarList.addEventListener("change", handleReleaseRadarPriorityChange);
   elements.releaseRadarMarkSeen.addEventListener("click", markVisibleReleaseRadarItemsSeen);
   elements.releaseRadarExport.addEventListener("click", exportWatchedReleaseReminders);
   elements.releaseRadarBadgeEnabled.addEventListener("change", handleReleaseRadarBadgeToggle);
@@ -1233,6 +1283,7 @@ function bindEvents() {
     if (!elements.conditionAssistantModal.classList.contains("hidden")) return closeConditionAssistant();
     if (!elements.conditionGuideModal.classList.contains("hidden")) return closeConditionGuide();
     if (!elements.diagnosticsModal.classList.contains("hidden")) return closeDiagnosticsModal();
+    if (!elements.shareCardModal.classList.contains("hidden")) return closeShareCardModal();
     if (!elements.importModal.classList.contains("hidden")) return closeImportModal();
     if (!elements.releaseLinkModal.classList.contains("hidden")) return closeReleaseLinkModal();
     if (!elements.seriesModal.classList.contains("hidden")) return closeSeriesModal();
@@ -2488,6 +2539,7 @@ function getFleaMarketCandidates() {
         title: detail.title || "",
         publicationYear: detail.publicationYear || null,
         desiredCondition: detail.desiredCondition || "",
+        priority: normalizeWishlistPriority(detail.priority),
         notes: detail.notes || "",
         duckipediaUrl: detail.duckipediaUrl || createConfiguredDuckipediaUrl(group.series, bandNumber, detail.title || "")
       });
@@ -2495,11 +2547,11 @@ function getFleaMarketCandidates() {
   });
 
   return candidates.sort((first, second) => {
-    const firstMain = first.series === "Lustiges Taschenbuch" ? 0 : 1;
-    const secondMain = second.series === "Lustiges Taschenbuch" ? 0 : 1;
-    return firstMain - secondMain
+    const firstMainRank = first.series === "Lustiges Taschenbuch" ? 0 : 1;
+    const secondMainRank = second.series === "Lustiges Taschenbuch" ? 0 : 1;
+    return firstMainRank - secondMainRank
       || first.series.localeCompare(second.series, "de", { sensitivity: "base" })
-      || first.bandNumber - second.bandNumber;
+      || compareWishlistEntries(first, second);
   });
 }
 
@@ -2555,17 +2607,24 @@ function closeFleaMarketPage() {
 function renderFleaMarket() {
   const searchTerm = normalizeSearchText(elements.fleaMarketSearch.value);
   const scope = elements.fleaMarketScope.value || "all";
+  const priorityFilter = elements.fleaMarketPriorityFilter.value || "active";
   const sessionItems = getFleaMarketSessionItems();
   const allCandidates = getFleaMarketCandidates();
-  const candidates = allCandidates.filter((item) => {
+  const scopedCandidates = allCandidates.filter((item) => {
     if (scope === "main" && item.series !== "Lustiges Taschenbuch") return false;
     if (scope === "other" && item.series === "Lustiges Taschenbuch") return false;
+    if (priorityFilter === "active" && item.priority === "ignore") return false;
+    if (priorityFilter === "unrated" && item.priority) return false;
+    if (!["active", "all", "unrated"].includes(priorityFilter) && item.priority !== priorityFilter) return false;
+    return true;
+  });
+  const candidates = scopedCandidates.filter((item) => {
     if (!searchTerm) return true;
     return normalizeSearchText(`${item.series} ${item.bandNumber} ${item.title}`).includes(searchTerm);
   });
 
-  const selectedCount = allCandidates.filter((item) => sessionItems[item.key]).length;
-  elements.fleaMarketMissingCount.textContent = String(allCandidates.length);
+  const selectedCount = scopedCandidates.filter((item) => sessionItems[item.key]).length;
+  elements.fleaMarketMissingCount.textContent = String(scopedCandidates.length);
   elements.fleaMarketSelectedCount.textContent = String(selectedCount);
   elements.fleaMarketPageCount.textContent = selectedCount === 1 ? "1 gefunden" : `${selectedCount} gefunden`;
   elements.fleaMarketSave.disabled = selectedCount === 0;
@@ -2609,11 +2668,21 @@ function renderFleaMarket() {
 
     const copy = document.createElement("div");
     copy.className = "flea-market-item-copy";
+    const bandLine = document.createElement("span");
+    bandLine.className = "flea-market-band-line";
     const band = document.createElement("strong");
     band.textContent = `Band ${item.bandNumber}`;
+    bandLine.append(band);
+    const priorityDefinition = getWishlistPriorityDefinition(item.priority);
+    if (priorityDefinition) {
+      const priority = document.createElement("span");
+      priority.className = `wishlist-priority wishlist-priority-${item.priority}`;
+      priority.textContent = priorityDefinition.shortLabel;
+      bandLine.append(priority);
+    }
     const metadata = document.createElement("span");
     metadata.textContent = [item.title, item.publicationYear].filter(Boolean).join(" · ") || "Noch keine Zusatzdaten";
-    copy.append(band, metadata);
+    copy.append(bandLine, metadata);
 
     const condition = document.createElement("select");
     condition.dataset.marketCondition = item.key;
@@ -3697,6 +3766,8 @@ function renderStats() {
     button.setAttribute("aria-label", `${label}: ${value}. Zugehörige Ansicht öffnen`);
   });
 
+  renderCollectorMission();
+
   elements.conditionStatsTotal.textContent = physicalCopies === 1 ? "1 Exemplar" : `${physicalCopies} Exemplare`;
 
   const allCopies = state.comics.flatMap((comic) => getComicCopies(comic));
@@ -3738,6 +3809,195 @@ function renderStats() {
   renderStatistics();
 }
 
+
+function renderCollectorMission() {
+  if (!elements.collectorMission) return;
+  const mission = buildCollectorMission({
+    progressData: getSeriesProgressData(),
+    missingGroups: state.missingGroups,
+    settings: state.settings
+  });
+  state.collectorMission = mission;
+  elements.collectorMissionEyebrow.textContent = mission.eyebrow;
+  elements.collectorMissionTitle.textContent = mission.title;
+  elements.collectorMissionText.textContent = mission.copy;
+  elements.collectorMission.dataset.accent = mission.accent || "progress";
+  elements.collectorMission.disabled = !mission.action;
+  elements.collectorMission.setAttribute("aria-label", mission.action ? `${mission.eyebrow}: ${mission.title}. Öffnen` : `${mission.eyebrow}: ${mission.title}`);
+}
+
+function handleCollectorMissionClick() {
+  const action = state.collectorMission?.action;
+  if (!action) return;
+  if (action.type === "missing-series") {
+    state.missingScope = "all";
+    state.missingReturnTarget = "home";
+    state.openMissingSeries = new Set([action.series]);
+    elements.missingPageTitle.textContent = `Fehlende Bände · ${action.series}`;
+    renderMissingBands({ forceOpenSeries: action.series });
+    elements.missingPage.classList.remove("hidden");
+    elements.missingPage.setAttribute("aria-hidden", "false");
+    document.body.classList.add("app-page-open");
+    window.setTimeout(() => {
+      [...elements.missingList.querySelectorAll("details[data-series]")]
+        .find((detail) => detail.dataset.series === action.series)
+        ?.scrollIntoView({ block: "start" });
+    }, 0);
+    return;
+  }
+  if (action.type === "missing-band") {
+    openMissingPage("all");
+    state.openMissingSeries.add(action.series);
+    renderMissingBands({ forceOpenSeries: action.series });
+    window.setTimeout(() => openMissingDetailModal(action.series, action.bandNumber), 40);
+  }
+}
+
+function renderMilestones(milestones) {
+  if (!elements.milestoneList) return;
+  const source = Array.isArray(milestones) ? milestones : [];
+  elements.milestoneCount.textContent = String(source.length);
+  elements.milestoneList.replaceChildren();
+  if (!source.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted-copy";
+    empty.textContent = "Die ersten Meilensteine entstehen automatisch mit deiner Sammlung und deinen Reihenzielen.";
+    elements.milestoneList.append(empty);
+    return;
+  }
+  source.forEach((milestone) => {
+    const item = document.createElement("article");
+    item.className = "milestone-row";
+    const mark = document.createElement("span");
+    mark.className = "milestone-row-mark";
+    mark.setAttribute("aria-hidden", "true");
+    mark.textContent = milestone.type === "series-complete" ? "✓" : milestone.type === "progress" ? "%" : "★";
+    const copy = document.createElement("span");
+    const eyebrow = document.createElement("small"); eyebrow.textContent = milestone.eyebrow;
+    const title = document.createElement("strong"); title.textContent = milestone.title;
+    const detail = document.createElement("span"); detail.textContent = milestone.copy;
+    copy.append(eyebrow, title, detail);
+    item.append(mark, copy);
+    elements.milestoneList.append(item);
+  });
+}
+
+function scheduleMilestoneSync(milestones) {
+  if (state.milestoneSyncPending) return;
+  state.milestoneSyncPending = true;
+  window.setTimeout(async () => {
+    const currentIds = milestones.map((entry) => entry.id);
+    const seen = new Set(normalizeMilestoneIds(state.settings.milestoneSeenIds));
+    try {
+      if (!state.settings.milestonesInitializedAt) {
+        state.settings = await saveAppSettings({
+          ...state.settings,
+          milestoneSeenIds: currentIds,
+          milestonesInitializedAt: new Date().toISOString()
+        });
+        return;
+      }
+      const newMilestones = milestones.filter((entry) => !seen.has(entry.id));
+      if (!newMilestones.length) return;
+      newMilestones.forEach((entry) => seen.add(entry.id));
+      state.settings = await saveAppSettings({ ...state.settings, milestoneSeenIds: [...seen] });
+      showMilestoneCelebration(newMilestones[0]);
+    } catch (error) {
+      console.warn("Meilensteinstatus konnte nicht gespeichert werden:", error);
+    } finally {
+      state.milestoneSyncPending = false;
+    }
+  }, 0);
+}
+
+function showMilestoneCelebration(milestone) {
+  if (!milestone || !elements.milestoneCelebration) return;
+  elements.milestoneCelebrationTitle.textContent = milestone.title;
+  elements.milestoneCelebrationCopy.textContent = milestone.copy;
+  elements.milestoneCelebration.classList.remove("hidden");
+  window.clearTimeout(state.milestoneCelebrationTimer);
+  state.milestoneCelebrationTimer = window.setTimeout(hideMilestoneCelebration, 6500);
+}
+
+function hideMilestoneCelebration() {
+  window.clearTimeout(state.milestoneCelebrationTimer);
+  state.milestoneCelebrationTimer = null;
+  elements.milestoneCelebration?.classList.add("hidden");
+}
+
+function createShareCardContext() {
+  const progressData = getSeriesProgressData();
+  const dna = buildStatisticsDNA({ comics: state.comics, progressData, missingGroups: state.missingGroups });
+  return {
+    dna,
+    mainProgress: progressData.find((entry) => entry.series === "Lustiges Taschenbuch") || null,
+    milestone: state.currentMilestones[0] || buildMilestones({ comics: state.comics, progressData })[0] || null,
+    totalSeries: new Set(state.comics.map((comic) => comic.seriesId || comic.series)).size,
+    totalMissing: countMissingBands(state.missingGroups),
+    generatedAt: new Date()
+  };
+}
+
+async function openShareCardModal() {
+  elements.shareCardMessage.textContent = "";
+  elements.shareCardModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+  await renderShareCardPreview();
+  window.setTimeout(() => elements.shareCardTemplate.focus({ preventScroll: true }), 0);
+}
+
+function closeShareCardModal() {
+  elements.shareCardModal.classList.add("hidden");
+  elements.shareCardMessage.textContent = "";
+  restoreBodyModalState();
+  window.setTimeout(() => elements.openShareCard?.focus({ preventScroll: true }), 0);
+}
+
+async function renderShareCardPreview() {
+  if (state.shareCardRendering) return;
+  state.shareCardRendering = true;
+  elements.shareCardShare.disabled = true;
+  try {
+    const payload = buildShareCardPayload(elements.shareCardTemplate.value, createShareCardContext());
+    await renderShareCard(elements.shareCardCanvas, payload);
+    elements.shareCardMessage.textContent = "";
+  } catch (error) {
+    console.error(error);
+    elements.shareCardMessage.textContent = `Vorschau fehlgeschlagen: ${error.message}`;
+    elements.shareCardMessage.dataset.type = "error";
+  } finally {
+    state.shareCardRendering = false;
+    elements.shareCardShare.disabled = false;
+  }
+}
+
+async function handleShareCardShare() {
+  if (state.shareCardRendering) return;
+  elements.shareCardShare.disabled = true;
+  elements.shareCardMessage.textContent = "Share Card wird vorbereitet …";
+  elements.shareCardMessage.dataset.type = "info";
+  try {
+    const payload = buildShareCardPayload(elements.shareCardTemplate.value, createShareCardContext());
+    await renderShareCard(elements.shareCardCanvas, payload);
+    const blob = await canvasToPngBlob(elements.shareCardCanvas);
+    const result = await shareOrDownloadBlob({
+      blob,
+      filename: createAppFilename(`Entenarchiv-Share-${payload.template}`, "png"),
+      mimeType: "image/png",
+      title: "Entenarchiv – meine Sammlung",
+      text: "Meine Sammlung aus Entenarchiv."
+    });
+    elements.shareCardMessage.textContent = result.method === "share" ? "Share Card wurde ans Teilen-Menü übergeben." : result.method === "download" ? "Share Card wurde als PNG gespeichert." : "Teilen abgebrochen.";
+    elements.shareCardMessage.dataset.type = result.method === "cancelled" ? "info" : "success";
+  } catch (error) {
+    console.error(error);
+    elements.shareCardMessage.textContent = `Share Card konnte nicht erzeugt werden: ${error.message}`;
+    elements.shareCardMessage.dataset.type = "error";
+  } finally {
+    elements.shareCardShare.disabled = false;
+  }
+}
+
 function renderStatistics() {
   if (!elements.statisticsHighlights) return;
   const progressData = getSeriesProgressData();
@@ -3752,6 +4012,10 @@ function renderStatistics() {
   elements.dnaSummary.textContent = `${dna.uniqueIssues} Ausgaben · ${dna.physicalCopies} Exemplare`;
 
   renderDnaInsights(dna);
+  const milestones = buildMilestones({ comics: state.comics, progressData });
+  state.currentMilestones = milestones;
+  renderMilestones(milestones);
+  scheduleMilestoneSync(milestones);
 
   const oldestYear = dna.years.length ? Math.min(...dna.years.map((entry) => entry.year)) : null;
   const bestProgress = progressData.filter((entry) => entry.target > 0).sort((a, b) => b.percentage - a.percentage || b.target - a.target)[0];
@@ -4108,15 +4372,24 @@ function renderMissingBands({ forceOpenSeries = "" } = {}) {
       const detail = state.settings.missingBandDetails?.[key] || {};
       const button = document.createElement("button");
       button.type = "button";
-      button.className = detail.title || detail.desiredCondition || detail.notes || detail.publicationYear
+      const priorityId = normalizeWishlistPriority(detail.priority);
+      button.className = detail.title || detail.desiredCondition || detail.notes || detail.publicationYear || priorityId
         ? "missing-band missing-band-detailed"
         : "missing-band";
+      if (priorityId) button.classList.add(`missing-priority-${priorityId}`);
       button.dataset.series = group.series;
       button.dataset.bandNumber = String(bandNumber);
 
       const number = document.createElement("strong");
       number.textContent = `Band ${bandNumber}`;
       button.append(number);
+      const priorityDefinition = getWishlistPriorityDefinition(priorityId);
+      if (priorityDefinition) {
+        const priority = document.createElement("span");
+        priority.className = `wishlist-priority wishlist-priority-${priorityId}`;
+        priority.textContent = priorityDefinition.shortLabel;
+        button.append(priority);
+      }
 
       const detailsText = [
         detail.title,
@@ -6338,6 +6611,7 @@ async function openMissingDetailModal(series, bandNumber) {
   elements.missingDetailContext.textContent = `${series} · Band ${bandNumber}`;
   elements.missingDetailName.value = detail.title || "";
   elements.missingDetailYear.value = detail.publicationYear ?? "";
+  elements.missingDetailPriority.value = normalizeWishlistPriority(detail.priority);
   elements.missingDetailCondition.value = detail.desiredCondition || "";
   elements.missingDetailUrl.value = detail.duckipediaUrl || "";
   elements.missingDetailNotes.value = detail.notes || "";
@@ -6412,6 +6686,7 @@ async function handleSaveMissingDetail(event) {
   const title = elements.missingDetailName.value.trim();
   const yearRaw = elements.missingDetailYear.value.trim();
   const desiredCondition = elements.missingDetailCondition.value;
+  const priority = normalizeWishlistPriority(elements.missingDetailPriority.value);
   const notes = elements.missingDetailNotes.value.trim();
   const duckipediaUrl = normalizeHttpUrl(elements.missingDetailUrl.value);
 
@@ -6436,6 +6711,7 @@ async function handleSaveMissingDetail(event) {
     title,
     publicationYear,
     desiredCondition,
+    priority,
     notes,
     duckipediaUrl,
     updatedAt: new Date().toISOString()
@@ -6444,6 +6720,9 @@ async function handleSaveMissingDetail(event) {
   const openSeries = state.selectedMissingBand.series;
   await saveMeaningfulSettings({ missingBandDetails: nextDetails });
   renderMissingBands({ forceOpenSeries: openSeries });
+  renderStats();
+  renderFleaMarketHubStatus();
+  if (!elements.fleaMarketPage.classList.contains("hidden")) renderFleaMarket();
   closeMissingDetailModal();
   showToast("Details zum fehlenden Band gespeichert.");
 }
@@ -6542,12 +6821,15 @@ async function handleDeleteMissingDetail() {
   const openSeries = state.selectedMissingBand.series;
   await saveMeaningfulSettings({ missingBandDetails: nextDetails });
   renderMissingBands({ forceOpenSeries: openSeries });
+  renderStats();
+  renderFleaMarketHubStatus();
+  if (!elements.fleaMarketPage.classList.contains("hidden")) renderFleaMarket();
   closeMissingDetailModal();
   showToast("Ergänzende Details gelöscht.");
 }
 
 function hasMissingDetailContent(detail) {
-  return Boolean(detail && (detail.title || detail.publicationYear || detail.desiredCondition || detail.notes || detail.duckipediaUrl));
+  return Boolean(detail && (detail.title || detail.publicationYear || detail.desiredCondition || normalizeWishlistPriority(detail.priority) || detail.notes || detail.duckipediaUrl));
 }
 
 function normalizeHttpUrl(value) {
@@ -6728,6 +7010,7 @@ function restoreBodyModalState() {
     elements.conditionAssistantModal,
     elements.issueDetailModal,
     elements.diagnosticsModal,
+    elements.shareCardModal,
     elements.importModal,
     elements.releaseLinkModal,
     elements.seriesModal,
@@ -7180,6 +7463,11 @@ function mergeImportedSettings(mode, backup, importedChangeAmount = 0) {
       state.settings.releaseRadarKnownSignatures,
       (importedSettings.releaseRadarKnownSignatures || []).map((signature) => ({ signature }))
     ),
+    milestoneSeenIds: [...new Set([
+      ...normalizeMilestoneIds(state.settings.milestoneSeenIds),
+      ...normalizeMilestoneIds(importedSettings.milestoneSeenIds)
+    ])],
+    milestonesInitializedAt: state.settings.milestonesInitializedAt || importedSettings.milestonesInitializedAt || null,
     showCovers: importedSettings.showCovers ?? state.settings.showCovers,
     duckipediaAutoEnrich: importedSettings.duckipediaAutoEnrich ?? state.settings.duckipediaAutoEnrich,
     lastMediaBackupAt: backup.hasMedia ? (importedSettings.lastMediaBackupAt || backup.exportedAt || state.settings.lastMediaBackupAt) : state.settings.lastMediaBackupAt,
@@ -8017,6 +8305,9 @@ function createReleaseRadarCard(item) {
     ? `${item.identity.series} · Band ${item.identity.bandNumber}`
     : `${item.event.sourceName || "LTB Jahresplan"} · noch keiner Archivreihe zugeordnet`;
   content.append(badges, title, timing, source);
+  if (item.identity && item.collection.type !== "owned") {
+    content.append(createReleaseRadarPriorityControl(item));
+  }
 
   const actions = document.createElement("div");
   actions.className = "release-radar-card-actions";
@@ -8054,6 +8345,79 @@ function createReleaseRadarCard(item) {
 
   article.append(date, content, actions);
   return article;
+}
+
+function createReleaseRadarPriorityControl(item) {
+  const label = document.createElement("label");
+  label.className = "release-radar-priority";
+  const text = document.createElement("span");
+  text.textContent = "Suchprio";
+  const select = document.createElement("select");
+  select.dataset.radarPriority = item.key;
+  select.setAttribute("aria-label", `Suchpriorität für ${item.event.title}`);
+
+  const empty = document.createElement("option");
+  empty.value = "";
+  empty.textContent = "Keine";
+  select.append(empty);
+  WISHLIST_PRIORITIES.forEach((priority) => {
+    const option = document.createElement("option");
+    option.value = priority.id;
+    option.textContent = priority.label;
+    select.append(option);
+  });
+
+  const detailKey = createMissingDetailKey(item.identity.series, item.identity.bandNumber);
+  select.value = normalizeWishlistPriority(state.settings.missingBandDetails?.[detailKey]?.priority);
+  label.append(text, select);
+  return label;
+}
+
+async function handleReleaseRadarPriorityChange(event) {
+  const select = event.target.closest("select[data-radar-priority]");
+  if (!select) return;
+  const item = getReleaseRadarItems().find((entry) => entry.key === select.dataset.radarPriority);
+  if (!item?.identity || item.collection.type === "owned") return;
+
+  const priority = normalizeWishlistPriority(select.value);
+  const detailKey = createMissingDetailKey(item.identity.series, item.identity.bandNumber);
+  const nextDetails = { ...(state.settings.missingBandDetails || {}) };
+  const existingDetail = nextDetails[detailKey] || {};
+  const nextDetail = { ...existingDetail, priority, updatedAt: new Date().toISOString() };
+  if (hasMissingDetailContent(nextDetail)) nextDetails[detailKey] = nextDetail;
+  else delete nextDetails[detailKey];
+
+  const nextTargets = { ...(state.settings.knownHighestBandBySeries || {}) };
+  if (priority && priority !== "ignore") {
+    const currentTarget = Number(nextTargets[item.identity.series]) || 0;
+    if (item.identity.bandNumber > currentTarget) nextTargets[item.identity.series] = item.identity.bandNumber;
+  }
+
+  const decisions = normalizeReleaseDecisionMap(state.settings.releaseRadarDecisions);
+  if (priority === "ignore") {
+    decisions[item.key] = { status: "ignored", updatedAt: new Date().toISOString() };
+  } else if (priority && decisions[item.key]?.status === "ignored") {
+    delete decisions[item.key];
+  }
+
+  try {
+    await saveMeaningfulSettings({
+      missingBandDetails: nextDetails,
+      knownHighestBandBySeries: nextTargets,
+      releaseRadarDecisions: decisions
+    }, 1);
+    state.missingGroups = calculateMissingBands(state.comics, nextTargets);
+    renderMissingHub();
+    renderMissingBands();
+    renderStats();
+    renderFleaMarketHubStatus();
+    renderReleaseRadarPage();
+    if (!elements.calendarPage.classList.contains("hidden")) renderCalendarPage();
+    showReleaseRadarMessage(priority ? `Suchpriorität „${getWishlistPriorityDefinition(priority)?.label}“ gespeichert.` : "Suchpriorität entfernt.", "success");
+  } catch (error) {
+    select.value = normalizeWishlistPriority(state.settings.missingBandDetails?.[detailKey]?.priority);
+    showReleaseRadarMessage(`Suchpriorität konnte nicht gespeichert werden: ${error.message}`, "error");
+  }
 }
 
 function createRadarBadge(label, variant) {

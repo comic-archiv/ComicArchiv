@@ -46,7 +46,7 @@ export const LEGACY_CONDITION_MAP = Object.freeze({
 });
 
 export const APP_CONFIG = Object.freeze({
-  appVersion: "4.4.0",
+  appVersion: "4.5.0",
   dataFormatVersion: 9,
   archiveModelVersion: ARCHIVE_MODEL_VERSION,
   minimumSupportedBackupVersion: 1,
@@ -162,7 +162,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   releaseSeriesAliases: Object.freeze({}),
   releaseEventLinks: Object.freeze({}),
   archiveMigrationAcknowledgedAt: null,
-  scannerMode: "fast"
+  scannerMode: "fast",
+  milestoneSeenIds: Object.freeze([]),
+  milestonesInitializedAt: null
 });
 
 export function normalizeConditionCode(code, fallback = "") {

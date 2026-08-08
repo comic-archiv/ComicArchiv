@@ -8,6 +8,7 @@ import {
   normalizeDuckipediaPattern
 } from "./config.js";
 import { blobToDataUrl } from "./media.js";
+import { normalizeMilestoneIds, normalizeWishlistPriority, getWishlistPriorityDefinition, compareWishlistEntries } from "./collector-goals.js";
 import {
   buildSeriesCatalog,
   createCustomSeriesId,
@@ -24,6 +25,13 @@ import {
   validateArchiveGraph
 } from "./archive-model.js";
 import { normalizeCalendarEvent } from "./calendar.js";
+import {
+  RELEASE_RADAR_FILTERS,
+  normalizeKnownReleaseSignatures,
+  normalizeReleaseDecisionMap,
+  normalizeReleaseEventLinks,
+  normalizeReleaseSeriesAliases
+} from "./release-radar.js";
 
 const CSV_SEPARATOR = ";";
 const UTF8_BOM = "\uFEFF";
@@ -79,6 +87,7 @@ export function createMissingCsv(missingGroups, settings = {}) {
     "Fehlender Band",
     "Titel / Name",
     "Erscheinungsjahr",
+    "Priorität",
     "Wunschzustand",
     "Notizen",
     "Duckipedia"
@@ -93,6 +102,7 @@ export function createMissingCsv(missingGroups, settings = {}) {
         bandNumber,
         detail.title || "",
         detail.publicationYear ?? "",
+        getWishlistPriorityDefinition(detail.priority)?.label || "",
         detail.desiredCondition || "",
         detail.notes || "",
         detail.duckipediaUrl || createDuckipediaSearchUrl(group.series, bandNumber, detail.title || "", settings)
@@ -145,9 +155,10 @@ export function createMissingPdfBlob(missingGroups, settings = {}) {
   const listWidth = (contentWidth - gutter) / 2;
   const columns = Object.freeze({
     check: 6.5,
-    band: 15,
-    year: 13,
-    title: listWidth - 6.5 - 15 - 13
+    priority: 8,
+    band: 13,
+    year: 12,
+    title: listWidth - 6.5 - 8 - 13 - 12
   });
 
   const colors = {
@@ -236,6 +247,8 @@ export function createMissingPdfBlob(missingGroups, settings = {}) {
     let x = startX;
     doc.text("OK", x + columns.check / 2, cursorY + 3.3, { align: "center" });
     x += columns.check;
+    doc.text("Prio", x + columns.priority / 2, cursorY + 3.3, { align: "center" });
+    x += columns.priority;
     doc.text("Band", x + 1.2, cursorY + 3.3);
     x += columns.band;
     doc.text("Titel / Name", x + 1.2, cursorY + 3.3);
@@ -267,9 +280,11 @@ export function createMissingPdfBlob(missingGroups, settings = {}) {
     const title = String(detail.title || "").trim();
 
     return {
+      series: String(group.series || ""),
       bandNumber,
       title,
       year: detail.publicationYear ? String(detail.publicationYear) : "",
+      priority: normalizeWishlistPriority(detail.priority),
       url: detail.duckipediaUrl || createDuckipediaSearchUrl(group.series, bandNumber, title, settings)
     };
   }
@@ -293,7 +308,7 @@ export function createMissingPdfBlob(missingGroups, settings = {}) {
     setDrawColor([224, 230, 237]);
     doc.setLineWidth(0.12);
     let x = startX;
-    [columns.check, columns.band, columns.title].forEach((width) => {
+    [columns.check, columns.priority, columns.band, columns.title].forEach((width) => {
       x += width;
       doc.line(x, y, x, y + height);
     });
@@ -310,6 +325,19 @@ export function createMissingPdfBlob(missingGroups, settings = {}) {
     doc.setLineWidth(0.32);
     doc.rect(x + 2, centerY - 1.2, 2.4, 2.4, "S");
     x += columns.check;
+
+    const priority = getWishlistPriorityDefinition(data.priority);
+    if (priority) {
+      setTextColor(data.priority === "wanted" ? colors.primary : data.priority === "ignore" ? colors.muted : colors.text);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.1);
+      doc.text(priority.symbol, x + columns.priority / 2, centerY + 1, { align: "center" });
+    } else {
+      setTextColor(colors.muted);
+      doc.setFont("helvetica", "normal");
+      doc.text("-", x + columns.priority / 2, centerY + 1, { align: "center" });
+    }
+    x += columns.priority;
 
     setTextColor(colors.primary);
     doc.setFont("helvetica", "bold");
@@ -361,7 +389,10 @@ export function createMissingPdfBlob(missingGroups, settings = {}) {
     currentGroup = group;
     rowStripe = 0;
 
-    const entries = group.missingBands.map((bandNumber) => measureEntry(getEntryData(group, bandNumber)));
+    const entries = group.missingBands
+      .map((bandNumber) => getEntryData(group, bandNumber))
+      .sort(compareWishlistEntries)
+      .map((entry) => measureEntry(entry));
     const firstPairHeight = measurePair(entries[0], entries[1] || null);
 
     // Keep the heading, column labels and first pair together.
@@ -490,6 +521,16 @@ function serializeSettings(settings = {}) {
     calendarSelectedYear: Number(settings.calendarSelectedYear) || new Date().getFullYear(),
     calendarSelectedMonth: Number.isInteger(Number(settings.calendarSelectedMonth)) ? Number(settings.calendarSelectedMonth) : new Date().getMonth(),
     calendarReminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(settings.calendarReminderTime || "")) ? settings.calendarReminderTime : "09:00",
+    releaseRadarDecisions: settings.releaseRadarDecisions || {},
+    releaseRadarKnownSignatures: Array.isArray(settings.releaseRadarKnownSignatures) ? settings.releaseRadarKnownSignatures : [],
+    releaseRadarInitializedAt: settings.releaseRadarInitializedAt || null,
+    releaseRadarLastOpenedAt: settings.releaseRadarLastOpenedAt || null,
+    releaseRadarFilter: settings.releaseRadarFilter || "open",
+    releaseRadarBadgeEnabled: settings.releaseRadarBadgeEnabled !== false,
+    releaseSeriesAliases: settings.releaseSeriesAliases || {},
+    releaseEventLinks: settings.releaseEventLinks || {},
+    milestoneSeenIds: normalizeMilestoneIds(settings.milestoneSeenIds),
+    milestonesInitializedAt: isValidDateString(settings.milestonesInitializedAt) ? settings.milestonesInitializedAt : null,
     archiveMigrationAcknowledgedAt: isValidDateString(settings.archiveMigrationAcknowledgedAt) ? settings.archiveMigrationAcknowledgedAt : null
   };
 }
@@ -1019,6 +1060,7 @@ function normalizeImportedSettings(settings, seriesConfiguration) {
       title: normalizeOptionalString(detail.title, 200, "Fehlband-Titel"),
       publicationYear: Number.isInteger(publicationYear) && publicationYear >= 1800 && publicationYear <= APP_CONFIG.publicationYearMaximum ? publicationYear : null,
       desiredCondition,
+      priority: normalizeWishlistPriority(detail.priority),
       notes: normalizeOptionalString(detail.notes, 2000, "Fehlband-Notizen"),
       duckipediaUrl: normalizeOptionalHttpUrl(detail.duckipediaUrl),
       updatedAt: isValidDateString(detail.updatedAt) ? detail.updatedAt : null
@@ -1054,7 +1096,17 @@ function normalizeImportedSettings(settings, seriesConfiguration) {
     calendarAutoSync: source.calendarAutoSync !== false,
     calendarSelectedYear: Number.isSafeInteger(Number(source.calendarSelectedYear)) ? Number(source.calendarSelectedYear) : new Date().getFullYear(),
     calendarSelectedMonth: Number.isSafeInteger(Number(source.calendarSelectedMonth)) ? Math.min(11, Math.max(0, Number(source.calendarSelectedMonth))) : new Date().getMonth(),
-    calendarReminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(source.calendarReminderTime || "")) ? String(source.calendarReminderTime) : "09:00"
+    calendarReminderTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(source.calendarReminderTime || "")) ? String(source.calendarReminderTime) : "09:00",
+    releaseRadarDecisions: normalizeReleaseDecisionMap(source.releaseRadarDecisions),
+    releaseRadarKnownSignatures: normalizeKnownReleaseSignatures(source.releaseRadarKnownSignatures),
+    releaseRadarInitializedAt: isValidDateString(source.releaseRadarInitializedAt) ? source.releaseRadarInitializedAt : null,
+    releaseRadarLastOpenedAt: isValidDateString(source.releaseRadarLastOpenedAt) ? source.releaseRadarLastOpenedAt : null,
+    releaseRadarFilter: RELEASE_RADAR_FILTERS.includes(source.releaseRadarFilter) ? source.releaseRadarFilter : "open",
+    releaseRadarBadgeEnabled: source.releaseRadarBadgeEnabled !== false,
+    releaseSeriesAliases: normalizeReleaseSeriesAliases(source.releaseSeriesAliases),
+    releaseEventLinks: normalizeReleaseEventLinks(source.releaseEventLinks),
+    milestoneSeenIds: normalizeMilestoneIds(source.milestoneSeenIds),
+    milestonesInitializedAt: isValidDateString(source.milestonesInitializedAt) ? source.milestonesInitializedAt : null
   };
 }
 

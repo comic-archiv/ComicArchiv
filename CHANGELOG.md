@@ -1,5 +1,31 @@
 # Änderungen
 
+## 4.5.0 – Sammelziele, Wunschliste & Share Cards
+
+### Neu
+
+- Suchprioritäten **Gesucht**, **Mitnehmen**, **Irgendwann** und **Ignorieren** für fehlende Bände
+- Prioritäten direkt im Erscheinungsradar und im Flohmarkt-Modus
+- Priorität im CSV- und kompakten zweispaltigen Flohmarkt-PDF
+- eine einzige intelligente Missionskarte auf dem Dashboard
+- automatische Missionen für fast vollständige Reihen, hohe Suchprioritäten und Fortschrittsschwellen
+- lokale Meilensteine für Bestandsgrößen, Hauptreihen-Fortschritt und vollständige Zielreihen
+- neue Meilensteine erscheinen nur kurz; die Historie bleibt eingeklappt in Statistiken
+- vier handgebaute Editorial-Share-Card-Templates als lokales PNG
+- Share Cards können über das iOS-Teilen-Menü geteilt oder heruntergeladen werden
+- neue Module `collector-goals.js` und `share-cards.js`
+
+### Technik
+
+- App-Version und Service-Worker-Cache auf 4.5.0 angehoben
+- Datenformat bleibt Version 9
+- Archivmodell bleibt Version 1
+- IndexedDB-Schema bleibt Version 5
+- keine Datenmigration erforderlich
+- Prioritäten und Meilensteinstatus sind backupfähig
+- neue Module sind im Produktions-Build und Offline-Kern enthalten
+- 118 automatisierte Tests
+
 ## 4.4.0 – Sammlungs-DNA
 
 ### Neu

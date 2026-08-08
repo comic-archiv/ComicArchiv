@@ -13,6 +13,7 @@ import {
   normalizeReleaseSeriesAliases,
   RELEASE_RADAR_FILTERS
 } from "./release-radar.js";
+import { normalizeMilestoneIds, normalizeWishlistPriority } from "./collector-goals.js";
 import {
   buildSeriesCatalog,
   createCustomSeriesId,
@@ -911,6 +912,7 @@ function normalizeSettings(settings) {
           ? publicationYear
           : null,
         desiredCondition: normalizeConditionCode(value.desiredCondition, ""),
+        priority: normalizeWishlistPriority(value.priority),
         notes: typeof value.notes === "string" ? value.notes.trim().slice(0, 2000) : "",
         duckipediaUrl: normalizeOptionalUrl(value.duckipediaUrl),
         updatedAt: isValidDateString(value.updatedAt) ? value.updatedAt : null
@@ -967,7 +969,9 @@ function normalizeSettings(settings) {
     archiveMigrationAcknowledgedAt: isValidDateString(source.archiveMigrationAcknowledgedAt)
       ? source.archiveMigrationAcknowledgedAt
       : null,
-    scannerMode: source.scannerMode === "review" ? "review" : "fast"
+    scannerMode: source.scannerMode === "review" ? "review" : "fast",
+    milestoneSeenIds: normalizeMilestoneIds(source.milestoneSeenIds),
+    milestonesInitializedAt: isValidDateString(source.milestonesInitializedAt) ? source.milestonesInitializedAt : null
   };
 }
 

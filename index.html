@@ -55,8 +55,13 @@
 <button aria-label="Doppelt 0 öffnen" class="stat-card" data-dashboard-action="duplicate" type="button"><span class="stat-label">Doppelt</span><strong class="stat-value" id="stat-duplicate">0</strong></button>
 <button aria-label="Fehlende Bände 0 öffnen" class="stat-card stat-card-highlight" data-dashboard-action="missing" type="button"><span class="stat-label">Fehlende Bände</span><strong class="stat-value" id="stat-missing">0</strong></button>
 </div>
-
-
+<div class="collector-mission-slot" id="collector-mission-slot">
+<button class="collector-mission-card" id="collector-mission" type="button">
+<span class="collector-mission-mark" aria-hidden="true">◎</span>
+<span class="collector-mission-copy"><small id="collector-mission-eyebrow">Nächstes Sammelziel</small><strong id="collector-mission-title">Wird berechnet …</strong><span id="collector-mission-text"></span></span>
+<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
+</div>
 
 </section>
 <section aria-labelledby="release-radar-home-title" class="release-radar-home section-anchor" id="release-radar-home">
@@ -131,7 +136,7 @@
 </div>
 <p aria-live="polite" class="form-message" id="export-message" role="status"></p>
 <p class="backup-help">JSON sichert deine Daten. Eigene Coverbilder sicherst du separat unter „Medien &amp; Metadaten“.</p>
-<p class="app-version-footer">Entenarchiv <span id="app-version">v4.4.0</span></p></section>
+<p class="app-version-footer">Entenarchiv <span id="app-version">v4.5.0</span></p></section>
 </main>
 <nav aria-label="Hauptnavigation" class="bottom-nav"><button class="bottom-nav-item" id="nav-calendar" type="button"><span class="bottom-nav-icon-wrap"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 8.5h15M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path></svg><span aria-label="0 neue Veröffentlichungen" class="bottom-nav-badge hidden" id="calendar-nav-badge">0</span></span><span>Kalender</span></button><button class="bottom-nav-item bottom-nav-primary" id="nav-add" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg><span>Hinzufügen</span></button><button class="bottom-nav-item" id="nav-statistics" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"></path></svg><span>Statistiken</span></button></nav><section aria-hidden="true" aria-labelledby="add-page-title" class="app-page hidden" id="add-page">
 <header class="app-page-header">
@@ -229,7 +234,7 @@
 <svg aria-hidden="true" viewbox="0 0 24 24"><path d="M15 18l-6-6 6-6"></path></svg><span>Zurück</span>
 </button>
 <div class="app-page-title"><p class="eyebrow">Deine Sammlung in Zahlen</p><h2 id="statistics-title">Statistiken</h2></div>
-<span class="count-badge" id="statistics-summary">0 Bücher</span>
+<div class="statistics-header-actions"><button class="header-share-button" id="open-share-card" type="button" aria-label="Share Card erstellen"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 16V4m0 0-4 4m4-4 4 4M5 13v6h14v-6"></path></svg><span>Share Card</span></button><span class="count-badge" id="statistics-summary">0 Bücher</span></div>
 </header>
 <div class="app-page-content statistics-page-content">
 <section aria-labelledby="dna-title" class="panel dna-hero-card">
@@ -241,6 +246,10 @@
 <div class="subsection-heading"><div><p class="eyebrow">Fast geschafft</p><h3 id="near-complete-title">Reihen kurz vor vollständig</h3></div><span class="muted-copy" id="near-complete-summary"></span></div>
 <div class="near-complete-list" id="near-complete-list"></div>
 </section>
+<details class="panel milestone-panel" id="milestone-panel">
+<summary><span><small class="eyebrow">Meilensteine</small><strong>Was du schon erreicht hast</strong></span><span class="count-badge" id="milestone-count">0</span></summary>
+<div class="milestone-list" id="milestone-list"></div>
+</details>
 <section aria-labelledby="year-chart-title" class="panel statistics-chart-card">
 <div class="subsection-heading"><div><p class="eyebrow">Zeitreise</p><h3 id="year-chart-title">Erscheinungsjahre mit den meisten Büchern</h3></div><span class="muted-copy" id="year-chart-total"></span></div>
 <div class="horizontal-chart" id="year-chart"></div>
@@ -428,6 +437,7 @@
 <div class="field-grid compact-field-grid">
 <label class="field field-full"><span>Suche</span><input id="flea-market-search" placeholder="Reihe, Bandnummer oder Titel" type="search"/></label>
 <label class="field"><span>Bereich</span><select id="flea-market-scope"><option value="all">Alle Reihen</option><option value="main">Nur Hauptreihe</option><option value="other">Nur Sonderreihen</option></select></label>
+<label class="field"><span>Priorität</span><select id="flea-market-priority-filter"><option value="active">Aktive Suche</option><option value="wanted">Gesucht</option><option value="pickup">Mitnehmen</option><option value="unrated">Ohne Priorität</option><option value="someday">Irgendwann</option><option value="ignore">Ignoriert</option><option value="all">Alle</option></select></label>
 <div class="field"><div class="field-label-row"><label for="flea-market-default-condition">Standardzustand</label><span class="condition-actions"><button class="inline-action condition-assistant-trigger" data-assistant-target="flea-market-default-condition" data-open-condition-assistant="" type="button">Assistent</button><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Stufen</button></span></div><select id="flea-market-default-condition"></select></div>
 </div>
 <button class="secondary-button compact-button" id="flea-market-apply-condition" type="button">Zustand auf gefundene Bände anwenden</button>
@@ -770,6 +780,7 @@
 <div class="field-grid compact-field-grid">
 <label class="field field-full"><span>Titel / Name</span><input id="missing-detail-name" maxlength="200" placeholder="Optional" type="text"/></label>
 <label class="field"><span>Erscheinungsjahr</span><input id="missing-detail-year" inputmode="numeric" max="2035" min="1800" placeholder="Optional" type="number"/></label>
+<label class="field"><span>Suchpriorität</span><select id="missing-detail-priority"><option value="">Keine Priorität</option><option value="wanted">Gesucht</option><option value="pickup">Mitnehmen</option><option value="someday">Irgendwann</option><option value="ignore">Ignorieren</option></select></label>
 <div class="field"><div class="field-label-row"><label for="missing-detail-condition">Zustand (Wunsch / gefunden)</label><span class="condition-actions"><button class="inline-action condition-assistant-trigger" data-assistant-notes="missing-detail-notes" data-assistant-target="missing-detail-condition" data-open-condition-assistant="" type="button">Assistent</button><button class="inline-action condition-guide-trigger" data-open-condition-guide="" type="button">Stufen</button></span></div><select id="missing-detail-condition"></select></div>
 <label class="field field-full"><span>Exakter Duckipedia-Link</span><input id="missing-detail-url" inputmode="url" maxlength="1000" placeholder="Optional – sonst wird die Suche geöffnet" type="url"/></label>
 <label class="field field-full"><span>Notizen</span><textarea id="missing-detail-notes" maxlength="2000" placeholder="Optional" rows="3"></textarea></label>
@@ -926,6 +937,18 @@
 <p aria-live="polite" class="form-message recovery-status" id="recovery-status" role="status"></p>
 </section>
 </div>
+<div aria-labelledby="share-card-title" aria-modal="true" class="modal hidden" id="share-card-modal" role="dialog">
+<div class="modal-backdrop" data-close-share-card=""></div>
+<section class="modal-card share-card-modal-card">
+<div class="section-heading"><div><p class="eyebrow">Editorial Share Card</p><h2 id="share-card-title">Sammlung teilen</h2></div><button aria-label="Share Card schließen" class="icon-button small-icon-button" id="close-share-card" type="button">×</button></div>
+<p class="share-card-intro">Handgebautes Entenarchiv-Design: klare Typografie, Papierlook und deine echten Sammlungsdaten.</p>
+<label class="field"><span>Motiv</span><select id="share-card-template"><option value="collection">Meine Sammlung</option><option value="main-series">Hauptreihe</option><option value="milestone">Meilenstein</option><option value="dna">Sammlungs-DNA</option></select></label>
+<div class="share-card-preview"><canvas id="share-card-canvas" width="1080" height="1350" aria-label="Vorschau der Share Card"></canvas></div>
+<div class="modal-actions"><button class="primary-button" id="share-card-share" type="button">PNG teilen</button><button class="secondary-button" data-close-share-card="" type="button">Schließen</button></div>
+<p aria-live="polite" class="form-message" id="share-card-message" role="status"></p>
+</section>
+</div>
+<div aria-live="polite" class="milestone-celebration hidden" id="milestone-celebration"><span aria-hidden="true" class="milestone-celebration-mark">★</span><span><small>Meilenstein erreicht</small><strong id="milestone-celebration-title"></strong><span id="milestone-celebration-copy"></span></span><button aria-label="Meilenstein schließen" id="milestone-celebration-close" type="button">×</button></div>
 <div aria-atomic="true" aria-live="polite" class="toast" id="toast" role="status"></div>
 <script src="./recovery.js"></script>
 <script src="./app.js" type="module"></script>
