@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
 
 permissions:
   contents: read
@@ -19,25 +21,24 @@ jobs:
   quality:
     name: Qualitätsprüfung
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - name: Projekt laden
         uses: actions/checkout@v4
-
       - name: Node.js einrichten
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
+      - name: Offizielle LTB-Jahrespläne prüfen
+        if: github.event_name != 'pull_request'
+        run: npm run calendar:sync
       - name: Dateien und Datenlogik prüfen
         run: npm run check
-
       - name: Sauberes Produktionspaket erstellen
         run: npm run build
-
       - name: Pages-Paket bereitstellen
         if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: ./dist
 
