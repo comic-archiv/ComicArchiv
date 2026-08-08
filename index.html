@@ -131,7 +131,7 @@
 </div>
 <p aria-live="polite" class="form-message" id="export-message" role="status"></p>
 <p class="backup-help">JSON sichert deine Daten. Eigene Coverbilder sicherst du separat unter „Medien &amp; Metadaten“.</p>
-<p class="app-version-footer">Entenarchiv <span id="app-version">v4.3.1</span></p></section>
+<p class="app-version-footer">Entenarchiv <span id="app-version">v4.4.0</span></p></section>
 </main>
 <nav aria-label="Hauptnavigation" class="bottom-nav"><button class="bottom-nav-item" id="nav-calendar" type="button"><span class="bottom-nav-icon-wrap"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 8.5h15M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path></svg><span aria-label="0 neue Veröffentlichungen" class="bottom-nav-badge hidden" id="calendar-nav-badge">0</span></span><span>Kalender</span></button><button class="bottom-nav-item bottom-nav-primary" id="nav-add" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg><span>Hinzufügen</span></button><button class="bottom-nav-item" id="nav-statistics" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"></path></svg><span>Statistiken</span></button></nav><section aria-hidden="true" aria-labelledby="add-page-title" class="app-page hidden" id="add-page">
 <header class="app-page-header">
@@ -232,7 +232,15 @@
 <span class="count-badge" id="statistics-summary">0 Bücher</span>
 </header>
 <div class="app-page-content statistics-page-content">
+<section aria-labelledby="dna-title" class="panel dna-hero-card">
+<div class="subsection-heading dna-heading"><div><p class="eyebrow">Deine Sammlung als Profil</p><h3 id="dna-title">Sammlungs-DNA</h3></div><span class="count-badge" id="dna-summary">Noch keine Daten</span></div>
+<div aria-label="Persönliche Sammlungs-Highlights" class="dna-insight-grid" id="dna-insights"></div>
+</section>
 <section aria-label="Statistische Highlights" class="statistics-highlight-grid" id="statistics-highlights"></section>
+<section aria-labelledby="near-complete-title" class="panel statistics-chart-card near-complete-card">
+<div class="subsection-heading"><div><p class="eyebrow">Fast geschafft</p><h3 id="near-complete-title">Reihen kurz vor vollständig</h3></div><span class="muted-copy" id="near-complete-summary"></span></div>
+<div class="near-complete-list" id="near-complete-list"></div>
+</section>
 <section aria-labelledby="year-chart-title" class="panel statistics-chart-card">
 <div class="subsection-heading"><div><p class="eyebrow">Zeitreise</p><h3 id="year-chart-title">Erscheinungsjahre mit den meisten Büchern</h3></div><span class="muted-copy" id="year-chart-total"></span></div>
 <div class="horizontal-chart" id="year-chart"></div>
@@ -244,6 +252,11 @@
 <section aria-labelledby="series-chart-title" class="panel statistics-chart-card">
 <div class="subsection-heading"><div><p class="eyebrow">Schwergewichte</p><h3 id="series-chart-title">Größte Reihen in deiner Sammlung</h3></div></div>
 <div class="horizontal-chart" id="series-chart"></div>
+</section>
+<section aria-labelledby="quality-map-title" class="panel statistics-chart-card quality-map-card">
+<div class="subsection-heading"><div><p class="eyebrow">Qualitätslandkarte</p><h3 id="quality-map-title">Zustände je Reihe auf einen Blick</h3></div><span class="muted-copy">12 größte Reihen · Tippen öffnet die Bände</span></div>
+<div class="quality-map-legend" id="quality-map-legend"></div>
+<div class="quality-map" id="quality-map"></div>
 </section>
 <div id="statistics-condition-slot"><section aria-labelledby="condition-stats-title" class="panel condition-panel">
 <div class="subsection-heading"><h3 id="condition-stats-title">Verteilung nach Zustand</h3><span class="muted-copy" id="condition-stats-total">0 Exemplare</span></div>

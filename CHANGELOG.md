@@ -1,5 +1,27 @@
 # Änderungen
 
+## 4.4.0 – Sammlungs-DNA
+
+### Neu
+
+- interaktive Sammlungs-DNA mit persönlichem Jahrgangs-, Qualitäts-, Reihen- und Lückenprofil
+- Bereich **Fast geschafft** für Reihen mit nur noch ein bis fünf fehlenden Zielbänden
+- Qualitätslandkarte für die zwölf größten Reihen
+- klickbare Jahrgangs-, Qualitäts- und Reihen-Charts
+- klickbare Zustandsverteilung
+- Statistikfilter öffnen direkt die zugrunde liegenden Ausgaben
+- statistische Fehlband-Insights springen direkt in die passende Reihe
+- neues Modul `statistics-dna.js`
+
+### Technik
+
+- App-Version und Service-Worker-Cache auf 4.4.0 angehoben
+- Datenformat bleibt Version 9
+- Archivmodell bleibt Version 1
+- IndexedDB-Schema bleibt Version 5
+- keine Datenmigration erforderlich
+- Statistikmodul wird im Offline-Kern mitgeführt
+
 ## 4.3.1 – Erscheinungsradar und automatische Jahrespläne
 
 ### Behoben

@@ -116,6 +116,11 @@ import {
 import { createShelfUI } from "./shelf-ui.js";
 import { matchesSmartList, sortSmartList } from "./shelf.js";
 import {
+  QUALITY_BUCKETS,
+  buildStatisticsDNA,
+  formatMissingRun
+} from "./statistics-dna.js";
+import {
   RELEASE_RADAR_FILTERS,
   buildReleaseRadarItems as createReleaseRadarItems,
   createReleaseEventSignature,
@@ -184,6 +189,7 @@ const state = {
   collectionReturnTarget: "home",
   localCoverIds: new Set(),
   missingScope: "main",
+  missingReturnTarget: "home",
   openMissingSeries: new Set(),
   missingLookupSequence: 0,
   fleaMarketScope: "all",
@@ -220,6 +226,12 @@ const elements = {
   closeStatistics: document.querySelector("#close-statistics"),
   statisticsSummary: document.querySelector("#statistics-summary"),
   statisticsHighlights: document.querySelector("#statistics-highlights"),
+  dnaSummary: document.querySelector("#dna-summary"),
+  dnaInsights: document.querySelector("#dna-insights"),
+  nearCompleteList: document.querySelector("#near-complete-list"),
+  nearCompleteSummary: document.querySelector("#near-complete-summary"),
+  qualityMap: document.querySelector("#quality-map"),
+  qualityMapLegend: document.querySelector("#quality-map-legend"),
   yearChart: document.querySelector("#year-chart"),
   yearChartTotal: document.querySelector("#year-chart-total"),
   qualityChart: document.querySelector("#quality-chart"),
@@ -2383,6 +2395,10 @@ function closeCollectionPage({ returnFocus = true } = {}) {
       document.querySelector("#close-library")?.focus({ preventScroll: true });
       return;
     }
+    if (state.collectionReturnTarget === "statistics" && !elements.statisticsPage.classList.contains("hidden")) {
+      elements.closeStatistics?.focus({ preventScroll: true });
+      return;
+    }
     const target = state.collectionScope === "main"
       ? elements.openMainCollection
       : state.collectionScope === "other"
@@ -2420,8 +2436,9 @@ function renderMissingHub() {
   elements.missingCount.textContent = totalMissing === 1 ? "1 fehlt" : `${totalMissing} fehlen`;
 }
 
-function openMissingPage(scope) {
+function openMissingPage(scope, { returnTarget = "home" } = {}) {
   state.missingScope = scope === "other" ? "other" : scope === "all" ? "all" : "main";
+  state.missingReturnTarget = returnTarget;
   state.openMissingSeries = new Set();
   elements.missingPageTitle.textContent = state.missingScope === "main"
     ? "Lustige Taschenbücher"
@@ -2442,12 +2459,18 @@ function closeMissingPage({ returnFocus = true } = {}) {
   document.body.classList.remove("app-page-open");
   if (returnFocus) {
     window.setTimeout(() => {
+      if (state.missingReturnTarget === "statistics" && !elements.statisticsPage.classList.contains("hidden")) {
+        elements.closeStatistics.focus({ preventScroll: true });
+        state.missingReturnTarget = "home";
+        return;
+      }
       const target = state.missingScope === "main"
         ? elements.openMainMissing
         : state.missingScope === "other"
           ? elements.openOtherMissing
           : elements.dashboardStats;
       target.focus({ preventScroll: true });
+      state.missingReturnTarget = "home";
     }, 0);
   }
 }
@@ -3257,10 +3280,14 @@ function renderCollection() {
   const smartDefinition = state.collectionPreset.smartList
     ? SMART_LIST_DEFINITIONS_LOOKUP[state.collectionPreset.smartList]
     : null;
-  elements.smartListBanner.classList.toggle("hidden", !smartDefinition);
-  if (smartDefinition) {
-    elements.smartListTitle.textContent = smartDefinition.title;
-    elements.smartListDescription.textContent = smartDefinition.description;
+  const presetBanner = smartDefinition || (state.collectionPreset.bannerTitle ? {
+    title: state.collectionPreset.bannerTitle,
+    description: state.collectionPreset.bannerDescription || "Statistische Auswahl aus deiner Sammlung"
+  } : null);
+  elements.smartListBanner.classList.toggle("hidden", !presetBanner);
+  if (presetBanner) {
+    elements.smartListTitle.textContent = presetBanner.title;
+    elements.smartListDescription.textContent = presetBanner.description;
   }
   clearCardCoverObjectUrls();
   elements.comicList.replaceChildren();
@@ -3313,6 +3340,10 @@ function getFilteredAndSortedComics() {
     }
     if (state.collectionPreset.series && comic.series !== state.collectionPreset.series) {
       return false;
+    }
+    if (Array.isArray(state.collectionPreset.conditionCodes) && state.collectionPreset.conditionCodes.length) {
+      const allowedConditions = new Set(state.collectionPreset.conditionCodes);
+      if (!getComicCopies(comic).some((copy) => allowedConditions.has(copy.condition))) return false;
     }
     if (selectedSeries !== "all" && comic.series !== selectedSeries) {
       return false;
@@ -3674,8 +3705,10 @@ function renderStats() {
     const count = allCopies.filter((copy) => copy.condition === condition.code).length;
     const percentage = physicalCopies > 0 ? (count / physicalCopies) * 100 : 0;
 
-    const row = document.createElement("div");
-    row.className = "condition-stat-row";
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "condition-stat-row condition-stat-action";
+    row.setAttribute("aria-label", `${condition.label}: ${count} Exemplare. Bände öffnen`);
     const label = document.createElement("span");
     label.className = "condition-stat-label";
     label.textContent = condition.label;
@@ -3691,6 +3724,15 @@ function renderStats() {
     countElement.className = "condition-stat-count";
     countElement.textContent = count;
     row.append(label, bar, countElement);
+    if (count > 0) {
+      row.addEventListener("click", () => openStatisticsCollection({
+        conditionCodes: [condition.code],
+        bannerTitle: condition.label,
+        bannerDescription: `Alle Ausgaben mit mindestens einem Exemplar in Zustand ${condition.code}.`
+      }));
+    } else {
+      row.disabled = true;
+    }
     elements.conditionStats.append(row);
   });
   renderStatistics();
@@ -3698,76 +3740,291 @@ function renderStats() {
 
 function renderStatistics() {
   if (!elements.statisticsHighlights) return;
-  const physicalCopies = countPhysicalCopies(state.comics);
-  const readCount = state.comics.filter((comic) => getComicCopies(comic).some((copy) => copy.isRead)).length;
-  const readRate = state.comics.length ? Math.round((readCount / state.comics.length) * 100) : 0;
   const progressData = getSeriesProgressData();
-  const completeSeries = progressData.filter((entry) => entry.percentage >= 100).length;
-  elements.statisticsSummary.textContent = physicalCopies === 1 ? "1 Buch" : `${physicalCopies} Bücher`;
-
-  const years = new Map();
-  const seriesCounts = new Map();
-  const seriesQuality = new Map();
-  const conditions = new Map();
-  state.comics.forEach((comic) => {
-    const copies = getComicCopies(comic);
-    const count = copies.length;
-    if (Number.isInteger(comic.publicationYear)) years.set(comic.publicationYear, (years.get(comic.publicationYear) || 0) + count);
-    seriesCounts.set(comic.series, (seriesCounts.get(comic.series) || 0) + count);
-    if (!seriesQuality.has(comic.series)) seriesQuality.set(comic.series, { good: 0, total: 0 });
-    const quality = seriesQuality.get(comic.series);
-    copies.forEach((copy) => {
-      conditions.set(copy.condition, (conditions.get(copy.condition) || 0) + 1);
-      quality.total += 1;
-      if (getConditionRank(copy.condition) <= getConditionRank("1-2")) quality.good += 1;
-    });
+  const dna = buildStatisticsDNA({
+    comics: state.comics,
+    progressData,
+    missingGroups: state.missingGroups
   });
+  const readRate = dna.uniqueIssues ? Math.round((dna.readIssues / dna.uniqueIssues) * 100) : 0;
+  const extraCopyRate = dna.uniqueIssues ? Math.round((dna.extraCopies / dna.uniqueIssues) * 100) : 0;
+  elements.statisticsSummary.textContent = dna.physicalCopies === 1 ? "1 Buch" : `${dna.physicalCopies} Bücher`;
+  elements.dnaSummary.textContent = `${dna.uniqueIssues} Ausgaben · ${dna.physicalCopies} Exemplare`;
 
-  const oldestYear = years.size ? Math.min(...years.keys()) : null;
-  const mostCommonCondition = [...conditions.entries()].sort((a, b) => b[1] - a[1])[0];
+  renderDnaInsights(dna);
+
+  const oldestYear = dna.years.length ? Math.min(...dna.years.map((entry) => entry.year)) : null;
   const bestProgress = progressData.filter((entry) => entry.target > 0).sort((a, b) => b.percentage - a.percentage || b.target - a.target)[0];
   const highlightData = [
-    { label: "Lesefortschritt", value: `${readRate} %`, copy: `${readCount} von ${state.comics.length} Bänden gelesen` },
-    { label: "Vollständige Reihen", value: String(completeSeries), copy: progressData.length ? `von ${progressData.length} bewerteten Reihen` : "Noch keine Ziele berechenbar" },
-    { label: "Ältestes Erscheinungsjahr", value: oldestYear ? String(oldestYear) : "–", copy: oldestYear ? "in deiner Sammlung" : "Noch kein Jahr erfasst" },
-    { label: "Häufigster Zustand", value: mostCommonCondition ? `Zustand ${mostCommonCondition[0]}` : "–", copy: mostCommonCondition ? `${getConditionDetails(mostCommonCondition[0])?.label || ""} · ${mostCommonCondition[1]} Exemplare` : "Noch keine Bücher" },
-    { label: "Vollständigste Reihe", value: bestProgress ? `${Math.round(bestProgress.percentage)} %` : "–", copy: bestProgress ? bestProgress.series : "Noch nicht berechenbar" }
+    {
+      label: "Lesefortschritt",
+      value: `${readRate} %`,
+      copy: `${dna.readIssues} von ${dna.uniqueIssues} Ausgaben gelesen`,
+      action: () => openStatisticsCollection({ read: "unread", bannerTitle: "Noch ungelesen", bannerDescription: "Ausgaben, von denen noch kein Exemplar gelesen wurde." })
+    },
+    {
+      label: "Zusätzliche Exemplare",
+      value: String(dna.extraCopies),
+      copy: extraCopyRate ? `${extraCopyRate} % mehr Bücher als Ausgaben` : "Keine Mehrfachexemplare",
+      action: dna.extraCopies ? () => openStatisticsCollection({ duplicate: true, bannerTitle: "Mehrfach vorhanden", bannerDescription: "Ausgaben mit mindestens zwei physischen Exemplaren." }) : null
+    },
+    {
+      label: "Durchschnittszustand",
+      value: dna.averageCondition ? `Zustand ${dna.averageCondition.code}` : "–",
+      copy: dna.averageCondition?.label || "Noch keine Bewertung",
+      action: dna.averageCondition ? () => openStatisticsCollection({ conditionCodes: [dna.averageCondition.code], bannerTitle: `Zustand ${dna.averageCondition.code}`, bannerDescription: "Ausgaben rund um den rechnerischen Durchschnitt deiner Sammlung." }) : null
+    },
+    {
+      label: "Vollständige Reihen",
+      value: String(dna.completedSeries),
+      copy: dna.progressSeriesCount ? `von ${dna.progressSeriesCount} berechenbaren Reihen` : "Noch keine Ziele berechenbar",
+      action: dna.progressSeriesCount ? () => openProgressPage() : null
+    },
+    {
+      label: "Ältestes Erscheinungsjahr",
+      value: oldestYear ? String(oldestYear) : "–",
+      copy: oldestYear ? "frühester Jahrgang im Archiv" : "Noch kein Jahr erfasst",
+      action: oldestYear ? () => openStatisticsCollection({ publicationYear: oldestYear, bannerTitle: `Jahrgang ${oldestYear}`, bannerDescription: `Alle Ausgaben aus dem Erscheinungsjahr ${oldestYear}.` }) : null
+    },
+    {
+      label: "Vollständigste Reihe",
+      value: bestProgress ? `${Math.round(bestProgress.percentage)} %` : "–",
+      copy: bestProgress ? bestProgress.series : "Noch nicht berechenbar",
+      action: bestProgress ? () => openStatisticsCollection({ series: bestProgress.series, bannerTitle: bestProgress.series, bannerDescription: `Vollständigkeit ${Math.round(bestProgress.percentage)} %.` }) : null
+    }
   ];
   elements.statisticsHighlights.replaceChildren();
   highlightData.forEach((item) => {
-    const card = document.createElement("article");
-    card.className = "statistics-highlight-card";
+    const card = document.createElement(item.action ? "button" : "article");
+    if (item.action) card.type = "button";
+    card.className = `statistics-highlight-card${item.action ? " is-interactive" : ""}`;
     const label = document.createElement("span"); label.textContent = item.label;
     const value = document.createElement("strong"); value.textContent = item.value;
     const copy = document.createElement("small"); copy.textContent = item.copy;
     card.append(label, value, copy);
+    if (item.action) card.addEventListener("click", item.action);
     elements.statisticsHighlights.append(card);
   });
 
-  const yearData = [...years.entries()]
-    .sort((a, b) => b[1] - a[1] || b[0] - a[0])
-    .slice(0, 10)
-    .map(([year, count]) => ({ label: String(year), value: count, display: `${count}` }));
-  elements.yearChartTotal.textContent = years.size ? `${years.size} Jahrgänge erfasst` : "Keine Jahresdaten";
+  renderNearComplete(dna.nearComplete);
+
+  const yearData = dna.years.slice(0, 12).map((entry) => ({
+    label: String(entry.year),
+    value: entry.copies,
+    display: String(entry.copies),
+    detail: `${entry.issues} Ausgaben`,
+    action: () => openStatisticsCollection({
+      publicationYear: entry.year,
+      bannerTitle: `Jahrgang ${entry.year}`,
+      bannerDescription: `${entry.issues} Ausgaben und ${entry.copies} physische Exemplare aus ${entry.year}.`
+    })
+  }));
+  elements.yearChartTotal.textContent = dna.years.length ? `${dna.years.length} Jahrgänge erfasst` : "Keine Jahresdaten";
   renderHorizontalChart(elements.yearChart, yearData, { empty: "Noch keine Erscheinungsjahre eingetragen." });
 
-  const qualityData = [...seriesQuality.entries()]
-    .map(([series, value]) => ({
-      label: series,
-      value: value.total ? (value.good / value.total) * 100 : 0,
-      display: `${Math.round(value.total ? (value.good / value.total) * 100 : 0)} %`,
-      detail: `${value.good} von ${value.total} Exemplaren`
-    }))
-    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, "de"))
-    .slice(0, 10);
+  const qualityData = [...dna.series]
+    .sort((a, b) => b.qualityRate - a.qualityRate || b.copies - a.copies || a.series.localeCompare(b.series, "de"))
+    .slice(0, 10)
+    .map((entry) => ({
+      label: entry.series,
+      value: entry.qualityRate,
+      display: `${Math.round(entry.qualityRate)} %`,
+      detail: `${entry.qualityGood} von ${entry.copies} Exemplaren`,
+      action: () => openStatisticsCollection({
+        series: entry.series,
+        conditionCodes: ["0", "0-1", "1", "1-2"],
+        bannerTitle: `${entry.series}: 1–2 oder besser`,
+        bannerDescription: `${entry.qualityGood} Exemplare in Zustand 1–2 oder besser.`
+      })
+    }));
   renderHorizontalChart(elements.qualityChart, qualityData, { maximum: 100, empty: "Noch keine Zustände vorhanden." });
 
-  const seriesData = [...seriesCounts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "de"))
+  const seriesData = [...dna.series]
+    .sort((a, b) => b.copies - a.copies || a.series.localeCompare(b.series, "de"))
     .slice(0, 10)
-    .map(([series, count]) => ({ label: series, value: count, display: `${count}` }));
+    .map((entry) => ({
+      label: entry.series,
+      value: entry.copies,
+      display: String(entry.copies),
+      detail: `${entry.issues} Ausgaben`,
+      action: () => openStatisticsCollection({
+        series: entry.series,
+        bannerTitle: entry.series,
+        bannerDescription: `${entry.issues} Ausgaben · ${entry.copies} physische Exemplare.`
+      })
+    }));
   renderHorizontalChart(elements.seriesChart, seriesData, { empty: "Noch keine Reihen vorhanden." });
+  renderQualityMap(dna.series);
 }
+
+function renderDnaInsights(dna) {
+  elements.dnaInsights.replaceChildren();
+  const insights = [
+    dna.strongestYear ? {
+      kicker: "Stärkster Jahrgang",
+      value: String(dna.strongestYear.year),
+      copy: `${dna.strongestYear.copies} Bücher aus diesem Erscheinungsjahr`,
+      action: () => openStatisticsCollection({ publicationYear: dna.strongestYear.year, bannerTitle: `Jahrgang ${dna.strongestYear.year}`, bannerDescription: "Dein stärkster Erscheinungsjahrgang." })
+    } : null,
+    dna.bestQualitySeries ? {
+      kicker: "Beste Qualitätsquote",
+      value: `${Math.round(dna.bestQualitySeries.qualityRate)} %`,
+      copy: `${dna.bestQualitySeries.series} · Zustand 1–2 oder besser`,
+      action: () => openStatisticsCollection({ series: dna.bestQualitySeries.series, conditionCodes: ["0", "0-1", "1", "1-2"], bannerTitle: dna.bestQualitySeries.series, bannerDescription: "Exemplare in Zustand 1–2 oder besser." })
+    } : null,
+    dna.biggestSeries ? {
+      kicker: "Größte Reihe",
+      value: `${dna.biggestSeries.copies}`,
+      copy: `${dna.biggestSeries.series} · ${dna.biggestSeries.issues} Ausgaben`,
+      action: () => openStatisticsCollection({ series: dna.biggestSeries.series, bannerTitle: dna.biggestSeries.series, bannerDescription: "Deine größte Reihe nach physischen Exemplaren." })
+    } : null,
+    dna.largestGap ? {
+      kicker: "Größte Lücke",
+      value: String(dna.largestGap.length),
+      copy: `${dna.largestGap.series} · ${formatMissingRun(dna.largestGap)}`,
+      action: () => openStatisticsMissingSeries(dna.largestGap.series)
+    } : null
+  ].filter(Boolean);
+
+  if (!insights.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted-copy";
+    empty.textContent = "Mit mehr erfassten Bänden entstehen hier automatisch persönliche Erkenntnisse.";
+    elements.dnaInsights.append(empty);
+    return;
+  }
+
+  insights.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "dna-insight-card";
+    const kicker = document.createElement("span"); kicker.textContent = item.kicker;
+    const value = document.createElement("strong"); value.textContent = item.value;
+    const copy = document.createElement("small"); copy.textContent = item.copy;
+    const arrow = document.createElement("span"); arrow.className = "dna-insight-arrow"; arrow.textContent = "›";
+    button.append(kicker, value, copy, arrow);
+    button.addEventListener("click", item.action);
+    elements.dnaInsights.append(button);
+  });
+}
+
+function renderNearComplete(entries) {
+  elements.nearCompleteList.replaceChildren();
+  const source = (Array.isArray(entries) ? entries : []).slice(0, 8);
+  elements.nearCompleteSummary.textContent = source.length ? `${source.length} Reihen` : "Keine Reihe mit 1–5 Lücken";
+  if (!source.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted-copy";
+    empty.textContent = "Sobald einer Reihe höchstens fünf Zielbände fehlen, erscheint sie hier.";
+    elements.nearCompleteList.append(empty);
+    return;
+  }
+  source.forEach((entry) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "near-complete-row";
+    const copy = document.createElement("span");
+    const title = document.createElement("strong"); title.textContent = entry.series;
+    const detail = document.createElement("small"); detail.textContent = `${entry.presentWithinTarget} von ${entry.target} vorhanden`;
+    copy.append(title, detail);
+    const side = document.createElement("span");
+    side.className = "near-complete-side";
+    const missing = document.createElement("strong"); missing.textContent = `${entry.missing} ${entry.missing === 1 ? "fehlt" : "fehlen"}`;
+    const percentage = document.createElement("small"); percentage.textContent = `${Math.round(entry.percentage)} %`;
+    side.append(missing, percentage);
+    button.append(copy, side);
+    button.addEventListener("click", () => openStatisticsMissingSeries(entry.series));
+    elements.nearCompleteList.append(button);
+  });
+}
+
+function renderQualityMap(seriesEntries) {
+  elements.qualityMapLegend.replaceChildren();
+  QUALITY_BUCKETS.forEach((bucket) => {
+    const chip = document.createElement("span");
+    chip.className = `quality-map-legend-item quality-bucket-${bucket.id}`;
+    chip.textContent = bucket.label;
+    elements.qualityMapLegend.append(chip);
+  });
+
+  elements.qualityMap.replaceChildren();
+  const rows = [...(Array.isArray(seriesEntries) ? seriesEntries : [])]
+    .filter((entry) => entry.copies > 0)
+    .sort((a, b) => b.copies - a.copies || a.series.localeCompare(b.series, "de"))
+    .slice(0, 12);
+  if (!rows.length) {
+    const empty = document.createElement("p"); empty.className = "muted-copy"; empty.textContent = "Noch keine Zustandsdaten vorhanden.";
+    elements.qualityMap.append(empty);
+    return;
+  }
+
+  rows.forEach((entry) => {
+    const row = document.createElement("div");
+    row.className = "quality-map-row";
+    const heading = document.createElement("button");
+    heading.type = "button";
+    heading.className = "quality-map-series";
+    const title = document.createElement("strong"); title.textContent = entry.series;
+    const meta = document.createElement("small"); meta.textContent = `${entry.copies} Exemplare`;
+    heading.append(title, meta);
+    heading.addEventListener("click", () => openStatisticsCollection({ series: entry.series, bannerTitle: entry.series, bannerDescription: `${entry.copies} physische Exemplare.` }));
+    row.append(heading);
+
+    const cells = document.createElement("div");
+    cells.className = "quality-map-cells";
+    QUALITY_BUCKETS.forEach((bucket) => {
+      const count = entry.qualityBuckets[bucket.id] || 0;
+      const percentage = entry.copies ? (count / entry.copies) * 100 : 0;
+      const cell = document.createElement("button");
+      cell.type = "button";
+      cell.className = `quality-map-cell quality-bucket-${bucket.id}`;
+      cell.disabled = count === 0;
+      cell.title = `${bucket.label}: ${count} Exemplare`;
+      cell.setAttribute("aria-label", `${entry.series}, ${bucket.label}: ${count} Exemplare. Bände öffnen`);
+      const value = document.createElement("strong"); value.textContent = String(count);
+      const rate = document.createElement("small"); rate.textContent = `${Math.round(percentage)} %`;
+      cell.append(value, rate);
+      if (count > 0) {
+        cell.addEventListener("click", () => openStatisticsCollection({
+          series: entry.series,
+          conditionCodes: [...bucket.codes],
+          bannerTitle: `${entry.series}: ${bucket.label}`,
+          bannerDescription: `${count} Exemplare in diesem Zustandsbereich.`
+        }));
+      }
+      cells.append(cell);
+    });
+    row.append(cells);
+    elements.qualityMap.append(row);
+  });
+}
+
+function openStatisticsCollection(presets = {}) {
+  openCollectionPage("all", {
+    ...presets,
+    returnTarget: "statistics",
+    title: presets.title || "Statistische Auswahl"
+  });
+}
+
+function openStatisticsMissingSeries(series) {
+  state.missingReturnTarget = "statistics";
+  state.missingScope = "all";
+  state.openMissingSeries = new Set([series]);
+  elements.missingPageTitle.textContent = `Fehlende Bände · ${series}`;
+  renderMissingBands({ forceOpenSeries: series });
+  elements.missingPage.classList.remove("hidden");
+  elements.missingPage.setAttribute("aria-hidden", "false");
+  document.body.classList.add("app-page-open");
+  elements.missingPage.scrollTop = 0;
+  window.setTimeout(() => {
+    const details = [...elements.missingList.querySelectorAll("details[data-series]")]
+      .find((entry) => entry.dataset.series === series);
+    details?.scrollIntoView({ block: "start" });
+    elements.closeMissingPage.focus({ preventScroll: true });
+  }, 0);
+}
+
 
 function renderHorizontalChart(container, data, options = {}) {
   container.replaceChildren();
@@ -3780,8 +4037,9 @@ function renderHorizontalChart(container, data, options = {}) {
   }
   const maximum = Number(options.maximum) || Math.max(...data.map((item) => Number(item.value) || 0), 1);
   data.forEach((item) => {
-    const row = document.createElement("div");
-    row.className = "horizontal-chart-row";
+    const row = document.createElement(item.action ? "button" : "div");
+    if (item.action) row.type = "button";
+    row.className = `horizontal-chart-row${item.action ? " is-interactive" : ""}`;
     const heading = document.createElement("div");
     heading.className = "horizontal-chart-heading";
     const label = document.createElement("span"); label.textContent = item.label;
@@ -3798,6 +4056,7 @@ function renderHorizontalChart(container, data, options = {}) {
       detail.textContent = item.detail;
       row.append(detail);
     }
+    if (item.action) row.addEventListener("click", item.action);
     container.append(row);
   });
 }
