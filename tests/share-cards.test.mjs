@@ -21,7 +21,7 @@ const context = {
 test("Share Card Meine Sammlung verwendet ausschließlich Sammlungsdaten", () => {
   const payload = buildShareCardPayload("collection", context);
   assert.equal(payload.headline, "681 Bücher");
-  assert.deepEqual(payload.stats.map((entry) => entry.value), ["27", "182", "39"]);
+  assert.deepEqual(payload.stats.map((entry) => entry.value), ["27", "642", "182", "39"]);
 });
 
 test("Share Card Hauptreihe bildet Reihenziel und Vollständigkeit ab", () => {
@@ -34,7 +34,7 @@ test("Meilenstein- und DNA-Karten bleiben feste Editorial-Templates", () => {
   const milestone = buildShareCardPayload("milestone", context);
   const dna = buildShareCardPayload("dna", context);
   assert.equal(milestone.headline, "LTB History komplett");
-  assert.equal(milestone.note, "Aus meinem Entenarchiv.");
+  assert.equal(milestone.note, "Aus meinem Entenarchiv");
   assert.equal(dna.headline, "1997");
   assert.equal(dna.stats[2].value, "87 %");
 });

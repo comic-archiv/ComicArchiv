@@ -17,17 +17,20 @@ export function buildShareCardPayload(template, context = {}) {
   const generatedAt = context.generatedAt instanceof Date ? context.generatedAt : new Date();
 
   if (template === "main-series") {
+    const percentage = main ? Number(main.percentage || 0) : 0;
     return {
       template,
-      kicker: "LUSTIGES TASCHENBUCH",
-      headline: main ? `${main.presentWithinTarget} / ${main.target}` : "Noch kein Ziel",
-      subline: main ? `${formatPercent(main.percentage)} vollständig` : "Lege zuerst ein Sammlungsziel für die Hauptreihe fest.",
+      sectionLabel: "Lustiges Taschenbuch",
+      headline: main ? `${formatNumber(main.presentWithinTarget)} / ${formatNumber(main.target)}` : "Noch kein Ziel",
+      subline: main ? `${formatPercent(percentage)} vollständig` : "Lege zuerst ein Sammlungsziel für die Hauptreihe fest.",
       stats: main ? [
-        { value: String(main.missing), label: "fehlen" },
-        { value: String(main.presentWithinTarget), label: "vorhanden" },
-        { value: String(main.target), label: "Zielbände" }
+        { value: formatNumber(main.presentWithinTarget), label: "vorhanden" },
+        { value: formatNumber(main.missing), label: "fehlen" },
+        { value: formatNumber(main.target), label: "Zielbände" },
+        { value: formatPercent(percentage), label: "Fortschritt" }
       ] : [],
       note: "Meine LTB-Sammlung",
+      progress: percentage,
       generatedAt
     };
   }
@@ -35,11 +38,17 @@ export function buildShareCardPayload(template, context = {}) {
   if (template === "milestone") {
     return {
       template,
-      kicker: milestone?.eyebrow?.toUpperCase() || "MEILENSTEIN",
+      sectionLabel: milestone?.eyebrow || "Meilenstein",
       headline: milestone?.title || "Noch kein Meilenstein",
       subline: milestone?.copy || "Mit deiner Sammlung entstehen hier automatisch Meilensteine.",
-      stats: [],
-      note: "Aus meinem Entenarchiv.",
+      stats: [
+        { value: formatNumber(dna.physicalCopies || 0), label: "Bücher" },
+        { value: formatNumber(dna.uniqueIssues || 0), label: "Ausgaben" },
+        { value: formatNumber(dna.completedSeries || 0), label: "Reihen komplett" },
+        { value: milestone?.value != null ? formatNumber(milestone.value) : "–", label: milestone?.type === "progress" ? "Prozentmarke" : "Meilenstein" }
+      ],
+      note: "Aus meinem Entenarchiv",
+      progress: milestone?.type === "progress" ? Number(milestone.value || 0) : null,
       generatedAt
     };
   }
@@ -49,28 +58,30 @@ export function buildShareCardPayload(template, context = {}) {
     const bestQuality = dna.bestQualitySeries || null;
     return {
       template,
-      kicker: "SAMMLUNGS-DNA",
+      sectionLabel: "Sammlungs-DNA",
       headline: strongestYear ? String(strongestYear.year) : "Dein Archiv",
-      subline: strongestYear ? `Mein stärkster Jahrgang mit ${strongestYear.copies} Büchern.` : "Noch nicht genug Jahresdaten für eine Zeitreise.",
+      subline: strongestYear ? `Mein stärkster Jahrgang mit ${formatNumber(strongestYear.copies)} Büchern.` : "Noch nicht genug Jahresdaten für eine Zeitreise.",
       stats: [
-        { value: String(dna.physicalCopies || 0), label: "Bücher" },
-        { value: String(dna.uniqueIssues || 0), label: "Ausgaben" },
-        { value: bestQuality ? `${Math.round(bestQuality.qualityRate)} %` : "–", label: "beste Qualitätsquote" }
+        { value: formatNumber(dna.physicalCopies || 0), label: "Bücher" },
+        { value: formatNumber(dna.uniqueIssues || 0), label: "Ausgaben" },
+        { value: bestQuality ? `${Math.round(bestQuality.qualityRate)} %` : "–", label: "Top-Qualität" },
+        { value: formatNumber(dna.extraCopies || 0), label: "Extra-Exemplare" }
       ],
-      note: bestQuality ? bestQuality.series : "Entenarchiv",
+      note: bestQuality ? `Beste Qualitätsquote: ${bestQuality.series}` : "Entenarchiv",
       generatedAt
     };
   }
 
   return {
     template: "collection",
-    kicker: "MEINE SAMMLUNG",
-    headline: `${dna.physicalCopies || 0} Bücher`,
-    subline: `${dna.uniqueIssues || 0} unterschiedliche Ausgaben im Entenarchiv.`,
+    sectionLabel: "Meine Sammlung",
+    headline: `${formatNumber(dna.physicalCopies || 0)} Bücher`,
+    subline: `${formatNumber(dna.uniqueIssues || 0)} unterschiedliche Ausgaben im Entenarchiv.`,
     stats: [
-      { value: String(totalSeries), label: "Reihen" },
-      { value: String(totalMissing), label: "fehlen" },
-      { value: String(dna.extraCopies || 0), label: "zusätzliche Exemplare" }
+      { value: formatNumber(totalSeries), label: "Reihen" },
+      { value: formatNumber(dna.uniqueIssues || 0), label: "Ausgaben" },
+      { value: formatNumber(totalMissing), label: "fehlen" },
+      { value: formatNumber(dna.extraCopies || 0), label: "Extra-Exemplare" }
     ],
     note: "Privates Comicarchiv",
     generatedAt
@@ -86,103 +97,107 @@ export async function renderShareCard(canvas, payload, { iconUrl = "./icons/icon
 
   const colors = {
     paper: "#F7F4EE",
+    paperRaised: "#FFFDF8",
     navy: "#0B1020",
     blue: "#005EA8",
+    blueSoft: "#E8F2FA",
     yellow: "#EFB423",
     green: "#16834A",
     muted: "#657083",
-    line: "#C9C6BE"
+    line: "#D7D0C4"
   };
 
   context.clearRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
-  context.fillStyle = colors.paper;
+  context.fillStyle = colors.blue;
   context.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
-  drawPrintTexture(context, colors.navy);
-
-  context.fillStyle = colors.blue;
-  context.fillRect(0, 0, 44, CARD_HEIGHT);
-  context.fillStyle = colors.yellow;
-  context.fillRect(44, 0, 18, CARD_HEIGHT);
-
-  drawRegistrationMarks(context, colors.navy);
-
-  context.fillStyle = colors.navy;
-  context.font = "700 38px Arial, sans-serif";
-  context.letterSpacing = "2px";
-  context.fillText("ENTENARCHIV", 120, 130);
-  context.font = "700 24px Arial, sans-serif";
-  context.fillStyle = colors.blue;
-  context.fillText(String(payload.kicker || "SAMMLUNG"), 120, 218);
-
-  context.fillStyle = colors.yellow;
-  context.fillRect(120, 258, 840, 12);
-
-  const headline = String(payload.headline || "Entenarchiv");
-  context.fillStyle = colors.navy;
-  context.font = headline.length > 24 ? "800 88px Arial, sans-serif" : "800 118px Arial, sans-serif";
-  const headlineLines = wrapText(context, headline, 840, headline.length > 24 ? 100 : 126, 3);
-  let y = 390;
-  headlineLines.forEach((line) => {
-    context.fillText(line, 120, y);
-    y += headline.length > 24 ? 100 : 126;
-  });
-
-  context.font = "500 34px Arial, sans-serif";
-  context.fillStyle = colors.muted;
-  y += 20;
-  const sublines = wrapText(context, String(payload.subline || ""), 820, 48, 4);
-  sublines.forEach((line) => {
-    context.fillText(line, 120, y);
-    y += 48;
-  });
-
-  const stats = Array.isArray(payload.stats) ? payload.stats.slice(0, 3) : [];
-  if (stats.length) {
-    const statsTop = Math.max(820, y + 46);
-    context.strokeStyle = colors.line;
-    context.lineWidth = 2;
-    context.beginPath();
-    context.moveTo(120, statsTop - 34);
-    context.lineTo(960, statsTop - 34);
-    context.stroke();
-    const cellWidth = 840 / stats.length;
-    stats.forEach((stat, index) => {
-      const x = 120 + index * cellWidth;
-      if (index > 0) {
-        context.beginPath();
-        context.moveTo(x, statsTop - 18);
-        context.lineTo(x, statsTop + 120);
-        context.stroke();
-      }
-      context.fillStyle = index === 0 ? colors.blue : colors.navy;
-      context.font = "800 52px Arial, sans-serif";
-      context.fillText(String(stat.value || "–"), x + 18, statsTop + 34);
-      context.fillStyle = colors.muted;
-      context.font = "600 23px Arial, sans-serif";
-      const labelLines = wrapText(context, String(stat.label || ""), cellWidth - 36, 30, 2);
-      labelLines.forEach((line, lineIndex) => context.fillText(line, x + 18, statsTop + 72 + lineIndex * 28));
-    });
-  }
-
-  const footerY = 1190;
-  context.fillStyle = colors.navy;
-  context.fillRect(120, footerY, 840, 2);
-  context.font = "700 24px Arial, sans-serif";
-  context.fillStyle = colors.navy;
-  context.fillText(String(payload.note || "Entenarchiv"), 120, footerY + 64);
-  context.font = "500 20px Arial, sans-serif";
-  context.fillStyle = colors.muted;
-  context.fillText(formatDate(payload.generatedAt), 120, footerY + 103);
+  drawBlueTexture(context);
 
   const icon = await loadImage(iconUrl).catch(() => null);
-  if (icon) context.drawImage(icon, 866, footerY + 28, 94, 94);
+  if (icon) {
+    drawRoundedImage(context, icon, 72, 54, 98, 98, 24);
+  }
 
-  context.fillStyle = colors.green;
-  context.fillRect(120, 1305, 180, 8);
-  context.fillStyle = colors.yellow;
-  context.fillRect(310, 1305, 110, 8);
+  context.textBaseline = "alphabetic";
+  context.textAlign = "left";
+  context.fillStyle = "#FFFFFF";
+  context.font = "800 39px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
+  context.fillText("ENTENARCHIV", 192, 102);
+  context.fillStyle = "rgba(255,255,255,0.76)";
+  context.font = "700 21px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
+  context.fillText("SAMMLUNGSKARTE", 192, 137);
+
+  context.textAlign = "right";
+  context.fillStyle = "rgba(255,255,255,0.78)";
+  context.font = "700 21px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
+  context.fillText(formatDate(payload.generatedAt).toUpperCase(), 1008, 105);
+  context.textAlign = "left";
+
+  const cardX = 54;
+  const cardY = 188;
+  const cardW = 972;
+  const cardH = 1058;
+  fillRoundedRect(context, cardX, cardY, cardW, cardH, 42, colors.paper);
+
   context.fillStyle = colors.blue;
-  context.fillRect(430, 1305, 530, 8);
+  context.font = "800 25px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
+  context.fillText(String(payload.sectionLabel || "Meine Sammlung").toUpperCase(), 108, 266);
+
+  context.fillStyle = colors.yellow;
+  fillRoundedRect(context, 108, 296, 116, 10, 5, colors.yellow);
+
+  const headline = String(payload.headline || "Entenarchiv");
+  const headlineFont = getHeadlineFont(headline);
+  context.fillStyle = colors.navy;
+  context.font = headlineFont;
+  const headlineLines = wrapText(context, headline, 760, 106, 2);
+  let headlineY = 424;
+  headlineLines.forEach((line) => {
+    context.fillText(line, 108, headlineY);
+    headlineY += 108;
+  });
+
+  context.font = "600 34px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
+  context.fillStyle = colors.muted;
+  const sublines = wrapText(context, String(payload.subline || ""), 770, 48, 3);
+  let sublineY = Math.max(566, headlineY + 14);
+  sublines.forEach((line) => {
+    context.fillText(line, 108, sublineY);
+    sublineY += 48;
+  });
+
+  if (Number.isFinite(Number(payload.progress))) {
+    const progressY = Math.min(720, sublineY + 30);
+    fillRoundedRect(context, 108, progressY, 864, 18, 9, colors.blueSoft);
+    const progressWidth = Math.max(0, Math.min(864, 864 * Number(payload.progress) / 100));
+    if (progressWidth > 0) fillRoundedRect(context, 108, progressY, progressWidth, 18, 9, colors.yellow);
+    sublineY = progressY + 54;
+  }
+
+  const stats = normalizeStats(payload.stats);
+  const gridTop = Math.max(738, sublineY + 20);
+  drawStatsGrid(context, stats, { x: 108, y: gridTop, width: 864, colors });
+
+  const footerTop = 1094;
+  context.strokeStyle = colors.line;
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(108, footerTop);
+  context.lineTo(972, footerTop);
+  context.stroke();
+
+  context.fillStyle = colors.navy;
+  context.font = "800 25px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
+  const noteLines = wrapText(context, String(payload.note || "Entenarchiv"), 650, 34, 2);
+  noteLines.forEach((line, index) => context.fillText(line, 108, 1145 + index * 34));
+
+  context.fillStyle = colors.muted;
+  context.font = "600 20px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
+  context.fillText("Erstellt mit Entenarchiv", 108, 1208);
+
+  if (icon) context.drawImage(icon, 868, 1120, 92, 92);
+
+  context.fillStyle = colors.yellow;
+  fillRoundedRect(context, 54, 1284, 972, 12, 6, colors.yellow);
 
   return canvas;
 }
@@ -196,63 +211,126 @@ export function canvasToPngBlob(canvas) {
   });
 }
 
-function drawPrintTexture(context, color) {
+function normalizeStats(stats) {
+  const source = Array.isArray(stats) ? stats.slice(0, 4) : [];
+  while (source.length < 4) source.push({ value: "–", label: "" });
+  return source;
+}
+
+function drawStatsGrid(context, stats, { x, y, width, colors }) {
+  const gap = 18;
+  const cellWidth = (width - gap) / 2;
+  const cellHeight = 132;
+  stats.slice(0, 4).forEach((stat, index) => {
+    const column = index % 2;
+    const row = Math.floor(index / 2);
+    const cellX = x + column * (cellWidth + gap);
+    const cellY = y + row * (cellHeight + gap);
+    fillRoundedRect(context, cellX, cellY, cellWidth, cellHeight, 24, index === 0 ? colors.blueSoft : colors.paperRaised);
+    context.strokeStyle = index === 0 ? "#B9D9F1" : colors.line;
+    context.lineWidth = 2;
+    strokeRoundedRect(context, cellX, cellY, cellWidth, cellHeight, 24);
+
+    context.fillStyle = index === 0 ? colors.blue : colors.navy;
+    context.font = "850 43px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
+    context.fillText(String(stat.value || "–"), cellX + 28, cellY + 56);
+    context.fillStyle = colors.muted;
+    context.font = "650 22px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
+    const labels = wrapText(context, String(stat.label || ""), cellWidth - 56, 27, 2);
+    labels.forEach((line, lineIndex) => context.fillText(line, cellX + 28, cellY + 92 + lineIndex * 25));
+  });
+}
+
+function drawBlueTexture(context) {
   context.save();
-  context.globalAlpha = 0.055;
-  context.fillStyle = color;
-  for (let y = 28; y < CARD_HEIGHT; y += 30) {
-    for (let x = 88 + (Math.floor(y / 30) % 2) * 10; x < CARD_WIDTH; x += 30) {
-      context.beginPath();
-      context.arc(x, y, 1.5, 0, Math.PI * 2);
-      context.fill();
-    }
+  context.globalAlpha = 0.09;
+  context.strokeStyle = "#FFFFFF";
+  context.lineWidth = 1;
+  for (let x = -CARD_HEIGHT; x < CARD_WIDTH; x += 52) {
+    context.beginPath();
+    context.moveTo(x, CARD_HEIGHT);
+    context.lineTo(x + CARD_HEIGHT, 0);
+    context.stroke();
   }
   context.restore();
 }
 
-function drawRegistrationMarks(context, color) {
+function drawRoundedImage(context, image, x, y, width, height, radius) {
   context.save();
-  context.strokeStyle = color;
-  context.lineWidth = 2;
-  [[96, 82], [984, 82], [96, 1268], [984, 1268]].forEach(([x, y]) => {
-    context.beginPath();
-    context.moveTo(x - 11, y);
-    context.lineTo(x + 11, y);
-    context.moveTo(x, y - 11);
-    context.lineTo(x, y + 11);
-    context.stroke();
-  });
+  roundedRectPath(context, x, y, width, height, radius);
+  context.clip();
+  context.drawImage(image, x, y, width, height);
   context.restore();
+}
+
+function fillRoundedRect(context, x, y, width, height, radius, fillStyle) {
+  context.save();
+  roundedRectPath(context, x, y, width, height, radius);
+  context.fillStyle = fillStyle;
+  context.fill();
+  context.restore();
+}
+
+function strokeRoundedRect(context, x, y, width, height, radius) {
+  context.save();
+  roundedRectPath(context, x, y, width, height, radius);
+  context.stroke();
+  context.restore();
+}
+
+function roundedRectPath(context, x, y, width, height, radius) {
+  const r = Math.max(0, Math.min(radius, width / 2, height / 2));
+  context.beginPath();
+  context.moveTo(x + r, y);
+  context.lineTo(x + width - r, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + r);
+  context.lineTo(x + width, y + height - r);
+  context.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  context.lineTo(x + r, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - r);
+  context.lineTo(x, y + r);
+  context.quadraticCurveTo(x, y, x + r, y);
+  context.closePath();
+}
+
+function getHeadlineFont(headline) {
+  if (headline.length > 28) return "850 72px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
+  if (headline.length > 18) return "850 84px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
+  return "850 102px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
 }
 
 function wrapText(context, text, maxWidth, lineHeight, maxLines) {
   const words = String(text || "").split(/\s+/).filter(Boolean);
   const lines = [];
   let line = "";
+  let consumed = 0;
   for (const word of words) {
     const candidate = line ? `${line} ${word}` : word;
     if (context.measureText(candidate).width <= maxWidth || !line) {
       line = candidate;
+      consumed += 1;
       continue;
     }
     lines.push(line);
     line = word;
+    consumed += 1;
     if (lines.length >= maxLines - 1) break;
   }
   if (line && lines.length < maxLines) lines.push(line);
-  if (words.length && lines.length === maxLines) {
-    const reconstructed = lines.join(" ");
-    if (reconstructed.length < text.length) {
-      let last = lines[lines.length - 1];
-      while (last.length > 1 && context.measureText(`${last}…`).width > maxWidth) last = last.slice(0, -1);
-      lines[lines.length - 1] = `${last.replace(/[\s.,;:!?-]+$/g, "")}…`;
-    }
+  if (words.length > consumed && lines.length) {
+    let last = lines[lines.length - 1];
+    while (last.length > 1 && context.measureText(`${last}…`).width > maxWidth) last = last.slice(0, -1);
+    lines[lines.length - 1] = `${last.replace(/[\s.,;:!?-]+$/g, "")}…`;
   }
   return lines.length ? lines : [""];
 }
 
 function formatPercent(value) {
   return `${Number(value || 0).toLocaleString("de-DE", { maximumFractionDigits: 1 })} %`;
+}
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString("de-DE");
 }
 
 function formatDate(value) {

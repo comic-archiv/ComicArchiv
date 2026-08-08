@@ -1,5 +1,26 @@
 # Änderungen
 
+## 4.5.1 – Design-System & Layout-Polish
+
+### Design
+
+- zentrale Tokens für Karten-, Control- und Modalradien
+- quadratische, einheitliche Zurück-Buttons auf allen Unterseiten
+- konsistente Kartenhöhen, Abstände, Schatten und Typografie
+- kompakteres Backup-Center und ruhigere Dashboard-Hierarchie
+- geglättete Layouts für Sammlung, Kalender, Erscheinungsradar, Scanner, Statistik und Banddetails
+- Share Cards vollständig neu komponiert: kompakter Aufbau, Hero-Kennzahl, 2×2-Faktenraster und deutlich weniger Leerraum
+- Entenarchiv-Icon im Header ohne zusätzliche schiefe Umrandung
+
+### Technik
+
+- App-Version und Service-Worker-Cache auf 4.5.1 angehoben
+- Datenformat bleibt Version 9
+- Archivmodell bleibt Version 1
+- IndexedDB-Schema bleibt Version 5
+- keine Datenmigration erforderlich
+- 122 automatisierte Tests
+
 ## 4.5.0 – Sammelziele, Wunschliste & Share Cards
 
 ### Neu

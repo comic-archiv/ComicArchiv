@@ -9479,3 +9479,523 @@ body.app-page-open > .app-header {
   border-radius: 8px;
   font-size: 0.7rem;
 }
+
+/* --------------------------------------------------------------------------
+   Entenarchiv 4.5.1: Design-System & Layout-Polish
+   -------------------------------------------------------------------------- */
+:root {
+  --radius-card: 18px;
+  --radius-control: 14px;
+  --radius-sheet: 24px;
+  --space-1: 6px;
+  --space-2: 10px;
+  --space-3: 14px;
+  --space-4: 18px;
+  --space-5: 24px;
+  --shadow-card: 0 10px 28px color-mix(in srgb, #000 18%, transparent);
+  --shadow-soft: 0 6px 18px color-mix(in srgb, #000 11%, transparent);
+}
+
+:root[data-theme="light"] {
+  --shadow-card: 0 10px 28px rgba(66, 50, 22, 0.09);
+  --shadow-soft: 0 6px 18px rgba(66, 50, 22, 0.07);
+}
+
+/* Ruhigere Typografie und einheitliche vertikale Hierarchie. */
+h1,
+h2,
+h3,
+.stat-value,
+.statistics-highlight-card strong,
+.series-hero-heading > strong,
+.release-radar-metrics strong {
+  text-wrap: balance;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.12;
+}
+
+.eyebrow {
+  margin-bottom: 4px;
+  line-height: 1.25;
+}
+
+.section-heading,
+.subsection-heading {
+  gap: var(--space-3);
+}
+
+.section-heading {
+  margin-bottom: var(--space-4);
+}
+
+.subsection-heading {
+  margin-bottom: var(--space-3);
+}
+
+/* App-Branding ohne zusätzliches schiefes Kartenmotiv um das echte Icon. */
+.brand {
+  gap: 11px;
+}
+
+.brand-mark.brand-logo {
+  width: 44px;
+  height: 44px;
+  transform: none;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Einheitliche Kontrollflächen. */
+.icon-button,
+.primary-button,
+.secondary-button,
+.danger-button,
+.text-button,
+.compact-button,
+.inline-action,
+.link-button,
+.file-button,
+.app-page-back,
+.bottom-nav-item,
+.scanner-mode-button,
+.release-radar-filter-tabs button {
+  border-radius: var(--radius-control);
+}
+
+.primary-button,
+.secondary-button,
+.danger-button {
+  min-height: 46px;
+  line-height: 1.2;
+}
+
+input,
+select,
+textarea,
+.check-row,
+.release-radar-priority,
+.release-radar-priority select {
+  border-radius: var(--radius-control);
+}
+
+/* Der Zurück-Button ist auf jeder Unterseite dieselbe quadratische Icon-Aktion. */
+.app-page-header {
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: calc(72px + env(safe-area-inset-top));
+  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+  background: var(--page-bg);
+  box-shadow: 0 8px 22px color-mix(in srgb, #000 13%, transparent);
+}
+
+.app-page-back {
+  display: inline-grid;
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.app-page-back span {
+  display: none !important;
+}
+
+.app-page-back svg {
+  width: 22px;
+  height: 22px;
+}
+
+.app-page-title {
+  align-self: center;
+}
+
+.app-page-title h2 {
+  margin: 0;
+  font-size: clamp(1.12rem, 5vw, 1.38rem);
+  line-height: 1.13;
+}
+
+.app-page-title .eyebrow {
+  margin-bottom: 2px;
+}
+
+@media (max-width: 430px) {
+  .app-page-header {
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+  }
+}
+
+/* Einheitliches Kartenraster: nur Chips/Pills bleiben bewusst rund. */
+.panel,
+.stat-card,
+.backup-status-card,
+.collection-hub-card,
+.calendar-overview-card,
+.calendar-event-card,
+.calendar-catalog-card,
+.media-action-panel,
+.media-settings-panel,
+.diagnostics-card,
+.copy-manager-card,
+.series-manager-card,
+.release-radar-home-card,
+.release-radar-launch,
+.release-radar-hero,
+.release-radar-card,
+.release-radar-settings,
+.statistics-highlight-card,
+.statistics-chart-card,
+.dna-hero-card,
+.dna-insight-card,
+.near-complete-card,
+.quality-map-card,
+.collector-mission-card,
+.scanner-mode-panel,
+.assistant-result-card,
+.condition-guide-item,
+.cover-editor,
+.library-intro-panel,
+.progress-overview-card,
+.archive-migration-card,
+.flea-market-item,
+.missing-band,
+.series-hero,
+.series-toolbar,
+.smart-list-banner,
+.smart-list-card {
+  border-radius: var(--radius-card);
+}
+
+.panel,
+.stat-card,
+.collection-hub-card,
+.backup-status-card,
+.statistics-highlight-card,
+.statistics-chart-card,
+.dna-insight-card,
+.near-complete-card,
+.quality-map-card,
+.collector-mission-card {
+  box-shadow: var(--shadow-soft);
+}
+
+/* Dashboard: gleiche Höhen, klare Zahl-/Label-Achse. */
+.stats-grid {
+  gap: 9px;
+}
+
+.stat-card {
+  display: grid;
+  min-height: 86px;
+  align-content: center;
+  gap: 7px;
+  padding: 13px 10px;
+  text-align: center;
+}
+
+.stat-label {
+  order: 2;
+  margin: 0;
+  font-size: 0.7rem;
+  line-height: 1.15;
+}
+
+.stat-value {
+  order: 1;
+  font-size: clamp(1.6rem, 7vw, 2.15rem);
+  font-variant-numeric: tabular-nums;
+  line-height: 0.95;
+}
+
+.stat-card-highlight {
+  min-height: 86px;
+}
+
+/* Home-Hubs: weniger optische Sprünge zwischen Icon, Text und Counter. */
+.collection-hub-card {
+  grid-template-columns: 50px minmax(0, 1fr) auto 18px;
+  min-height: 86px;
+  gap: 11px;
+  padding: 13px;
+}
+
+.collection-hub-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: var(--radius-control);
+}
+
+.collection-hub-copy {
+  gap: 4px;
+}
+
+.collection-hub-copy strong {
+  line-height: 1.18;
+}
+
+.collection-hub-copy small {
+  line-height: 1.3;
+}
+
+/* Backup bleibt funktional, nimmt aber deutlich weniger Höhe ein. */
+.backup-panel {
+  padding: 16px;
+}
+
+.backup-status-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.backup-status-card {
+  min-height: 76px;
+  padding: 11px 12px;
+}
+
+.backup-status-card strong {
+  line-height: 1.2;
+}
+
+.backup-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.backup-actions .primary-button {
+  grid-column: 1 / -1;
+}
+
+.backup-actions > button {
+  min-width: 0;
+  padding-inline: 10px;
+  font-size: 0.8rem;
+}
+
+.backup-help,
+.app-version-footer {
+  font-size: 0.74rem;
+}
+
+@media (max-width: 350px) {
+  .backup-status-grid,
+  .backup-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .backup-actions .primary-button {
+    grid-column: auto;
+  }
+}
+
+/* Modals/Sheets folgen einer einzigen Radius- und Headerlogik. */
+.modal-card {
+  border-radius: var(--radius-sheet);
+}
+
+.modal-card > .section-heading:first-child {
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.modal-card > .section-heading:first-child .small-icon-button {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  border-radius: var(--radius-control);
+}
+
+/* Scanner: Segmente statt verschieden geformter Kacheln. */
+.scanner-mode-panel {
+  padding: 10px;
+}
+
+.scanner-mode-switch {
+  gap: 6px;
+}
+
+.scanner-mode-button {
+  min-height: 62px;
+  padding: 10px 12px;
+}
+
+.scanner-mode-button strong,
+.scanner-mode-button small {
+  line-height: 1.22;
+}
+
+/* Kalender & Radar: Datum, Titel und Aktionen bleiben auf einer sauberen Achse. */
+.calendar-event-card,
+.release-radar-card {
+  gap: 12px;
+  padding: 13px;
+}
+
+.calendar-event-date,
+.release-radar-date {
+  border-radius: var(--radius-control);
+}
+
+.calendar-event-copy h4,
+.release-radar-card-content h3 {
+  line-height: 1.2;
+}
+
+.calendar-event-actions,
+.release-radar-card-actions {
+  gap: 8px;
+}
+
+/* Regal/Detail: gleiche visuelle Radien und ruhigere Metadaten. */
+.shelf-tile {
+  border-radius: var(--radius-card);
+}
+
+.shelf-cover,
+.shelf-cover img,
+.shelf-cover-fallback,
+.shelf-cover-missing {
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+}
+
+.shelf-tile-body {
+  gap: 5px;
+}
+
+.shelf-tile-body > strong,
+.shelf-tile-body > small {
+  line-height: 1.22;
+}
+
+#issue-detail-modal .issue-detail-card {
+  border-radius: var(--radius-sheet);
+}
+
+#issue-detail-modal .issue-detail-copy > div {
+  border-radius: var(--radius-control);
+}
+
+/* Statistik: keine zufälligen Höhen, Titel und Werte bleiben sauber ausgerichtet. */
+.statistics-highlight-grid,
+.dna-insight-grid {
+  gap: 9px;
+}
+
+.statistics-highlight-card,
+.dna-insight-card {
+  min-height: 96px;
+  align-content: start;
+  gap: 5px;
+  padding: 13px;
+}
+
+.statistics-highlight-card strong,
+.dna-insight-card strong {
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.statistics-chart-card .subsection-heading {
+  align-items: flex-start;
+}
+
+.horizontal-chart-heading {
+  align-items: center;
+}
+
+/* Missionen bleiben ein einzelner, kompakter Fokuspunkt. */
+.collector-mission-card {
+  min-height: 72px;
+  padding: 12px 13px;
+}
+
+.collector-mission-mark {
+  border-radius: var(--radius-control);
+}
+
+.collector-mission-copy strong,
+.collector-mission-copy > span {
+  line-height: 1.28;
+}
+
+/* Share Cards: Vorschau wie eine echte Karte ins Modal setzen, ohne grauen Bilderrahmen. */
+.share-card-modal-card {
+  width: min(100%, 620px);
+}
+
+.share-card-intro {
+  max-width: 58ch;
+  margin-bottom: 14px;
+  font-size: 0.8rem;
+}
+
+.share-card-preview {
+  margin-top: 14px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--primary);
+  box-shadow: var(--shadow-card);
+}
+
+.share-card-preview canvas {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Bottom-Navigation: drei gleichwertige Slots, primäre Aktion nur durch Farbe/Position betont. */
+.bottom-nav {
+  gap: 6px;
+  padding-inline: 12px;
+}
+
+.bottom-nav-item {
+  border-radius: var(--radius-control);
+}
+
+.bottom-nav-primary {
+  margin-top: -14px;
+  min-height: 68px;
+  border-radius: var(--radius-control);
+}
+
+/* Kleine Displays: Radien bleiben gleich, nur Dichte wird reduziert. */
+@media (max-width: 430px) {
+  .app-shell,
+  .app-page-content {
+    width: min(100% - 24px, var(--max-width));
+  }
+
+  .panel {
+    padding: 15px;
+  }
+
+  .section-heading {
+    margin-bottom: 14px;
+  }
+
+  .modal {
+    padding-inline: 8px;
+  }
+
+  .modal-card {
+    padding: 16px;
+  }
+
+  .share-card-modal-card {
+    max-height: calc(100dvh - 12px - env(safe-area-inset-top));
+  }
+}
