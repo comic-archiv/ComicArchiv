@@ -32,12 +32,15 @@ jobs:
           node-version: 22
           package-manager-cache: false
 
+      - name: Dateien und Datenlogik deterministisch prüfen
+        run: npm run check
+
       - name: Offizielle LTB-Jahrespläne prüfen
         if: github.event_name != 'pull_request'
         run: npm run calendar:sync
 
-      - name: Dateien und Datenlogik prüfen
-        run: npm run check
+      - name: Synchronisierte Kalenderdaten validieren
+        run: npm run calendar:verify
 
       - name: Sauberes Produktionspaket erstellen
         run: npm run build
