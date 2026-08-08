@@ -9,8 +9,11 @@ import {
   getReleaseTimingLabel,
   mergeKnownReleaseSignatures,
   normalizeReleaseDecisionMap,
+  normalizeReleaseEventLinks,
+  normalizeReleaseSeriesAliases,
   normalizeReleaseSeriesCatalog,
   resolveReleaseIdentity,
+  suggestReleaseSeriesDetails,
   summarizeReleaseRadar
 } from "../release-radar.js";
 
@@ -147,4 +150,45 @@ test("Reihenkatalog entfernt doppelte IDs und bewahrt Aliasse", () => {
   ]);
   assert.equal(result.length, 2);
   assert.deepEqual(result[0].aliases, ["Lustiges Taschenbuch", "LTB"]);
+});
+
+
+test("manuelle Kalenderzuordnung verknüpft einen bisher unbekannten Termin stabil", () => {
+  const release = event("Donald Duck Sonderheft 464", "2026-09-02", "dds-464");
+  const signature = createReleaseEventSignature(release);
+  const catalog = normalizeReleaseSeriesCatalog([
+    ...seriesCatalog,
+    { id: "dds", name: "Donald Duck Sonderheft", aliases: [] }
+  ]);
+  const links = normalizeReleaseEventLinks({
+    [signature]: { seriesId: "dds", bandNumber: 464, updatedAt: "2026-08-08T10:00:00.000Z" }
+  });
+  const identity = resolveReleaseIdentity(release, catalog, links);
+  assert.equal(identity?.seriesId, "dds");
+  assert.equal(identity?.bandNumber, 464);
+  assert.equal(identity?.manualLink, true);
+});
+
+test("gespeicherte Kalender-Aliasse erkennen spätere Bände automatisch", () => {
+  const aliases = normalizeReleaseSeriesAliases({ dds: ["DDSH", "Donald Duck Sonderheft", "DDSH"] });
+  assert.deepEqual(aliases.dds, ["DDSH", "Donald Duck Sonderheft"]);
+  const catalog = normalizeReleaseSeriesCatalog([
+    { id: "dds", name: "Donald Duck Sonderheft", aliases: aliases.dds }
+  ]);
+  const identity = resolveReleaseIdentity(event("DDSH 465", "2026-10-02"), catalog);
+  assert.equal(identity?.seriesId, "dds");
+  assert.equal(identity?.bandNumber, 465);
+});
+
+test("unbekannte Kalendertitel liefern einen sinnvollen Vorschlag für Reihe und Band", () => {
+  assert.deepEqual(suggestReleaseSeriesDetails(event("LTB Sonderedition 3", "2026-10-02")), {
+    seriesName: "LTB Sonderedition",
+    alias: "LTB Sonderedition",
+    bandNumber: 3
+  });
+  assert.deepEqual(suggestReleaseSeriesDetails(event("LTB 70 Jahre 2 - Jubiläum", "2026-10-02")), {
+    seriesName: "LTB 70 Jahre",
+    alias: "LTB 70 Jahre",
+    bandNumber: 2
+  });
 });

@@ -1,6 +1,6 @@
 # Änderungen
 
-## 4.3.0 – Erscheinungsradar und automatische Jahrespläne
+## 4.3.1 – Erscheinungsradar und automatische Jahrespläne
 
 ### Behoben
 

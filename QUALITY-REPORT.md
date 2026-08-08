@@ -1,68 +1,42 @@
-# Qualitätsbericht Entenarchiv 4.3.0
+# Qualitätsbericht Entenarchiv 4.3.1
 
-## Umfang
+## Schwerpunkt
 
-Geprüft wurden der Zurück-Button-Hotfix, das Erscheinungsradar, die Verknüpfung von Verlagsterminen mit Sammlung und Fehlbänden, der optionale App-Badge, der iCal-Erinnerungsexport, die automatische Jahresplan-Erkennung und der Produktions-Build.
+Version 4.3.1 ergänzt eine persistente Zuordnung nicht erkannter Kalendertermine zu bestehenden oder neu angelegten Reihen.
 
-## Automatisierte Prüfung
+## Automatisierte Prüfungen
 
-- 94 Logik-, Struktur- und Regressionstests erfolgreich
-- 33 erforderliche Projektdateien geprüft
-- 482 eindeutige HTML-IDs geprüft
-- 417 statische JavaScript-Verknüpfungen geprüft
-- Syntaxprüfung von 39 JavaScript- und Testdateien
-- 31 Service-Worker-Dateien geprüft
-- Produktions-Build erfolgreich erzeugt
+- 98 automatisierte Tests erfolgreich
+- Projektvalidierung erfolgreich
+- 497 eindeutige HTML-IDs geprüft
+- 431 statische App-Selektoren geprüft
+- 40 JavaScript-Dateien syntaktisch geprüft
+- 31 Offline-Dateien geprüft
+- Kalenderjahr 2026 mit 100 gültigen Terminen validiert
+- Produktions-Build erfolgreich erstellt
 
-## Neue Regressionstests
+## Spezifische Regressionstests
 
-### Unterseiten-Navigation
+Geprüft wurden unter anderem:
 
-- die globale App-Kopfzeile wird während einer Unterseite ausgeblendet
-- Unterseiten-Kopfzeilen besitzen eine eigene hohe Ebene
-- Zurück-Buttons bleiben sichtbar, anklickbar und über scrollenden Inhalten
+- manuelle Einzelzuordnung eines unbekannten Verlagstermins
+- Kalender-Alias für künftige Bände derselben Reihe
+- Vorschlag von Reihennamen und Bandnummer aus einem unbekannten Kalendertitel
+- bestehende LTB-Aliase und Priorisierung längerer Aliase
+- Zustand `Nicht zugeordnet` bleibt ohne Zuordnung erhalten
+- Datenformat 9, Archivmodell 1 und IndexedDB-Schema 5 bleiben unverändert
+- GitHub-Actions-Workflow bleibt Node-24-kompatibel
+- Service Worker und Produktions-Build bleiben vollständig
 
-### Erscheinungsradar
+## Datensicherheit
 
-- `LTB 614` wird stabil der Hauptreihe und Band 614 zugeordnet
-- längere Aliasse wie `LTB Fantasy Entenhausen` gewinnen vor dem allgemeinen Kürzel `LTB`
-- nicht eindeutig zuordenbare Verlagstermine bleiben sichtbar
-- vorhandene, fehlende und nicht vorgemerkte Ausgaben werden unterschieden
-- bekannte Termine werden nicht erneut als neu markiert
-- Vormerken, Bestellt und Ignorieren werden validiert
-- vorhandene und ignorierte Ausgaben erzeugen keine offenen Badges
-- eine heute fällige und zugleich neue Ausgabe wird im Badge nur einmal gezählt
-- Filter und Zusammenfassungen liefern konsistente Werte
+Neue Daten werden ausschließlich in den bestehenden App-Einstellungen gespeichert:
 
-### Automatische Jahrespläne
+- Kalender-Aliase nach stabiler Reihen-ID
+- manuelle Terminverknüpfungen nach Termin-Signatur
 
-- relative und absolute offizielle iCal-Links werden erkannt
-- fremde Hosts und unsichere HTTP-Links werden abgelehnt
-- Kalenderjahr wird aus validen DTSTART-Zeilen ermittelt
-- eine explizite `v2` gewinnt vor `v1`
-- bereits vorhandene andere Jahrgänge bleiben erhalten
-- unvollständige iCal-Dateien werden abgelehnt
-- ein Netzwerkfehler blockiert den vorhandenen Kalenderstand nicht
+Beim Löschen einer eigenen Reihe werden ihre Kalender-Aliase und manuellen Terminverknüpfungen ebenfalls entfernt. Beim Backup-Import werden diese Daten validiert; beim Zusammenführen werden Aliase und Terminverknüpfungen zusammengeführt statt verworfen.
 
-### Oberfläche und Build
+## Keine Migration
 
-- Startseiten-, Kalender- und Radar-Einstiege sind vollständig verdrahtet
-- App-Badge verwendet ausschließlich die Plattformfunktionen `setAppBadge` und `clearAppBadge`
-- `release-radar.js` liegt im Service-Worker-Paket und im Produktions-Build
-- Workflow enthält Zeitplan und Synchronisationsschritt
-- Datenformat, Archivmodell und IndexedDB-Schema bleiben unverändert
-
-## Kompatibilität
-
-Unverändert bleiben:
-
-- Datenformat `9`
-- Archivmodell `1`
-- IndexedDB-Schema `5`
-- Datenbankname `comicarchiv-db`
-
-Es ist keine Datenmigration erforderlich.
-
-## Einschränkungen der Testumgebung
-
-Die reale Darstellung eines Home-Screen-Badges, die iOS-Mitteilungsberechtigung, Apple-Kalender-Übergabe und das konkrete Scrollverhalten werden abschließend auf dem Ziel-iPhone geprüft. Der offizielle LTB-Server war aus der isolierten Build-Umgebung zeitweise nicht erreichbar; das Synchronisationsskript hat in diesem Fall wie vorgesehen den vorhandenen Kalenderstand verwendet, ohne Test oder Veröffentlichung abzubrechen.
+Es wurde keine IndexedDB-Struktur verändert. Eine erneute Migration der Sammlung ist nicht erforderlich.

@@ -118,14 +118,18 @@ import { matchesSmartList, sortSmartList } from "./shelf.js";
 import {
   RELEASE_RADAR_FILTERS,
   buildReleaseRadarItems as createReleaseRadarItems,
+  createReleaseEventSignature,
   filterReleaseRadarItems,
   getReleaseRadarBadgeCount,
   getReleaseTimingLabel,
   mergeKnownReleaseSignatures,
   normalizeKnownReleaseSignatures,
   normalizeReleaseDecisionMap,
+  normalizeReleaseEventLinks,
+  normalizeReleaseSeriesAliases,
   normalizeReleaseSeriesCatalog,
   resolveReleaseIdentity,
+  suggestReleaseSeriesDetails,
   summarizeReleaseRadar
 } from "./release-radar.js";
 
@@ -202,7 +206,8 @@ const state = {
   diagnosticsRunning: false,
   shelfCoverResolutionPromises: new Map(),
   releaseRadarFilter: "open",
-  releaseRadarReturnTarget: "home"
+  releaseRadarReturnTarget: "home",
+  releaseLinkEventId: null
 };
 
 const elements = {
@@ -378,6 +383,20 @@ const elements = {
   releaseRadarBadgeSummary: document.querySelector("#release-radar-badge-summary"),
   releaseRadarBadgeEnabled: document.querySelector("#release-radar-badge-enabled"),
   releaseRadarMessage: document.querySelector("#release-radar-message"),
+  releaseLinkModal: document.querySelector("#release-link-modal"),
+  releaseLinkForm: document.querySelector("#release-link-form"),
+  releaseLinkContext: document.querySelector("#release-link-context"),
+  releaseLinkModeExisting: document.querySelector("#release-link-mode-existing"),
+  releaseLinkModeNew: document.querySelector("#release-link-mode-new"),
+  releaseLinkExistingFields: document.querySelector("#release-link-existing-fields"),
+  releaseLinkNewFields: document.querySelector("#release-link-new-fields"),
+  releaseLinkExistingSeries: document.querySelector("#release-link-existing-series"),
+  releaseLinkNewName: document.querySelector("#release-link-new-name"),
+  releaseLinkNewPattern: document.querySelector("#release-link-new-pattern"),
+  releaseLinkAlias: document.querySelector("#release-link-alias"),
+  releaseLinkBand: document.querySelector("#release-link-band"),
+  releaseLinkMessage: document.querySelector("#release-link-message"),
+  closeReleaseLink: document.querySelector("#close-release-link"),
   themeToggle: document.querySelector("#theme-toggle"),
   themeIcon: document.querySelector("#theme-icon"),
   appVersion: document.querySelector("#app-version"),
@@ -1024,6 +1043,13 @@ function bindEvents() {
   elements.releaseRadarMarkSeen.addEventListener("click", markVisibleReleaseRadarItemsSeen);
   elements.releaseRadarExport.addEventListener("click", exportWatchedReleaseReminders);
   elements.releaseRadarBadgeEnabled.addEventListener("change", handleReleaseRadarBadgeToggle);
+  elements.releaseLinkForm.addEventListener("submit", handleReleaseLinkSubmit);
+  elements.releaseLinkModeExisting.addEventListener("change", syncReleaseLinkMode);
+  elements.releaseLinkModeNew.addEventListener("change", syncReleaseLinkMode);
+  elements.closeReleaseLink.addEventListener("click", closeReleaseLinkModal);
+  elements.releaseLinkModal.addEventListener("click", (event) => {
+    if (event.target.closest("[data-close-release-link]")) closeReleaseLinkModal();
+  });
   elements.calendarPrevYear.addEventListener("click", () => changeCalendarYear(-1));
   elements.calendarNextYear.addEventListener("click", () => changeCalendarYear(1));
   elements.calendarYearSelect.addEventListener("change", () => setCalendarYear(Number(elements.calendarYearSelect.value)));
@@ -1196,6 +1222,7 @@ function bindEvents() {
     if (!elements.conditionGuideModal.classList.contains("hidden")) return closeConditionGuide();
     if (!elements.diagnosticsModal.classList.contains("hidden")) return closeDiagnosticsModal();
     if (!elements.importModal.classList.contains("hidden")) return closeImportModal();
+    if (!elements.releaseLinkModal.classList.contains("hidden")) return closeReleaseLinkModal();
     if (!elements.seriesModal.classList.contains("hidden")) return closeSeriesModal();
     if (!elements.missingDetailModal.classList.contains("hidden")) return closeMissingDetailModal();
     if (!elements.duplicateModal.classList.contains("hidden")) return closeDuplicateModal();
@@ -5900,7 +5927,13 @@ function renderCustomSeriesList() {
       path.textContent = config.duckipediaPattern
         ? `Duckipedia: ${config.duckipediaPattern}`
         : "Duckipedia: Suchlink als Fallback";
+      const aliases = [...new Set([...(config.aliases || []), ...((state.settings.releaseSeriesAliases || {})[config.id] || [])])];
       copy.append(label, path);
+      if (aliases.length) {
+        const aliasCopy = document.createElement("small");
+        aliasCopy.textContent = `Kalender-Alias${aliases.length === 1 ? "" : "e"}: ${aliases.join(", ")}`;
+        copy.append(aliasCopy);
+      }
 
       const actions = document.createElement("div");
       actions.className = "management-actions";
@@ -5963,7 +5996,14 @@ async function handleRemoveCustomSeries(seriesName) {
 
   try {
     const removedConfig = (state.settings.customSeriesConfigs || []).find((entry) => entry.name === seriesName) || null;
+    const removedSeriesId = removedConfig?.id || createCustomSeriesId(seriesName);
     const nextConfigs = (state.settings.customSeriesConfigs || []).filter((entry) => entry.name !== seriesName);
+    const nextReleaseAliases = { ...normalizeReleaseSeriesAliases(state.settings.releaseSeriesAliases) };
+    delete nextReleaseAliases[removedSeriesId];
+    const nextReleaseLinks = Object.fromEntries(
+      Object.entries(normalizeReleaseEventLinks(state.settings.releaseEventLinks))
+        .filter(([, link]) => link.seriesId !== removedSeriesId)
+    );
 
     const nextHighest = { ...(state.settings.knownHighestBandBySeries || {}) };
     delete nextHighest[seriesName];
@@ -5988,6 +6028,8 @@ async function handleRemoveCustomSeries(seriesName) {
     await saveMeaningfulSettings({
       customSeries: nextConfigs.map((entry) => entry.name),
       customSeriesConfigs: nextConfigs,
+      releaseSeriesAliases: nextReleaseAliases,
+      releaseEventLinks: nextReleaseLinks,
       knownHighestBandBySeries: nextHighest,
       missingBandDetails: nextDetails,
       fleaMarketSession: {
@@ -5995,7 +6037,7 @@ async function handleRemoveCustomSeries(seriesName) {
         updatedAt: state.settings.fleaMarketSession?.updatedAt || null
       }
     });
-    await removeSeriesDefinition(removedConfig?.id || createCustomSeriesId(seriesName));
+    await removeSeriesDefinition(removedSeriesId);
 
     state.openMissingSeries.delete(seriesName);
     state.missingGroups = calculateMissingBands(state.comics, nextHighest);
@@ -6428,6 +6470,7 @@ function restoreBodyModalState() {
     elements.issueDetailModal,
     elements.diagnosticsModal,
     elements.importModal,
+    elements.releaseLinkModal,
     elements.seriesModal,
     elements.missingDetailModal,
     elements.duplicateModal,
@@ -6813,6 +6856,16 @@ function createImportIssueIdentity(comic) {
   return createIssueIdentityKey(seriesId, comic?.volumeNumber);
 }
 
+function mergeReleaseSeriesAliasMaps(first, second) {
+  const left = normalizeReleaseSeriesAliases(first);
+  const right = normalizeReleaseSeriesAliases(second);
+  const merged = { ...left };
+  Object.entries(right).forEach(([seriesId, aliases]) => {
+    merged[seriesId] = [...new Set([...(merged[seriesId] || []), ...aliases])];
+  });
+  return merged;
+}
+
 function mergeImportedSettings(mode, backup, importedChangeAmount = 0) {
   const importedSettings = backup.settings || {};
 
@@ -6855,6 +6908,19 @@ function mergeImportedSettings(mode, backup, importedChangeAmount = 0) {
       },
       updatedAt: importedSettings.fleaMarketSession?.updatedAt || state.settings.fleaMarketSession?.updatedAt || null
     },
+    releaseSeriesAliases: mergeReleaseSeriesAliasMaps(state.settings.releaseSeriesAliases, importedSettings.releaseSeriesAliases),
+    releaseEventLinks: {
+      ...normalizeReleaseEventLinks(state.settings.releaseEventLinks),
+      ...normalizeReleaseEventLinks(importedSettings.releaseEventLinks)
+    },
+    releaseRadarDecisions: {
+      ...normalizeReleaseDecisionMap(state.settings.releaseRadarDecisions),
+      ...normalizeReleaseDecisionMap(importedSettings.releaseRadarDecisions)
+    },
+    releaseRadarKnownSignatures: mergeKnownReleaseSignatures(
+      state.settings.releaseRadarKnownSignatures,
+      (importedSettings.releaseRadarKnownSignatures || []).map((signature) => ({ signature }))
+    ),
     showCovers: importedSettings.showCovers ?? state.settings.showCovers,
     duckipediaAutoEnrich: importedSettings.duckipediaAutoEnrich ?? state.settings.duckipediaAutoEnrich,
     lastMediaBackupAt: backup.hasMedia ? (importedSettings.lastMediaBackupAt || backup.exportedAt || state.settings.lastMediaBackupAt) : state.settings.lastMediaBackupAt,
@@ -7416,6 +7482,13 @@ function renderCalendarEventList(events) {
       action.dataset.bandNumber = String(releaseLink.bandNumber);
       action.textContent = status.type === "owned" ? "In Sammlung" : status.type === "missing" ? "Fehlband öffnen" : "Auf Wunschliste";
       actions.append(action);
+    } else if (event.source === "publisher" && event.category === "release") {
+      const linkAction = document.createElement("button");
+      linkAction.type = "button";
+      linkAction.className = "secondary-button compact-button";
+      linkAction.dataset.calendarReleaseLink = event.id;
+      linkAction.textContent = "Reihe zuordnen";
+      actions.append(linkAction);
     }
     if (event.source === "custom") {
       const edit = document.createElement("button");
@@ -7431,8 +7504,13 @@ function renderCalendarEventList(events) {
 }
 
 function getReleaseSeriesCatalog() {
+  const calendarAliases = normalizeReleaseSeriesAliases(state.settings.releaseSeriesAliases);
+  const withCalendarAliases = (entry) => ({
+    ...entry,
+    aliases: [...new Set([...(Array.isArray(entry.aliases) ? entry.aliases : []), ...(calendarAliases[entry.id] || [])])]
+  });
   const customDefinitions = Array.isArray(state.settings.customSeriesConfigs)
-    ? state.settings.customSeriesConfigs.map((entry) => ({
+    ? state.settings.customSeriesConfigs.map((entry) => withCalendarAliases({
         id: entry.id || createCustomSeriesId(entry.name),
         name: entry.name,
         aliases: entry.aliases || []
@@ -7450,14 +7528,14 @@ function getReleaseSeriesCatalog() {
       aliases: []
     }));
   return normalizeReleaseSeriesCatalog([
-    ...STANDARD_SERIES_DEFINITIONS,
+    ...STANDARD_SERIES_DEFINITIONS.map(withCalendarAliases),
     ...customDefinitions,
-    ...usedDefinitions
+    ...usedDefinitions.map(withCalendarAliases)
   ]);
 }
 
 function resolveCalendarRelease(event) {
-  return resolveReleaseIdentity(event, getReleaseSeriesCatalog());
+  return resolveReleaseIdentity(event, getReleaseSeriesCatalog(), state.settings.releaseEventLinks);
 }
 
 function getCalendarCollectionStatus({ seriesId, series, bandNumber }) {
@@ -7517,7 +7595,8 @@ function getReleaseRadarItems() {
     comics: state.comics,
     missingGroups: state.missingGroups,
     decisions: state.settings.releaseRadarDecisions,
-    knownSignatures: state.settings.releaseRadarKnownSignatures
+    knownSignatures: state.settings.releaseRadarKnownSignatures,
+    eventLinks: state.settings.releaseEventLinks
   });
 }
 
@@ -7685,6 +7764,8 @@ function createReleaseRadarCard(item) {
 
   if (item.collection.type === "owned" && item.identity) {
     actions.append(createReleaseRadarAction("owned", "In Sammlung", item.key, "success-button compact-button"));
+  } else if (!item.identity) {
+    actions.append(createReleaseRadarAction("link", "Reihe zuordnen", item.key, "primary-button compact-button"));
   } else if (item.identity) {
     actions.append(
       createReleaseRadarAction("watch", item.effectiveStatus === "watch" ? "Vorgemerkt ✓" : "Vormerken", item.key, item.effectiveStatus === "watch" ? "primary-button compact-button" : "secondary-button compact-button"),
@@ -7767,6 +7848,10 @@ async function handleReleaseRadarAction(button) {
   if (!item) return;
   const action = button.dataset.radarAction;
 
+  if (action === "link") {
+    openReleaseLinkModal(item.event);
+    return;
+  }
   if (action === "owned" && item.identity) {
     closeReleaseRadarPage({ returnFocus: false });
     if (!elements.calendarPage.classList.contains("hidden")) closeCalendarPage({ returnFocus: false });
@@ -7818,6 +7903,168 @@ async function markReleaseItemsSeen(items) {
   renderReleaseRadarPage();
   if (!elements.calendarPage.classList.contains("hidden")) renderCalendarPage();
   showReleaseRadarMessage(`${items.length} Termin${items.length === 1 ? "" : "e"} als gesehen markiert.`, "success");
+}
+
+function openReleaseLinkModal(calendarEvent) {
+  if (!calendarEvent) return;
+  state.releaseLinkEventId = calendarEvent.id;
+  const suggestion = suggestReleaseSeriesDetails(calendarEvent);
+  const catalog = getReleaseSeriesCatalog().filter((entry) => entry.id !== "other");
+  elements.releaseLinkExistingSeries.replaceChildren();
+  catalog
+    .slice()
+    .sort((first, second) => {
+      if (first.id === "ltb-main") return -1;
+      if (second.id === "ltb-main") return 1;
+      return first.name.localeCompare(second.name, "de", { sensitivity: "base" });
+    })
+    .forEach((series) => {
+      const option = document.createElement("option");
+      option.value = series.id;
+      option.textContent = series.name;
+      elements.releaseLinkExistingSeries.append(option);
+    });
+
+  const suggestedExisting = catalog.find((series) => {
+    const lookup = normalizeSeriesLookup(suggestion.seriesName);
+    return normalizeSeriesLookup(series.name) === lookup
+      || series.aliases.some((alias) => normalizeSeriesLookup(alias) === lookup);
+  });
+  if (suggestedExisting) elements.releaseLinkExistingSeries.value = suggestedExisting.id;
+
+  const shouldCreateNew = !suggestedExisting && Boolean(suggestion.seriesName);
+  elements.releaseLinkModeNew.checked = shouldCreateNew;
+  elements.releaseLinkModeExisting.checked = !shouldCreateNew;
+  elements.releaseLinkNewName.value = suggestion.seriesName || "";
+  elements.releaseLinkNewPattern.value = "";
+  elements.releaseLinkAlias.value = suggestion.alias || "";
+  elements.releaseLinkBand.value = suggestion.bandNumber ? String(suggestion.bandNumber) : "";
+  elements.releaseLinkContext.textContent = `${calendarEvent.title} · ${formatCalendarDate(calendarEvent.startDate, { includeYear: true })}`;
+  elements.releaseLinkMessage.textContent = "";
+  syncReleaseLinkMode();
+  elements.releaseLinkModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+  window.setTimeout(() => {
+    (shouldCreateNew ? elements.releaseLinkNewName : elements.releaseLinkExistingSeries).focus();
+  }, 0);
+}
+
+function closeReleaseLinkModal() {
+  elements.releaseLinkModal.classList.add("hidden");
+  state.releaseLinkEventId = null;
+  elements.releaseLinkMessage.textContent = "";
+  restoreBodyModalState();
+}
+
+function syncReleaseLinkMode() {
+  const createNew = elements.releaseLinkModeNew.checked;
+  elements.releaseLinkExistingFields.classList.toggle("hidden", createNew);
+  elements.releaseLinkNewFields.classList.toggle("hidden", !createNew);
+  elements.releaseLinkExistingSeries.required = !createNew;
+  elements.releaseLinkNewName.required = createNew;
+}
+
+async function handleReleaseLinkSubmit(event) {
+  event.preventDefault();
+  const calendarEvent = getCalendarEvents().find((entry) => entry.id === state.releaseLinkEventId);
+  if (!calendarEvent) {
+    elements.releaseLinkMessage.textContent = "Der Kalendertermin ist nicht mehr verfügbar.";
+    elements.releaseLinkMessage.dataset.type = "error";
+    return;
+  }
+
+  const bandNumber = Number(elements.releaseLinkBand.value);
+  if (!Number.isSafeInteger(bandNumber) || bandNumber < 1 || bandNumber > 99999) {
+    elements.releaseLinkMessage.textContent = "Bitte gib eine gültige Bandnummer zwischen 1 und 99999 ein.";
+    elements.releaseLinkMessage.dataset.type = "error";
+    return;
+  }
+
+  const alias = elements.releaseLinkAlias.value.trim().slice(0, 160);
+  const signature = createReleaseEventSignature(calendarEvent);
+  const existingAliases = normalizeReleaseSeriesAliases(state.settings.releaseSeriesAliases);
+  const existingLinks = normalizeReleaseEventLinks(state.settings.releaseEventLinks);
+  let seriesId = "";
+  let seriesName = "";
+  let nextConfigs = Array.isArray(state.settings.customSeriesConfigs) ? [...state.settings.customSeriesConfigs] : [];
+  let definitionToSave = null;
+
+  if (elements.releaseLinkModeNew.checked) {
+    const name = elements.releaseLinkNewName.value.trim();
+    const rawPattern = elements.releaseLinkNewPattern.value.trim();
+    const pattern = normalizeDuckipediaPattern(rawPattern);
+    if (!name || name.length > 100) {
+      elements.releaseLinkMessage.textContent = "Bitte gib einen Reihennamen mit höchstens 100 Zeichen ein.";
+      elements.releaseLinkMessage.dataset.type = "error";
+      return;
+    }
+    if (rawPattern && !pattern) {
+      elements.releaseLinkMessage.textContent = "Der Duckipedia-Pfad ist ungültig. Verwende einen Pfad oder eine URL von de.duckipedia.org.";
+      elements.releaseLinkMessage.dataset.type = "error";
+      return;
+    }
+    const duplicate = getReleaseSeriesCatalog().find((entry) => normalizeSeriesLookup(entry.name) === normalizeSeriesLookup(name));
+    if (duplicate) {
+      elements.releaseLinkMessage.textContent = `„${duplicate.name}“ gibt es bereits. Wähle bitte „Bestehender Reihe zuordnen“.`;
+      elements.releaseLinkMessage.dataset.type = "error";
+      return;
+    }
+    seriesId = createCustomSeriesId(name);
+    seriesName = name;
+    definitionToSave = {
+      id: seriesId,
+      name,
+      duckipediaPattern: pattern,
+      category: "special",
+      aliases: alias ? [alias] : [],
+      isArchived: false
+    };
+    nextConfigs = [...nextConfigs, definitionToSave];
+  } else {
+    seriesId = elements.releaseLinkExistingSeries.value;
+    const selected = getReleaseSeriesCatalog().find((entry) => entry.id === seriesId);
+    if (!selected) {
+      elements.releaseLinkMessage.textContent = "Bitte wähle eine vorhandene Reihe aus.";
+      elements.releaseLinkMessage.dataset.type = "error";
+      return;
+    }
+    seriesName = selected.name;
+    const customIndex = nextConfigs.findIndex((entry) => (entry.id || createCustomSeriesId(entry.name)) === seriesId);
+    if (customIndex >= 0 && alias) {
+      const current = nextConfigs[customIndex];
+      const aliases = [...new Set([...(current.aliases || []), alias])];
+      definitionToSave = { ...current, id: seriesId, aliases };
+      nextConfigs[customIndex] = definitionToSave;
+    }
+  }
+
+  const nextAliases = { ...existingAliases };
+  if (alias) nextAliases[seriesId] = [...new Set([...(nextAliases[seriesId] || []), alias])];
+  const nextLinks = {
+    ...existingLinks,
+    [signature]: { seriesId, bandNumber, updatedAt: new Date().toISOString() }
+  };
+
+  try {
+    await saveMeaningfulSettings({
+      customSeries: nextConfigs.map((entry) => entry.name),
+      customSeriesConfigs: nextConfigs,
+      releaseSeriesAliases: nextAliases,
+      releaseEventLinks: nextLinks
+    }, 1);
+    if (definitionToSave) await saveSeriesDefinition(definitionToSave);
+    populateConfiguration();
+    renderCustomSeriesList();
+    await refreshArchiveCoreStatus({ showReport: false });
+    closeReleaseLinkModal();
+    renderReleaseRadarPage();
+    if (!elements.calendarPage.classList.contains("hidden")) renderCalendarPage();
+    renderReleaseRadarIndicators();
+    showReleaseRadarMessage(`${calendarEvent.title} ist jetzt mit „${seriesName}“, Band ${bandNumber}, verknüpft.`, "success");
+  } catch (error) {
+    elements.releaseLinkMessage.textContent = `Zuordnung konnte nicht gespeichert werden: ${error.message}`;
+    elements.releaseLinkMessage.dataset.type = "error";
+  }
 }
 
 async function ensureReleaseOnWishlist(identity) {
@@ -7987,6 +8234,12 @@ function handleCalendarDayClick(event) {
 }
 
 function handleCalendarEventListClick(event) {
+  const releaseLinkAction = event.target.closest("button[data-calendar-release-link]");
+  if (releaseLinkAction) {
+    const calendarEvent = getCalendarEvents().find((item) => item.id === releaseLinkAction.dataset.calendarReleaseLink);
+    if (calendarEvent) openReleaseLinkModal(calendarEvent);
+    return;
+  }
   const collectionAction = event.target.closest("button[data-calendar-collection-action]");
   if (collectionAction) {
     handleCalendarCollectionAction(collectionAction).catch((error) => {

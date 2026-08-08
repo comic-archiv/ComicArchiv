@@ -27,6 +27,52 @@ export function normalizeKnownReleaseSignatures(value) {
     .slice(-MAX_KNOWN_SIGNATURES);
 }
 
+export function normalizeReleaseSeriesAliases(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result = {};
+  Object.entries(value).forEach(([seriesId, aliases]) => {
+    const normalizedId = String(seriesId || "").trim().slice(0, 120);
+    if (!normalizedId || !Array.isArray(aliases)) return;
+    const cleaned = [...new Set(aliases
+      .filter((alias) => typeof alias === "string" && alias.trim())
+      .map((alias) => alias.trim().slice(0, 160)))];
+    if (cleaned.length) result[normalizedId] = cleaned.slice(0, 40);
+  });
+  return result;
+}
+
+export function normalizeReleaseEventLinks(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result = {};
+  Object.entries(value).forEach(([signature, entry]) => {
+    if (typeof signature !== "string" || !signature.trim() || !entry || typeof entry !== "object" || Array.isArray(entry)) return;
+    const seriesId = String(entry.seriesId || "").trim().slice(0, 120);
+    const bandNumber = Number(entry.bandNumber);
+    if (!seriesId || !Number.isSafeInteger(bandNumber) || bandNumber < 1 || bandNumber > 99999) return;
+    result[signature.trim().slice(0, 500)] = {
+      seriesId,
+      bandNumber,
+      updatedAt: normalizeDateTime(entry.updatedAt) || new Date(0).toISOString()
+    };
+  });
+  return result;
+}
+
+export function suggestReleaseSeriesDetails(event) {
+  const title = String(event?.title || "").replace(/\s+/g, " ").trim();
+  if (!title) return { seriesName: "", alias: "", bandNumber: null };
+  const match = title.match(/^(.+?)\s+(?:Band\s*)?(\d{1,5})(?=\s*(?:$|[:|–—-]))/i)
+    || title.match(/^(.+)\s+(?:Band\s*)?(\d{1,5})\s*$/i);
+  if (!match) return { seriesName: title.slice(0, 100), alias: title.slice(0, 160), bandNumber: null };
+  const alias = match[1].trim().replace(/[,:;|–—-]+$/, "").trim();
+  const bandNumber = Number(match[2]);
+  return {
+    seriesName: alias.slice(0, 100),
+    alias: alias.slice(0, 160),
+    bandNumber: Number.isSafeInteger(bandNumber) && bandNumber >= 1 ? bandNumber : null
+  };
+}
+
 export function normalizeReleaseSeriesCatalog(entries = []) {
   const catalog = [];
   const seen = new Set();
@@ -58,13 +104,29 @@ export function createReleaseEventSignature(event) {
     : `${source}|${date}|${title}`.slice(0, 500);
 }
 
-export function resolveReleaseIdentity(event, seriesCatalog = []) {
+export function resolveReleaseIdentity(event, seriesCatalog = [], eventLinks = {}) {
   if (!event || event.source !== "publisher" || event.category !== "release") return null;
   const title = String(event.title || "").trim();
   const normalizedTitle = normalizeReleaseText(title);
   if (!normalizedTitle) return null;
 
   const catalog = normalizeReleaseSeriesCatalog(seriesCatalog);
+  const signature = createReleaseEventSignature(event);
+  const manualLink = normalizeReleaseEventLinks(eventLinks)[signature];
+  if (manualLink) {
+    const series = catalog.find((entry) => entry.id === manualLink.seriesId);
+    if (series) {
+      return {
+        seriesId: series.id,
+        series: series.name,
+        bandNumber: manualLink.bandNumber,
+        key: `${series.id}:${manualLink.bandNumber}`,
+        matchedAlias: "Manuelle Zuordnung",
+        title,
+        manualLink: true
+      };
+    }
+  }
   const aliases = catalog
     .flatMap((series) => series.aliases.map((alias) => ({
       series,
@@ -138,6 +200,7 @@ export function buildReleaseRadarItems(events, {
   missingGroups = [],
   decisions = {},
   knownSignatures = [],
+  eventLinks = {},
   today = formatToday()
 } = {}) {
   const decisionMap = normalizeReleaseDecisionMap(decisions);
@@ -150,7 +213,7 @@ export function buildReleaseRadarItems(events, {
     const signature = createReleaseEventSignature(event);
     if (!signature) return;
 
-    const identity = resolveReleaseIdentity(event, seriesCatalog);
+    const identity = resolveReleaseIdentity(event, seriesCatalog, eventLinks);
     const key = identity?.key || `event:${signature}`;
     const dedupeKey = identity ? `${identity.key}|${event.startDate}` : signature;
     if (seenKeys.has(dedupeKey)) return;

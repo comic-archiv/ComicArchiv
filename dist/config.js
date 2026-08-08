@@ -46,7 +46,7 @@ export const LEGACY_CONDITION_MAP = Object.freeze({
 });
 
 export const APP_CONFIG = Object.freeze({
-  appVersion: "4.3.0",
+  appVersion: "4.3.1",
   dataFormatVersion: 9,
   archiveModelVersion: ARCHIVE_MODEL_VERSION,
   minimumSupportedBackupVersion: 1,
@@ -159,6 +159,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   releaseRadarLastOpenedAt: null,
   releaseRadarFilter: "open",
   releaseRadarBadgeEnabled: true,
+  releaseSeriesAliases: Object.freeze({}),
+  releaseEventLinks: Object.freeze({}),
   archiveMigrationAcknowledgedAt: null,
   scannerMode: "fast"
 });

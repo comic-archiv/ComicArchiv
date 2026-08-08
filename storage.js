@@ -9,6 +9,8 @@ import {
 import {
   normalizeKnownReleaseSignatures,
   normalizeReleaseDecisionMap,
+  normalizeReleaseEventLinks,
+  normalizeReleaseSeriesAliases,
   RELEASE_RADAR_FILTERS
 } from "./release-radar.js";
 import {
@@ -960,6 +962,8 @@ function normalizeSettings(settings) {
     releaseRadarLastOpenedAt: isValidDateString(source.releaseRadarLastOpenedAt) ? source.releaseRadarLastOpenedAt : null,
     releaseRadarFilter: RELEASE_RADAR_FILTERS.includes(source.releaseRadarFilter) ? source.releaseRadarFilter : "open",
     releaseRadarBadgeEnabled: source.releaseRadarBadgeEnabled !== false,
+    releaseSeriesAliases: normalizeReleaseSeriesAliases(source.releaseSeriesAliases),
+    releaseEventLinks: normalizeReleaseEventLinks(source.releaseEventLinks),
     archiveMigrationAcknowledgedAt: isValidDateString(source.archiveMigrationAcknowledgedAt)
       ? source.archiveMigrationAcknowledgedAt
       : null,

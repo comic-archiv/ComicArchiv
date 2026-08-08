@@ -8706,3 +8706,68 @@ body.app-page-open > .app-header {
     transition: none;
   }
 }
+
+
+/* Entenarchiv 4.3.1: Kalendertermine intelligent Reihen zuordnen */
+.release-link-card {
+  width: min(94vw, 620px);
+}
+
+.release-link-mode {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0 0 0.9rem;
+  padding: 0;
+  border: 0;
+}
+
+.release-link-mode legend {
+  margin-bottom: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.release-link-mode label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: start;
+  padding: 0.7rem 0.78rem;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--surface-strong);
+  cursor: pointer;
+}
+
+.release-link-mode label:has(input:checked) {
+  border-color: color-mix(in srgb, var(--primary) 70%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.release-link-mode input {
+  margin-top: 0.2rem;
+  accent-color: var(--primary);
+}
+
+.release-link-mode span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.release-link-mode small {
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.release-link-details {
+  margin-top: 0.7rem;
+}
+
+@media (max-width: 620px) {
+  .release-link-card {
+    width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+    overflow-y: auto;
+  }
+}

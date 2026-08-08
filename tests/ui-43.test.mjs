@@ -35,11 +35,13 @@ test("Erscheinungsradar ist auf Startseite, Kalenderseite und in der Navigation 
 test("Erscheinungsradar bleibt mit Datenformat 9, Archivmodell 1 und Datenbank 5 migrationsfrei", async () => {
   const [config, storage, version] = await Promise.all([read("config.js"), read("storage.js"), read("version.json")]);
   const metadata = JSON.parse(version);
-  assert.equal(metadata.appVersion, "4.3.0");
+  assert.equal(metadata.appVersion, "4.3.1");
   assert.equal(metadata.dataFormatVersion, 9);
   assert.equal(metadata.archiveModelVersion, 1);
   assert.match(config, /releaseRadarDecisions:\s*Object\.freeze\(\{\}\)/);
   assert.match(config, /releaseRadarKnownSignatures:\s*Object\.freeze\(\[\]\)/);
+  assert.match(config, /releaseSeriesAliases:\s*Object\.freeze\(\{\}\)/);
+  assert.match(config, /releaseEventLinks:\s*Object\.freeze\(\{\}\)/);
   assert.match(storage, /const DATABASE_VERSION = 5/);
   assert.match(storage, /normalizeReleaseDecisionMap/);
   assert.match(storage, /normalizeKnownReleaseSignatures/);
@@ -75,4 +77,21 @@ test("App-Badge ist optional und wird nur über die Plattform-API gesetzt", asyn
   assert.match(app, /navigator\.clearAppBadge/);
   assert.match(app, /Notification\.requestPermission/);
   assert.match(app, /releaseRadarBadgeEnabled/);
+});
+
+
+test("nicht zugeordnete Neuerscheinungen können direkt einer Reihe zugeordnet werden", async () => {
+  const [html, app, css] = await Promise.all([read("index.html"), read("app.js"), read("style.css")]);
+  for (const id of [
+    "release-link-modal",
+    "release-link-form",
+    "release-link-existing-series",
+    "release-link-new-name",
+    "release-link-alias",
+    "release-link-band"
+  ]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(app, /openReleaseLinkModal/);
+  assert.match(app, /handleReleaseLinkSubmit/);
+  assert.match(app, /dataset\.calendarReleaseLink/);
+  assert.match(css, /\.release-link-card/);
 });

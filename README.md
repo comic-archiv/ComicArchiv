@@ -1,6 +1,12 @@
-# Entenarchiv 4.3.0
+# Entenarchiv 4.3.1
 
 Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.3 ergänzt den Archivkern, die digitalen Regale und Scanner Pro um ein **Erscheinungsradar**, das offizielle Verlagstermine mit der eigenen Sammlung verbindet.
+
+## Neu in 4.3.1
+
+- Nicht zugeordnete Verlagstermine können einer bestehenden Reihe zugeordnet oder direkt als neue Reihe angelegt werden.
+- Kalender-Aliase werden gespeichert und erkennen spätere Bände derselben Reihe automatisch.
+- Manuelle Einzelzuordnungen sichern auch ungewöhnlich benannte Termine ab.
 
 ## Neu in Version 4.3
 
@@ -49,7 +55,7 @@ Während eine Unterseite geöffnet ist, wird die globale Kopfzeile ausgeblendet.
 
 ## Technische Eckdaten
 
-- App-Version: `4.3.0`
+- App-Version: `4.3.1`
 - Datenformat: `9`
 - Archivmodell: `1`
 - IndexedDB-Schema: `5`
