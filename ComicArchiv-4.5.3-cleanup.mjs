@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const root = process.cwd();
@@ -81,6 +81,87 @@ async function updateJson(file, mutate) {
   if (formatted === source) return false;
   await writeText(file, formatted);
   return true;
+}
+
+async function syncCurrentReleaseVersionTests() {
+  const testsRoot = pathFor("tests");
+  if (!existsSync(testsRoot)) return;
+
+  const entries = await readdir(testsRoot, { recursive: true, withFileTypes: true });
+  const testFiles = entries
+    .filter((entry) => entry.isFile() && /\.(?:mjs|js)$/.test(entry.name))
+    .map((entry) => {
+      const parent = entry.parentPath || entry.path || testsRoot;
+      return resolve(parent, entry.name);
+    });
+
+  const relativeFromRoot = (absolutePath) => absolutePath.slice(root.length + 1).replace(/\\/g, "/");
+
+  for (const absolutePath of testFiles) {
+    const file = relativeFromRoot(absolutePath);
+    const source = await readFile(absolutePath, "utf8");
+    let next = source;
+
+    // 1) Explizite Testtitel für die aktuell verdrahtete Release-Version.
+    next = next
+      .replace(
+        /Version 4\.5\.2, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet/g,
+        "Version 4.5.3, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet"
+      )
+      .replace(
+        /Version 4\.5\.2\b(?=[^"\n]*konsistent)/g,
+        "Version 4.5.3"
+      );
+
+    // 2) Assertions, die ausdrücklich die aktuelle Release-Version prüfen.
+    //    Wir verändern nur Assertion-Blöcke, nicht Fixtures/Migrationsdaten.
+    const assertionPattern = /assert\.(?:equal|strictEqual|deepEqual|match|ok)\([\s\S]*?\);/g;
+    next = next.replace(assertionPattern, (assertion) => {
+      const isCurrentReleaseAssertion =
+        /APP_CONFIG\.appVersion|APP_VERSION|appVersion|package(?:Json)?\.version|versionJson|version\.json|recovery\.js|service-worker\.js|app-version|CACHE_NAME|v4-5-2/.test(assertion) ||
+        /4\.5\.2/.test(assertion) && /Datenformat|Datenbank|durchgängig|Version/.test(assertion);
+
+      if (!isCurrentReleaseAssertion) return assertion;
+
+      return assertion
+        .replace(/4\.5\.2/g, "4.5.3")
+        .replace(/4\\\.5\\\.2/g, "4\\.5\\.3")
+        .replace(/v4-5-2/g, "v4-5-3");
+    });
+
+    // 3) Manche Tests legen die erwartete CURRENT-Version vor der Assertion in einer
+    //    klar benannten Konstante ab. Nur diese benannten Current-Version-Konstanten anfassen.
+    next = next
+      .replace(
+        /\b(?:CURRENT_APP_VERSION|EXPECTED_APP_VERSION|EXPECTED_VERSION|APP_VERSION_EXPECTED)\s*=\s*["']4\.5\.2["']/g,
+        (match) => match.replace("4.5.2", "4.5.3")
+      );
+
+    if (next !== source) {
+      await writeText(file, next);
+      console.log(`  ✓ ${file}: aktuelle Release-Erwartungen auf 4.5.3 synchronisiert`);
+    }
+  }
+
+  // Präziser Selbstcheck: Keine bekannte Current-Version-Assertion darf weiter 4.5.2 erwarten.
+  const stale = [];
+  for (const absolutePath of testFiles) {
+    const file = relativeFromRoot(absolutePath);
+    const source = await readFile(absolutePath, "utf8");
+    const lines = source.split(/\r?\n/);
+    lines.forEach((line, index) => {
+      const looksLikeCurrentVersionAssertion =
+        /assert\./.test(line) &&
+        /4(?:\\\.)?\.?5(?:\\\.)?\.?2|v4-5-2/.test(line) &&
+        /APP_CONFIG|APP_VERSION|appVersion|package|version|recovery|service-worker|Datenformat|Datenbank/.test(line);
+      if (looksLikeCurrentVersionAssertion) {
+        stale.push(`${file}:${index + 1}: ${line.trim().slice(0, 180)}`);
+      }
+    });
+  }
+  if (stale.length) {
+    throw new Error(`Veraltete Current-Version-Assertions gefunden:\n${stale.join("\n")}`);
+  }
 }
 
 async function appendSection(file, marker, section) {
@@ -237,6 +318,8 @@ async function main() {
 
   await updateServiceWorker();
 
+  await syncCurrentReleaseVersionTests();
+
   const batchImplementation = `export async function saveComicsBatch(comics) {\n  const entries = Array.isArray(comics) ? comics.filter(Boolean) : [];\n  if (!entries.length) return [];\n  if (entries.length === 1) return [await saveComic(entries[0])];\n\n  const database = await getDatabase();\n  const core = await ensureArchiveCoreReady();\n  if (!core.ready) {\n    const transaction = database.transaction(COMICS_STORE, "readwrite");\n    const store = transaction.objectStore(COMICS_STORE);\n    entries.forEach((comic) => store.put(comic));\n    await transactionDone(transaction);\n    return entries;\n  }\n\n  const [settings, existingSeries, graph] = await Promise.all([\n    readSettingsValue(database),\n    readAll(database, SERIES_STORE),\n    readArchiveGraph(database)\n  ]);\n  const catalog = buildSeriesCatalog({ legacyComics: entries, settings, existingSeries });\n  const issuesById = new Map(graph.issues.map((issue) => [String(issue.id), issue]));\n  const issuesByIdentity = new Map(graph.issues.map((issue) => [String(issue.seriesVolumeKey || ""), issue]).filter(([key]) => key));\n  const copiesByIssue = new Map();\n  graph.copies.forEach((copy) => {\n    const issueId = String(copy.issueId || "");\n    if (!issueId) return;\n    if (!copiesByIssue.has(issueId)) copiesByIssue.set(issueId, []);\n    copiesByIssue.get(issueId).push(copy);\n  });\n  copiesByIssue.forEach((copies) => copies.sort((first, second) => Number(first.displayOrder || 0) - Number(second.displayOrder || 0)));\n\n  const seriesWrites = new Map();\n  const issueWrites = new Map();\n  const issueDeletes = new Set();\n  const copyWrites = new Map();\n  const copyDeletes = new Set();\n  const legacyWrites = new Map();\n  const legacyDeletes = new Set();\n  const coverWrites = new Map();\n  const coverDeletes = new Set();\n  const coverCache = new Map();\n  const projectedRecords = [];\n  const batchNonce = Date.now();\n\n  const readBatchCover = async (comicId) => {\n    const normalizedId = String(comicId || "");\n    if (!normalizedId || coverDeletes.has(normalizedId)) return null;\n    if (coverWrites.has(normalizedId)) return coverWrites.get(normalizedId);\n    if (coverCache.has(normalizedId)) return coverCache.get(normalizedId);\n    const record = await readRecord(database, COVER_STORE, normalizedId);\n    coverCache.set(normalizedId, record || null);\n    return record || null;\n  };\n\n  for (const [entryIndex, comic] of entries.entries()) {\n    const firstPass = legacyComicToArchiveRecords(comic, catalog.series, [], {\n      dataFormatVersion: APP_CONFIG.dataFormatVersion\n    });\n    const identityMatch = issuesByIdentity.get(firstPass.issue.seriesVolumeKey) || null;\n    const requestedIssueId = String(comic.issueId || comic.id || firstPass.issue.id);\n    const targetIssueId = identityMatch?.id || requestedIssueId;\n    const sourceIssueId = requestedIssueId;\n    const previousCopies = [...(copiesByIssue.get(String(targetIssueId)) || [])];\n    const sourceCopies = sourceIssueId !== targetIssueId\n      ? [...(copiesByIssue.get(String(sourceIssueId)) || [])]\n      : [];\n    const isAdditionalLegacyEntry = Boolean(identityMatch && sourceIssueId !== identityMatch.id);\n    const [sourceCover, targetCover] = sourceIssueId !== targetIssueId\n      ? await Promise.all([readBatchCover(sourceIssueId), readBatchCover(targetIssueId)])\n      : [null, null];\n\n    let records = legacyComicToArchiveRecords({\n      ...comic,\n      id: targetIssueId,\n      issueId: targetIssueId,\n      seriesId: firstPass.series.id,\n      createdAt: identityMatch?.createdAt || comic.createdAt\n    }, catalog.series, isAdditionalLegacyEntry ? [] : previousCopies, {\n      dataFormatVersion: APP_CONFIG.dataFormatVersion\n    });\n\n    if (identityMatch) {\n      records.issue = {\n        ...identityMatch,\n        ...records.issue,\n        id: identityMatch.id,\n        createdAt: identityMatch.createdAt || records.issue.createdAt,\n        title: records.issue.title || identityMatch.title || "",\n        publicationYear: records.issue.publicationYear ?? identityMatch.publicationYear ?? null,\n        duckipediaPageUrl: records.issue.duckipediaPageUrl || identityMatch.duckipediaPageUrl || "",\n        duckipediaCoverUrl: records.issue.duckipediaCoverUrl || identityMatch.duckipediaCoverUrl || "",\n        duckipediaCoverFileName: records.issue.duckipediaCoverFileName || identityMatch.duckipediaCoverFileName || "",\n        duckipediaCoverSource: records.issue.duckipediaCoverSource || identityMatch.duckipediaCoverSource || "",\n        duckipediaCoverLookupVersion: Math.max(\n          Number(records.issue.duckipediaCoverLookupVersion || 0),\n          Number(identityMatch.duckipediaCoverLookupVersion || 0)\n        ),\n        legacyComicIds: [...new Set([\n          ...(identityMatch.legacyComicIds || []),\n          ...(records.issue.legacyComicIds || []),\n          requestedIssueId\n        ].filter(Boolean))]\n      };\n      if (isAdditionalLegacyEntry) {\n        const incomingCopies = records.copies.map((copy, index) => ({\n          ...copy,\n          id: previousCopies.some((existing) => existing.id === copy.id) ? \`${'${copy.id}'}-${'${batchNonce}'}-${'${entryIndex + 1}'}-${'${index + 1}'}\` : copy.id,\n          issueId: identityMatch.id,\n          displayOrder: previousCopies.length + index + 1\n        }));\n        records.copies = [\n          ...previousCopies.map((copy, index) => ({ ...copy, issueId: identityMatch.id, displayOrder: index + 1 })),\n          ...incomingCopies\n        ];\n      } else {\n        records.copies = records.copies.map((copy, index) => ({\n          ...copy,\n          issueId: identityMatch.id,\n          displayOrder: index + 1\n        }));\n      }\n    }\n\n    const projected = materializeLegacyComics([records.issue], records.copies, [records.series])[0];\n    const oldCopyIds = [...new Set([\n      ...previousCopies.map((copy) => copy.id),\n      ...sourceCopies.map((copy) => copy.id)\n    ])];\n\n    const previousTargetIssue = issuesById.get(String(targetIssueId));\n    if (previousTargetIssue?.seriesVolumeKey && previousTargetIssue.seriesVolumeKey !== records.issue.seriesVolumeKey) {\n      if (issuesByIdentity.get(previousTargetIssue.seriesVolumeKey)?.id === previousTargetIssue.id) {\n        issuesByIdentity.delete(previousTargetIssue.seriesVolumeKey);\n      }\n    }\n    if (sourceIssueId !== targetIssueId) {\n      const sourceIssue = issuesById.get(String(sourceIssueId));\n      if (sourceIssue?.seriesVolumeKey && issuesByIdentity.get(sourceIssue.seriesVolumeKey)?.id === sourceIssue.id) {\n        issuesByIdentity.delete(sourceIssue.seriesVolumeKey);\n      }\n      issuesById.delete(String(sourceIssueId));\n      copiesByIssue.delete(String(sourceIssueId));\n      issueDeletes.add(String(sourceIssueId));\n    }\n\n    issuesById.set(String(records.issue.id), records.issue);\n    if (records.issue.seriesVolumeKey) issuesByIdentity.set(records.issue.seriesVolumeKey, records.issue);\n    copiesByIssue.set(String(records.issue.id), records.copies);\n    seriesWrites.set(String(records.series.id), records.series);\n    issueWrites.set(String(records.issue.id), records.issue);\n    oldCopyIds.forEach((copyId) => {\n      copyDeletes.add(String(copyId));\n      copyWrites.delete(String(copyId));\n    });\n    records.copies.forEach((copy) => copyWrites.set(String(copy.id), copy));\n    legacyWrites.set(String(projected.id), projected);\n    if (sourceIssueId !== projected.id) {\n      legacyDeletes.add(String(sourceIssueId));\n      legacyWrites.delete(String(sourceIssueId));\n    }\n\n    if (sourceIssueId !== targetIssueId) {\n      if (sourceCover) {\n        const sourceIsNewer = Date.parse(sourceCover.updatedAt || 0) > Date.parse(targetCover?.updatedAt || 0);\n        if (!targetCover || sourceIsNewer) {\n          const remappedCover = { ...sourceCover, comicId: targetIssueId };\n          coverWrites.set(String(targetIssueId), remappedCover);\n          coverDeletes.delete(String(targetIssueId));\n          coverCache.set(String(targetIssueId), remappedCover);\n        }\n      }\n      coverDeletes.add(String(sourceIssueId));\n      coverWrites.delete(String(sourceIssueId));\n      coverCache.set(String(sourceIssueId), null);\n    }\n\n    projectedRecords.push(projected);\n  }\n\n  const stores = [SERIES_STORE, ISSUES_STORE, COPIES_STORE, COMICS_STORE];\n  if (coverWrites.size || coverDeletes.size) stores.push(COVER_STORE);\n  const transaction = database.transaction(stores, "readwrite");\n  const seriesStore = transaction.objectStore(SERIES_STORE);\n  const issuesStore = transaction.objectStore(ISSUES_STORE);\n  const copiesStore = transaction.objectStore(COPIES_STORE);\n  const legacyStore = transaction.objectStore(COMICS_STORE);\n\n  seriesWrites.forEach((record) => seriesStore.put(record));\n  issueDeletes.forEach((issueId) => issuesStore.delete(issueId));\n  issueWrites.forEach((record) => issuesStore.put(record));\n  copyDeletes.forEach((copyId) => copiesStore.delete(copyId));\n  copyWrites.forEach((record) => copiesStore.put(record));\n  legacyDeletes.forEach((issueId) => legacyStore.delete(issueId));\n  legacyWrites.forEach((record) => legacyStore.put(record));\n\n  if (stores.includes(COVER_STORE)) {\n    const coverStore = transaction.objectStore(COVER_STORE);\n    coverDeletes.forEach((comicId) => coverStore.delete(comicId));\n    coverWrites.forEach((record) => coverStore.put(record));\n  }\n\n  await transactionDone(transaction);\n  return projectedRecords;\n}\n\nexport async function upsertComics(comics) {\n  return saveComicsBatch(comics);\n}`;
 
   await replaceOnce(
@@ -357,6 +440,12 @@ test("Bulk-Speicherung und Metadaten-GC sind im Storage-Layer vorhanden", async 
   assert.match(storage, /database\.transaction\(stores, "readwrite"\)/);
   assert.match(storage, /export async function pruneMetadataCache/);
   assert.match(app, /await upsertComics\(entries\);/);
+});
+
+test("Release-Versionstests werden beim Versionsbump synchron gehalten", async () => {
+  const script = await source("ComicArchiv-4.5.3-cleanup.mjs").catch(() => "");
+  if (!script) return;
+  assert.match(script, /syncCurrentReleaseVersionTests/);
 });
 
 test("private Exporte und generiertes dist sind von Git ausgeschlossen", async () => {
