@@ -19,7 +19,7 @@ import {
   clearMetadataCache,
   deleteComic,
   deleteCoverMedia,
-  getAllComics,
+  getArchiveRuntimeCollection,
   getAllCoverMedia,
   getAllCoverMediaKeys,
   getAllMetadataCache,
@@ -169,7 +169,9 @@ const SMART_LIST_DEFINITIONS_LOOKUP = Object.freeze({
 });
 
 const state = {
-  comics: [],
+  archiveGraph: { series: [], issues: [], copies: [] },
+  archiveRuntimeSource: "",
+  collectionEntries: [],
   filteredComics: [],
   missingGroups: [],
   settings: {
@@ -705,7 +707,7 @@ async function initializeApp() {
   bindEvents();
   shelfUI = createShelfUI({
     getSnapshot: () => ({
-      comics: state.comics,
+      comics: state.collectionEntries,
       missingGroups: state.missingGroups,
       settings: state.settings,
       localCoverIds: state.localCoverIds
@@ -839,7 +841,8 @@ async function refreshDataStackStatus() {
       const repairLabel = Number(status.mirrorRepair?.repairedCount || 0) > 0
         ? ` · Mirror repariert (${status.mirrorRepair.repairedCount})`
         : "";
-      elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion}${repairLabel} · Einstellungen getrennt aktiv`;
+      const runtimeLabel = state.archiveRuntimeSource === "archive-graph" ? " · Archivgraph aktiv" : "";
+      elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion}${repairLabel}${runtimeLabel} · Einstellungen getrennt aktiv`;
       elements.dataStackSummary.dataset.type = "success";
     } else if (status.ready) {
       elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion}`;
@@ -1048,7 +1051,7 @@ function toggleTestMode() {
 }
 
 function populateConfiguration() {
-  const availableSeries = getAvailableSeries(state.settings, state.comics);
+  const availableSeries = getAvailableSeries(state.settings, state.collectionEntries);
   const selectedSeries = elements.series.value;
   const selectedFilterSeries = elements.filterSeries.value;
   const selectedCondition = elements.condition.value || DEFAULT_CONDITION_CODE;
@@ -1835,7 +1838,7 @@ function findComicBySeriesAndVolume(series, volumeNumber) {
   const rawVolume = String(volumeNumber || "").trim().normalize("NFC");
   const volumeKey = /^[0-9]+$/.test(rawVolume) && Number(rawVolume) > 0 ? String(Number(rawVolume)) : rawVolume;
 
-  return state.comics.find((comic) => {
+  return state.collectionEntries.find((comic) => {
     const comicSeriesId = comic.seriesId || resolveConfiguredSeriesId(comic.series);
     if (identityKey && comicSeriesId) {
       return createIssueIdentityKey(comicSeriesId, comic.volumeNumber) === identityKey;
@@ -1913,7 +1916,7 @@ function buildComicFromForm() {
   const duplicateCondition = elements.isDuplicate.checked ? elements.duplicateCondition.value : null;
   const notes = elements.notes.value.trim();
   const errors = {};
-  const availableSeries = getAvailableSeries(state.settings, state.comics);
+  const availableSeries = getAvailableSeries(state.settings, state.collectionEntries);
 
   if (!availableSeries.includes(series)) {
     errors.series = "Bitte wähle eine gültige Reihe aus.";
@@ -2291,71 +2294,32 @@ function createStableId() {
   return `comic-${Date.now()}-${randomPart}`;
 }
 
-function migrateLegacyComicConditions(comics) {
-  let migratedRatings = 0;
-  let migratedComics = 0;
-
-  const normalizedComics = comics.map((comic) => {
-    const originalCopies = getComicCopies(comic);
-    const copies = originalCopies.map((copy, index) => {
-      const condition = normalizeConditionCode(copy.condition, DEFAULT_CONDITION_CODE);
-      if (condition !== copy.condition) migratedRatings += 1;
-      return normalizeCopy({
-        ...copy,
-        issueId: comic.id,
-        condition,
-        displayOrder: index + 1
-      }, { issueId: comic.id, position: index + 1 });
-    });
-    const primary = copies[0];
-    const secondary = copies[1] || null;
-    const copiesChanged = copies.some((copy, index) => copy.condition !== originalCopies[index]?.condition);
-    const versionChanged = Number(comic.dataFormatVersion) !== APP_CONFIG.dataFormatVersion;
-    const modelChanged = !Array.isArray(comic.copies) || Number(comic.copyCount) !== copies.length;
-
-    if (!copiesChanged && !versionChanged && !modelChanged) return comic;
-    migratedComics += 1;
-    return {
-      ...comic,
-      dataFormatVersion: APP_CONFIG.dataFormatVersion,
-      copies,
-      copyCount: copies.length,
-      condition: primary.condition,
-      duplicateCondition: secondary?.condition || null,
-      isRead: primary.isRead,
-      isSealed: primary.isSealed,
-      isDuplicate: copies.length > 1
-    };
-  });
-
-  return { comics: normalizedComics, migratedRatings, migratedComics };
-}
-
 async function refreshCollection() {
   try {
-    const [storedComics, coverKeys] = await Promise.all([
-      getAllComics(),
+    const [runtime, coverKeys] = await Promise.all([
+      getArchiveRuntimeCollection(),
       getAllCoverMediaKeys().catch((error) => {
         console.warn("Cover-IDs konnten nicht geladen werden:", error);
         return [];
       })
     ]);
     state.localCoverIds = new Set(coverKeys);
-    const migration = migrateLegacyComicConditions(storedComics);
-    state.comics = migration.comics;
-
-    if (migration.migratedComics > 0) {
-      await upsertComics(migration.comics.filter((comic, index) => comic !== storedComics[index]));
-    }
+    state.archiveGraph = {
+      series: runtime.series,
+      issues: runtime.issues,
+      copies: runtime.copies
+    };
+    state.archiveRuntimeSource = runtime.source || "archive-graph";
+    state.collectionEntries = runtime.entries;
 
     populateConfiguration();
     state.missingGroups = calculateMissingBands(
-      state.comics,
+      state.collectionEntries,
       state.settings.knownHighestBandBySeries
     );
     renderCollectionHub();
     renderMissingHub();
-    shelfUI?.refresh({ comics: state.comics, missingGroups: state.missingGroups, settings: state.settings, localCoverIds: state.localCoverIds });
+    shelfUI?.refresh({ comics: state.collectionEntries, missingGroups: state.missingGroups, settings: state.settings, localCoverIds: state.localCoverIds });
     if (!elements.collectionPage.classList.contains("hidden")) renderCollection();
     renderStats();
     if (!elements.missingPage.classList.contains("hidden")) renderMissingBands();
@@ -2365,13 +2329,11 @@ async function refreshCollection() {
     renderBackupStatus();
     renderCalendarOverview();
     if (!elements.calendarPage.classList.contains("hidden")) renderCalendarPage();
-
-    if (migration.migratedRatings > 0) {
-      showToast(`${migration.migratedRatings} gespeicherte Zustandswertungen wurden automatisch in das deutsche 0–5-System übertragen.`, "success");
-    }
   } catch (error) {
+    state.archiveRuntimeSource = "error";
     console.error(error);
-    showFormMessage(`Lokale Daten konnten nicht geladen werden: ${error.message}`, "error");
+    recordDiagnosticError(error, "Archive Runtime", "error");
+    showFormMessage(`Lokale Daten konnten nicht aus dem Archivgraph geladen werden: ${error.message}`, "error");
   }
 }
 
@@ -2419,7 +2381,7 @@ function openProgressForSeries(seriesName) {
 }
 
 
-function syncCollectionSeriesFilter(availableSeries = getAvailableSeries(state.settings, state.comics), preferredValue = elements.filterSeries.value) {
+function syncCollectionSeriesFilter(availableSeries = getAvailableSeries(state.settings, state.collectionEntries), preferredValue = elements.filterSeries.value) {
   const mainSeries = "Lustiges Taschenbuch";
   const options = state.collectionScope === "main"
     ? [mainSeries]
@@ -2443,8 +2405,8 @@ function syncCollectionSeriesFilter(availableSeries = getAvailableSeries(state.s
 }
 
 function renderCollectionHub() {
-  const mainCount = state.comics.filter((comic) => comic.series === "Lustiges Taschenbuch").length;
-  const otherCount = state.comics.length - mainCount;
+  const mainCount = state.collectionEntries.filter((comic) => comic.series === "Lustiges Taschenbuch").length;
+  const otherCount = state.collectionEntries.length - mainCount;
   elements.mainCollectionCount.textContent = String(mainCount);
   elements.otherCollectionCount.textContent = String(otherCount);
   elements.mainCollectionCount.setAttribute("aria-label", formatEntryCount(mainCount));
@@ -2458,7 +2420,7 @@ function openCollectionPage(scope, presets = {}) {
   );
   state.collectionPreset = { ...presets };
   resetFilters({ keepPageOpen: true, clearPreset: false });
-  syncCollectionSeriesFilter(getAvailableSeries(state.settings, state.comics));
+  syncCollectionSeriesFilter(getAvailableSeries(state.settings, state.collectionEntries));
 
   if (presets.series && [...elements.filterSeries.options].some((option) => option.value === presets.series)) {
     elements.filterSeries.value = presets.series;
@@ -2842,7 +2804,7 @@ async function saveFleaMarketFinds() {
       const condition = APP_CONFIG.conditions.some((item) => item.code === session.condition)
         ? session.condition
         : DEFAULT_CONDITION_CODE;
-      const existing = state.comics.find((comic) => (
+      const existing = state.collectionEntries.find((comic) => (
         normalizeSeriesLookup(comic.series) === normalizeSeriesLookup(candidate.series)
         && comic.numericBandNumber === candidate.bandNumber
       ));
@@ -2994,7 +2956,7 @@ async function refreshMediaStatus() {
     elements.showCovers.checked = state.settings.showCovers !== false;
     elements.autoEnrich.checked = state.settings.duckipediaAutoEnrich !== false;
 
-    const eligibleCount = state.comics.filter((comic) => comic.numericBandNumber && (
+    const eligibleCount = state.collectionEntries.filter((comic) => comic.numericBandNumber && (
       !comic.title || !comic.publicationYear || !comic.duckipediaCoverUrl || !isMetadataFresh(comic)
     )).length;
     elements.enrichmentCount.textContent = eligibleCount === 1 ? "1 Band prüfbar" : `${eligibleCount} Bände prüfbar`;
@@ -3030,7 +2992,7 @@ async function handleAutoEnrichChange() {
 
 async function handleEnrichAll() {
   if (state.enrichmentRunning) return;
-  const candidates = state.comics.filter((comic) => comic.numericBandNumber);
+  const candidates = state.collectionEntries.filter((comic) => comic.numericBandNumber);
 
   if (candidates.length === 0) {
     elements.enrichmentStatus.textContent = "Es gibt noch keine Comics mit rein numerischer Bandnummer.";
@@ -3105,9 +3067,9 @@ async function handleMediaBackupExport() {
       lastMediaBackupAt: backupTime,
       changesSinceBackup: 0,
       mediaChangesSinceBackup: 0,
-      lastBackupComicCount: state.comics.length
+      lastBackupComicCount: state.collectionEntries.length
     };
-    const content = await createMediaBackup(state.comics, nextSettings, metadataCache, covers);
+    const content = await createMediaBackup(state.collectionEntries, nextSettings, metadataCache, covers);
     const result = await shareOrDownloadBlob({
       blob: new Blob([content], { type: "application/json;charset=utf-8" }),
       filename: createAppFilename("Entenarchiv-Medien-Backup", "json"),
@@ -3196,7 +3158,7 @@ async function handleProgressTargetSubmit(event) {
       elements.progressTarget.focus();
       return;
     }
-    const highestPresent = state.comics
+    const highestPresent = state.collectionEntries
       .filter((comic) => comic.series === series && Number.isSafeInteger(comic.numericBandNumber))
       .reduce((maximum, comic) => Math.max(maximum, comic.numericBandNumber), 0);
     if (target < highestPresent) {
@@ -3210,11 +3172,11 @@ async function handleProgressTargetSubmit(event) {
 
   try {
     await saveMeaningfulSettings({ knownHighestBandBySeries: nextTargets });
-    state.missingGroups = calculateMissingBands(state.comics, nextTargets);
+    state.missingGroups = calculateMissingBands(state.collectionEntries, nextTargets);
     renderMissingBands();
     renderStats();
     renderSeriesProgress();
-    shelfUI?.refresh({ comics: state.comics, missingGroups: state.missingGroups, settings: state.settings, localCoverIds: state.localCoverIds });
+    shelfUI?.refresh({ comics: state.collectionEntries, missingGroups: state.missingGroups, settings: state.settings, localCoverIds: state.localCoverIds });
     syncProgressTargetInput();
     elements.progressMessage.textContent = rawTarget
       ? `Ziel für „${series}“ gespeichert.`
@@ -3243,12 +3205,12 @@ async function handleRemoveProgressTarget() {
     const nextTargets = { ...targets };
     delete nextTargets[series];
     await saveMeaningfulSettings({ knownHighestBandBySeries: nextTargets });
-    state.missingGroups = calculateMissingBands(state.comics, nextTargets);
+    state.missingGroups = calculateMissingBands(state.collectionEntries, nextTargets);
     renderMissingHub();
     renderMissingBands();
     renderStats();
     renderSeriesProgress();
-    shelfUI?.refresh({ comics: state.comics, missingGroups: state.missingGroups, settings: state.settings, localCoverIds: state.localCoverIds });
+    shelfUI?.refresh({ comics: state.collectionEntries, missingGroups: state.missingGroups, settings: state.settings, localCoverIds: state.localCoverIds });
     syncProgressTargetInput();
     elements.progressMessage.textContent = `Festes Ziel für „${series}“ entfernt.`;
     elements.progressMessage.dataset.type = "success";
@@ -3261,7 +3223,7 @@ async function handleRemoveProgressTarget() {
 function getSeriesProgressData() {
   const numericBandsBySeries = new Map();
 
-  state.comics.forEach((comic) => {
+  state.collectionEntries.forEach((comic) => {
     if (!Number.isSafeInteger(comic.numericBandNumber) || comic.numericBandNumber < 1) return;
     if (!numericBandsBySeries.has(comic.series)) numericBandsBySeries.set(comic.series, new Set());
     numericBandsBySeries.get(comic.series).add(comic.numericBandNumber);
@@ -3439,10 +3401,10 @@ function renderCollection() {
 
 function getScopedComics() {
   const mainSeries = "Lustiges Taschenbuch";
-  if (state.collectionScope === "all") return [...state.comics];
+  if (state.collectionScope === "all") return [...state.collectionEntries];
   return state.collectionScope === "other"
-    ? state.comics.filter((comic) => comic.series !== mainSeries)
-    : state.comics.filter((comic) => comic.series === mainSeries);
+    ? state.collectionEntries.filter((comic) => comic.series !== mainSeries)
+    : state.collectionEntries.filter((comic) => comic.series === mainSeries);
 }
 
 function getFilteredAndSortedComics() {
@@ -3791,12 +3753,12 @@ function createTag(label, active) {
 }
 
 function renderStats() {
-  const total = state.comics.length;
-  const read = state.comics.filter((comic) => getComicCopies(comic).some((copy) => copy.isRead)).length;
-  const sealed = state.comics.filter((comic) => getComicCopies(comic).some((copy) => copy.isSealed)).length;
-  const duplicate = state.comics.filter((comic) => getComicCopies(comic).length > 1).length;
-  const physicalCopies = countPhysicalCopies(state.comics);
-  const seriesCount = new Set(state.comics.map((comic) => comic.seriesId || comic.series)).size;
+  const total = state.collectionEntries.length;
+  const read = state.collectionEntries.filter((comic) => getComicCopies(comic).some((copy) => copy.isRead)).length;
+  const sealed = state.collectionEntries.filter((comic) => getComicCopies(comic).some((copy) => copy.isSealed)).length;
+  const duplicate = state.collectionEntries.filter((comic) => getComicCopies(comic).length > 1).length;
+  const physicalCopies = countPhysicalCopies(state.collectionEntries);
+  const seriesCount = new Set(state.collectionEntries.map((comic) => comic.seriesId || comic.series)).size;
   const missingCount = countMissingBands(state.missingGroups);
 
   elements.statTotal.textContent = total;
@@ -3827,7 +3789,7 @@ function renderStats() {
 
   elements.conditionStatsTotal.textContent = physicalCopies === 1 ? "1 Exemplar" : `${physicalCopies} Exemplare`;
 
-  const allCopies = state.comics.flatMap((comic) => getComicCopies(comic));
+  const allCopies = state.collectionEntries.flatMap((comic) => getComicCopies(comic));
   elements.conditionStats.replaceChildren();
   APP_CONFIG.conditions.forEach((condition) => {
     const count = allCopies.filter((copy) => copy.condition === condition.code).length;
@@ -4019,12 +3981,12 @@ function hideMilestoneCelebration() {
 
 function createShareCardContext() {
   const progressData = getSeriesProgressData();
-  const dna = buildStatisticsDNA({ comics: state.comics, progressData, missingGroups: state.missingGroups });
+  const dna = buildStatisticsDNA({ comics: state.collectionEntries, progressData, missingGroups: state.missingGroups });
   return {
     dna,
     mainProgress: progressData.find((entry) => entry.series === "Lustiges Taschenbuch") || null,
-    milestone: state.currentMilestones[0] || buildMilestones({ comics: state.comics, progressData })[0] || null,
-    totalSeries: new Set(state.comics.map((comic) => comic.seriesId || comic.series)).size,
+    milestone: state.currentMilestones[0] || buildMilestones({ comics: state.collectionEntries, progressData })[0] || null,
+    totalSeries: new Set(state.collectionEntries.map((comic) => comic.seriesId || comic.series)).size,
     totalMissing: countMissingBands(state.missingGroups),
     generatedAt: new Date()
   };
@@ -4096,7 +4058,7 @@ function renderStatistics() {
   if (!elements.statisticsHighlights) return;
   const progressData = getSeriesProgressData();
   const dna = buildStatisticsDNA({
-    comics: state.comics,
+    comics: state.collectionEntries,
     progressData,
     missingGroups: state.missingGroups
   });
@@ -4106,7 +4068,7 @@ function renderStatistics() {
   elements.dnaSummary.textContent = `${dna.uniqueIssues} Ausgaben · ${dna.physicalCopies} Exemplare`;
 
   renderDnaInsights(dna);
-  const milestones = buildMilestones({ comics: state.comics, progressData });
+  const milestones = buildMilestones({ comics: state.collectionEntries, progressData });
   state.currentMilestones = milestones;
   renderMilestones(milestones);
   scheduleMilestoneSync(milestones);
@@ -4513,7 +4475,7 @@ async function handleCardAction(event) {
   }
 
   const card = button.closest("[data-comic-id]");
-  const comic = state.comics.find((entry) => entry.id === card?.dataset.comicId);
+  const comic = state.collectionEntries.find((entry) => entry.id === card?.dataset.comicId);
 
   if (!comic) {
     showToast("Der Eintrag wurde nicht gefunden.", "error");
@@ -4675,7 +4637,7 @@ function createCopyManagerCheckbox(index, field, labelText, checked) {
 }
 
 function addCopyManagerCopy() {
-  const comic = state.comics.find((entry) => entry.id === state.selectedCopyComicId);
+  const comic = state.collectionEntries.find((entry) => entry.id === state.selectedCopyComicId);
   if (!comic) return;
   const now = new Date().toISOString();
   const reference = state.copyManagerDraft[0];
@@ -4720,7 +4682,7 @@ function handleCopyManagerClick(event) {
 
 async function handleSaveCopyManager(event) {
   event.preventDefault();
-  const comic = state.comics.find((entry) => entry.id === state.selectedCopyComicId);
+  const comic = state.collectionEntries.find((entry) => entry.id === state.selectedCopyComicId);
   if (!comic) return;
   if (state.copyManagerDraft.length === 0) {
     elements.duplicateMessage.textContent = "Mindestens ein Exemplar ist erforderlich.";
@@ -4831,7 +4793,7 @@ async function resolveShelfCoverUrl(comic, { force = false } = {}) {
   const promise = (async () => {
     try {
       const metadata = await getMetadataForBand(comic.series, comic.numericBandNumber, { force });
-      const currentComic = state.comics.find((entry) => entry.id === comic.id) || comic;
+      const currentComic = state.collectionEntries.find((entry) => entry.id === comic.id) || comic;
       const { comic: updatedComic, changed } = mergeComicWithMetadata(currentComic, metadata);
       if (changed) {
         await saveComic(updatedComic);
@@ -4855,7 +4817,7 @@ function replaceComicInMemory(updatedComic) {
     const index = items.findIndex((entry) => entry.id === updatedComic.id);
     if (index >= 0) items[index] = updatedComic;
   };
-  replace(state.comics);
+  replace(state.collectionEntries);
   replace(state.filteredComics);
 }
 
@@ -5005,7 +4967,7 @@ function resetForm() {
 
 function resetFilters({ keepPageOpen = false, clearPreset = true } = {}) {
   elements.search.value = "";
-  syncCollectionSeriesFilter(getAvailableSeries(state.settings, state.comics));
+  syncCollectionSeriesFilter(getAvailableSeries(state.settings, state.collectionEntries));
   elements.filterCondition.value = "all";
   elements.filterRead.value = "all";
   elements.filterSealed.checked = false;
@@ -5105,7 +5067,7 @@ async function openScannerModal() {
     return;
   }
 
-  const availableSeries = getAvailableSeries(state.settings, state.comics);
+  const availableSeries = getAvailableSeries(state.settings, state.collectionEntries);
   if (availableSeries.includes(elements.series.value)) {
     elements.scannerSeries.value = elements.series.value;
   }
@@ -5496,7 +5458,7 @@ function abortScannerLookup() {
 }
 
 function findExistingScannerIssue(series, bandNumber) {
-  return state.comics.find((comic) => (
+  return state.collectionEntries.find((comic) => (
     normalizeSeriesLookup(comic.series) === normalizeSeriesLookup(series)
     && comic.numericBandNumber === Number(bandNumber)
   )) || null;
@@ -5674,7 +5636,7 @@ function renderScannerQueue() {
         createOption("skip", "Überspringen")
       );
       actionSelect.value = item.action === "skip" ? "skip" : "additional-copy";
-      const existing = state.comics.find((comic) => comic.id === item.existingComicId);
+      const existing = state.collectionEntries.find((comic) => comic.id === item.existingComicId);
       const hint = document.createElement("small");
       hint.className = "field-help";
       const count = existing ? getComicCopies(existing).length : 0;
@@ -6024,7 +5986,7 @@ async function saveScannerQueue() {
       const drafts = getScannerQueueCopyDrafts(item);
       const now = new Date().toISOString();
       const existing = item.existingComicId
-        ? state.comics.find((comic) => comic.id === item.existingComicId)
+        ? state.collectionEntries.find((comic) => comic.id === item.existingComicId)
         : findComicBySeriesAndVolume(item.series, item.volumeNumber);
 
       if (existing) {
@@ -6393,7 +6355,7 @@ async function handleSaveCustomSeries(event) {
   const originalName = state.editingCustomSeriesName;
   const rawPattern = elements.customSeriesPattern.value.trim();
   const pattern = normalizeDuckipediaPattern(rawPattern);
-  const allSeries = getAvailableSeries(state.settings, state.comics)
+  const allSeries = getAvailableSeries(state.settings, state.collectionEntries)
     .filter((entry) => !originalName || entry.localeCompare(originalName, "de", { sensitivity: "base" }) !== 0);
 
   if (!name) {
@@ -6446,7 +6408,7 @@ async function handleSaveCustomSeries(event) {
     if (originalName) {
       nextConfigs = currentConfigs.map((entry) => entry.name === originalName ? nextConfig : entry);
       if (name !== originalName) {
-        const usedCount = state.comics.filter((comic) => comic.series === originalName).length;
+        const usedCount = state.collectionEntries.filter((comic) => comic.series === originalName).length;
         if (usedCount > 0 && !window.confirm(`Die Reihe wird von ${usedCount} gespeicherten Bänden verwendet. Alle Einträge in „${name}“ umbenennen?`)) {
           return;
         }
@@ -6476,7 +6438,7 @@ async function handleSaveCustomSeries(event) {
 
     const temporarySettings = { ...state.settings, customSeriesConfigs: nextConfigs };
     const sourceSeriesName = originalName || name;
-    const configuredComics = state.comics
+    const configuredComics = state.collectionEntries
       .filter((comic) => comic.series === sourceSeriesName)
       .map((comic) => {
         const pageUrl = comic.numericBandNumber
@@ -6614,7 +6576,7 @@ function handleCustomSeriesAction(event) {
 }
 
 async function handleRemoveCustomSeries(seriesName) {
-  const isUsed = state.comics.some((comic) => comic.series === seriesName);
+  const isUsed = state.collectionEntries.some((comic) => comic.series === seriesName);
   const prompt = isUsed
     ? `„${seriesName}“ wird von gespeicherten Comics verwendet. Aus der persönlichen Auswahlliste entfernen und zugehörige Ziele, Fehlband-Details sowie Flohmarkt-Markierungen löschen? Bestehende Comics bleiben erhalten.`
     : `„${seriesName}“ vollständig aus der persönlichen Reihenverwaltung entfernen? Zugehörige Ziele, Fehlband-Details und Flohmarkt-Markierungen werden ebenfalls gelöscht.`;
@@ -6666,7 +6628,7 @@ async function handleRemoveCustomSeries(seriesName) {
     await removeSeriesDefinition(removedSeriesId);
 
     state.openMissingSeries.delete(seriesName);
-    state.missingGroups = calculateMissingBands(state.comics, nextHighest);
+    state.missingGroups = calculateMissingBands(state.collectionEntries, nextHighest);
 
     populateConfiguration();
     renderCustomSeriesList();
@@ -7125,7 +7087,7 @@ async function handleCollectionCsvExport() {
 
   try {
     const result = await shareOrDownloadText({
-      content: createCollectionCsv(state.comics, state.settings),
+      content: createCollectionCsv(state.collectionEntries, state.settings),
       filename: createAppFilename("Entenarchiv-Sammlung", "csv"),
       mimeType: "text/csv;charset=utf-8",
       title: "Entenarchiv – Sammlung",
@@ -7209,11 +7171,11 @@ async function handleJsonExport() {
       ...state.settings,
       lastBackupAt: backupTime,
       changesSinceBackup: 0,
-      lastBackupComicCount: state.comics.length
+      lastBackupComicCount: state.collectionEntries.length
     };
     const metadataCache = await getAllMetadataCache();
     const result = await shareOrDownloadText({
-      content: createJsonBackup(state.comics, nextSettings, metadataCache),
+      content: createJsonBackup(state.collectionEntries, nextSettings, metadataCache),
       filename: createAppFilename("Entenarchiv-Backup", "json"),
       mimeType: "application/json;charset=utf-8",
       title: "Entenarchiv – JSON-Backup",
@@ -7374,7 +7336,7 @@ async function handleImportSubmit() {
 
   const mode = elements.importModeReplace.checked ? "replace" : "merge";
   const confirmationText = mode === "replace"
-    ? `Die aktuelle Sammlung mit ${state.comics.length} Einträgen wird vollständig ersetzt. Fortfahren?`
+    ? `Die aktuelle Sammlung mit ${state.collectionEntries.length} Einträgen wird vollständig ersetzt. Fortfahren?`
     : `Das Backup mit ${state.importBackup.comics.length} Einträgen wird mit deiner Sammlung zusammengeführt. Fortfahren?`;
 
   if (!window.confirm(confirmationText)) {
@@ -7395,7 +7357,7 @@ async function handleImportSubmit() {
       await replaceAllComics(state.importBackup.comics);
       resultMessage = `${state.importBackup.comics.length} Einträge wurden wiederhergestellt.`;
     } else {
-      mergeResult = mergeCollections(state.comics, state.importBackup.comics);
+      mergeResult = mergeCollections(state.collectionEntries, state.importBackup.comics);
       await replaceAllComics(mergeResult.comics);
       importedChangeAmount = mergeResult.added + mergeResult.updated;
       resultMessage = `${mergeResult.added} Ausgaben hinzugefügt, ${mergeResult.updated} aktualisiert`
@@ -7412,7 +7374,7 @@ async function handleImportSubmit() {
     }
 
     const storedComicsAfterImport = (mode === "replace" || state.importBackup.hasMedia)
-      ? await getAllComics()
+      ? (await getArchiveRuntimeCollection()).entries
       : null;
 
     if (mode === "replace" && !state.importBackup.hasMedia) {
@@ -7422,7 +7384,7 @@ async function handleImportSubmit() {
     }
 
     if (state.importBackup.hasMedia) {
-      const importedComicIds = new Set((storedComicsAfterImport || await getAllComics()).map((comic) => comic.id));
+      const importedComicIds = new Set((storedComicsAfterImport || (await getArchiveRuntimeCollection()).entries).map((comic) => comic.id));
       const coverIdMap = mode === "merge"
         ? (mergeResult?.idMap || {})
         : createImportedIssueIdMap(state.importBackup.comics, storedComicsAfterImport || []);
@@ -7592,7 +7554,7 @@ function renderBackupStatus() {
   const changes = Number.isSafeInteger(state.settings.changesSinceBackup)
     ? state.settings.changesSinceBackup
     : 0;
-  const hasCollectionData = state.comics.length > 0;
+  const hasCollectionData = state.collectionEntries.length > 0;
   const daysSinceBackup = lastBackupAt
     ? Math.floor((Date.now() - Date.parse(lastBackupAt)) / 86400000)
     : null;
@@ -7622,7 +7584,7 @@ function renderBackupStatus() {
   elements.backupReminder.classList.toggle("hidden", !needsBackup);
   if (needsBackup) {
     if (!lastBackupAt) {
-      elements.backupReminderText.textContent = `Deine Sammlung enthält ${formatEntryCount(state.comics.length)}, aber noch kein JSON-Backup.`;
+      elements.backupReminderText.textContent = `Deine Sammlung enthält ${formatEntryCount(state.collectionEntries.length)}, aber noch kein JSON-Backup.`;
     } else if (changes >= 25) {
       elements.backupReminderText.textContent = `Seit dem letzten Backup wurden ${changes} Änderungen vorgenommen.`;
     } else {
@@ -8164,7 +8126,7 @@ function getReleaseSeriesCatalog() {
     ...STANDARD_SERIES_DEFINITIONS.map((entry) => entry.name),
     ...customDefinitions.map((entry) => entry.name)
   ]);
-  const usedDefinitions = state.comics
+  const usedDefinitions = state.collectionEntries
     .filter((comic) => comic?.series && !configuredNames.has(comic.series))
     .map((comic) => ({
       id: comic.seriesId || createCustomSeriesId(comic.series),
@@ -8184,7 +8146,7 @@ function resolveCalendarRelease(event) {
 
 function getCalendarCollectionStatus({ seriesId, series, bandNumber }) {
   const normalizedSeriesId = String(seriesId || "").trim();
-  const owned = state.comics.some((comic) => {
+  const owned = state.collectionEntries.some((comic) => {
     const sameSeries = normalizedSeriesId
       ? comic.seriesId === normalizedSeriesId
       : comic.series === series;
@@ -8224,7 +8186,7 @@ async function handleCalendarCollectionAction(button) {
     const currentTarget = Number(nextTargets[series]) || 0;
     if (bandNumber > currentTarget) nextTargets[series] = bandNumber;
     await saveMeaningfulSettings({ knownHighestBandBySeries: nextTargets });
-    state.missingGroups = calculateMissingBands(state.comics, nextTargets);
+    state.missingGroups = calculateMissingBands(state.collectionEntries, nextTargets);
     renderMissingHub();
     renderMissingBands();
     renderStats();
@@ -8236,7 +8198,7 @@ async function handleCalendarCollectionAction(button) {
 function getReleaseRadarItems() {
   return createReleaseRadarItems(getCalendarEvents(), {
     seriesCatalog: getReleaseSeriesCatalog(),
-    comics: state.comics,
+    comics: state.collectionEntries,
     missingGroups: state.missingGroups,
     decisions: state.settings.releaseRadarDecisions,
     knownSignatures: state.settings.releaseRadarKnownSignatures,
@@ -8503,7 +8465,7 @@ async function handleReleaseRadarPriorityChange(event) {
       knownHighestBandBySeries: nextTargets,
       releaseRadarDecisions: decisions
     }, 1);
-    state.missingGroups = calculateMissingBands(state.comics, nextTargets);
+    state.missingGroups = calculateMissingBands(state.collectionEntries, nextTargets);
     renderMissingHub();
     renderMissingBands();
     renderStats();
@@ -8793,12 +8755,12 @@ async function ensureReleaseOnWishlist(identity) {
   if (identity.bandNumber <= currentTarget) return;
   nextTargets[identity.series] = identity.bandNumber;
   await saveMeaningfulSettings({ knownHighestBandBySeries: nextTargets }, 1);
-  state.missingGroups = calculateMissingBands(state.comics, nextTargets);
+  state.missingGroups = calculateMissingBands(state.collectionEntries, nextTargets);
   renderMissingHub();
   renderMissingBands();
   renderStats();
   renderSeriesProgress();
-  shelfUI?.refresh({ comics: state.comics, missingGroups: state.missingGroups, settings: state.settings, localCoverIds: state.localCoverIds });
+  shelfUI?.refresh({ comics: state.collectionEntries, missingGroups: state.missingGroups, settings: state.settings, localCoverIds: state.localCoverIds });
 }
 
 function prepareReleaseForAdd(item) {

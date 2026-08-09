@@ -1,6 +1,17 @@
-# Entenarchiv 4.6.3
+# Entenarchiv 4.6.4
 
-Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.6.3 schaltet den **Settings-Teil von Data Stack v2 produktiv**: Einstellungen werden nicht mehr aus einem einzigen großen `settings`-Datensatz gelesen und bei jeder kleinen Änderung komplett neu geschrieben, sondern als einzelne Feld-Datensätze in sechs fachlich getrennten Schema-6-Stores geführt.
+Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.6.4 schaltet die **Runtime-Lesequelle auf den Archivgraphen um**: Die laufende Oberfläche lädt ihre Sammlung direkt aus `seriesCatalog`, `issues` und `copies` und liest nicht mehr aus dem persistierten Legacy-`comics`-Mirror.
+
+## Neu in 4.6.4
+
+- `seriesCatalog`, `issues` und `copies` sind die primäre Runtime-Lesequelle für die Sammlung.
+- Das neue Modul `archive-runtime.js` erzeugt aus dem validierten Archivgraphen eine reine In-Memory-Kompatibilitätsansicht für bestehende UI-Komponenten.
+- `refreshCollection()` verwendet `getArchiveRuntimeCollection()` und besitzt keinen Legacy-Lesefallback mehr.
+- Der persistierte `comics`-Store bleibt in dieser Tranche nur noch als Write-Mirror für Rollback, alte Backups und Paritätskontrollen bestehen.
+- Einzel- und Batch-Saves geben direkt die neue Runtime-Projektion zurück und materialisieren für den Hot Path nicht zusätzlich eine zweite UI-Projektion.
+- Data Stack v2 zeigt bei erfolgreichem Start zusätzlich „Archivgraph aktiv“.
+- Datenbankschema, Datenformat und gespeicherte Sammlungsdaten bleiben unverändert; es ist keine neue IndexedDB-Migration erforderlich.
+- Der nächste Schritt entfernt die verbleibenden `comic`-förmigen UI-Verträge und danach den Live-Write-Mirror.
 
 ## Neu in 4.6.3
 
@@ -124,14 +135,14 @@ Die Gestaltung verwendet den Entenarchiv-Farbraum, klare Typografie, Druckraster
 
 ## Technische Eckdaten
 
-- App-Version: `4.6.3`
+- App-Version: `4.6.4`
 - Datenformat: `9`
 - Archivmodell: `1`
 - Data-Stack-Version: `2`
 - IndexedDB-Schema: `6`
-- Schema 6 mit Foundation-, Mirror- und Settings-Cutover-Snapshots; Split-Settings sind aktiv
-- neue Module `data-stack.js`, `collector-goals.js` und `share-cards.js`
-- Service-Worker-Cache: `v4-6-3`
+- Schema 6 mit Foundation-, Mirror- und Settings-Cutover-Snapshots; Split-Settings und Archivgraph-Runtime sind aktiv
+- neue Module `archive-runtime.js`, `data-stack.js`, `collector-goals.js` und `share-cards.js`
+- Service-Worker-Cache: `v4-6-4`
 - Scanner- und PDF-Bibliothek weiterhin nur bei Bedarf geladen
 - GitHub Pages mit vorgeschalteter GitHub-Actions-Prüfung
 
@@ -143,6 +154,7 @@ Entenarchiv/
 ├── style.css
 ├── app.js
 ├── archive-model.js
+├── archive-runtime.js
 ├── data-stack.js
 ├── collector-goals.js
 ├── share-cards.js

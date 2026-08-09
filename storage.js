@@ -25,6 +25,10 @@ import {
   validateArchiveGraph
 } from "./archive-model.js";
 import {
+  createArchiveRuntimeCollection,
+  createArchiveRuntimeEntry
+} from "./archive-runtime.js";
+import {
   canSafelyRepairLegacyMirror,
   compareSettingsSplit,
   createDataStackSnapshotRecord,
@@ -1053,6 +1057,16 @@ export async function getArchiveGraph() {
   return readArchiveGraph(database);
 }
 
+export async function getArchiveRuntimeCollection() {
+  const database = await getDatabase();
+  const core = await ensureArchiveCoreReady();
+  if (!core.ready) {
+    throw new Error("Archivkern ist nicht bereit. Der Runtime-Cutover verwendet keinen Legacy-Lesefallback mehr.");
+  }
+  const graph = await readArchiveGraph(database);
+  return createArchiveRuntimeCollection(graph, { dataFormatVersion: APP_CONFIG.dataFormatVersion });
+}
+
 export async function verifyDataStackParity() {
   const database = await getDatabase();
   const core = await ensureArchiveCoreReady();
@@ -1213,6 +1227,7 @@ export async function restoreLatestMigrationSnapshot() {
   return { comics: snapshot.comics.length, createdAt: snapshot.createdAt };
 }
 
+// Kompatibilitätsadapter für alte Backup-/Migrationspfade. Die laufende UI nutzt ab 4.6.4 getArchiveRuntimeCollection().
 export async function getAllComics() {
   const database = await getDatabase();
   const core = await ensureArchiveCoreReady();
@@ -1313,7 +1328,11 @@ export async function saveComic(comic) {
     }
   }
 
-  const projected = materializeLegacyComics([records.issue], records.copies, [records.series])[0];
+  const runtimeEntry = createArchiveRuntimeEntry(records.issue, {
+    series: records.series,
+    copies: records.copies,
+    dataFormatVersion: APP_CONFIG.dataFormatVersion
+  });
   const oldCopyIds = [...new Set([
     ...previousCopies.map((copy) => copy.id),
     ...sourceCopies.map((copy) => copy.id)
@@ -1329,8 +1348,8 @@ export async function saveComic(comic) {
   issuesStore.put(records.issue);
   oldCopyIds.forEach((copyId) => copiesStore.delete(copyId));
   records.copies.forEach((copy) => copiesStore.put(copy));
-  legacyStore.put(projected);
-  if (sourceIssueId !== projected.id) legacyStore.delete(sourceIssueId);
+  legacyStore.put(runtimeEntry);
+  if (sourceIssueId !== runtimeEntry.id) legacyStore.delete(sourceIssueId);
 
   if (sourceIssueId !== targetIssueId) {
     const coverStore = transaction.objectStore(COVER_STORE);
@@ -1342,7 +1361,7 @@ export async function saveComic(comic) {
   }
 
   await transactionDone(transaction);
-  return projected;
+  return runtimeEntry;
 }
 
 export async function deleteComic(id) {
@@ -1601,7 +1620,11 @@ export async function saveComicsBatch(comics) {
       }
     }
 
-    const projected = materializeLegacyComics([records.issue], records.copies, [records.series])[0];
+    const runtimeEntry = createArchiveRuntimeEntry(records.issue, {
+      series: records.series,
+      copies: records.copies,
+      dataFormatVersion: APP_CONFIG.dataFormatVersion
+    });
     const oldCopyIds = [...new Set([
       ...previousCopies.map((copy) => copy.id),
       ...sourceCopies.map((copy) => copy.id)
@@ -1633,8 +1656,8 @@ export async function saveComicsBatch(comics) {
       copyWrites.delete(String(copyId));
     });
     records.copies.forEach((copy) => copyWrites.set(String(copy.id), copy));
-    legacyWrites.set(String(projected.id), projected);
-    if (sourceIssueId !== projected.id) {
+    legacyWrites.set(String(runtimeEntry.id), runtimeEntry);
+    if (sourceIssueId !== runtimeEntry.id) {
       legacyDeletes.add(String(sourceIssueId));
       legacyWrites.delete(String(sourceIssueId));
     }
@@ -1654,7 +1677,7 @@ export async function saveComicsBatch(comics) {
       coverCache.set(String(sourceIssueId), null);
     }
 
-    projectedRecords.push(projected);
+    projectedRecords.push(runtimeEntry);
   }
 
   const stores = [SERIES_STORE, ISSUES_STORE, COPIES_STORE, COMICS_STORE];

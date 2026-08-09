@@ -1,5 +1,15 @@
 # Änderungen
 
+## 4.6.4 – Archive Graph Read Cutover
+
+- Die laufende Sammlung wird direkt aus `seriesCatalog`, `issues` und `copies` geladen; der persistierte `comics`-Store ist keine Runtime-Lesequelle mehr.
+- Neues Modul `archive-runtime.js` validiert den Archivgraph und erzeugt eine reine In-Memory-Kompatibilitätsansicht für bestehende UI-Komponenten.
+- `refreshCollection()` bricht bei einem ungültigen Archivgraph bewusst ab, statt still auf den Legacy-Mirror zurückzufallen.
+- Einzel- und Batch-Saves liefern direkt Archive-Runtime-Einträge zurück; der weiterhin gepflegte Legacy-Mirror nutzt im Hot Path dieselbe kompatible Projektion.
+- Data Stack v2 kennzeichnet den aktiven Zustand mit „Archivgraph aktiv“.
+- `getAllComics()` bleibt nur als Kompatibilitätsadapter für alte Backup-/Migrationspfade erhalten.
+- Datenformat 9, Archivmodell 1 und IndexedDB-Schema 6 bleiben unverändert.
+
 ## 4.6.3 – Settings Cutover
 
 - Die sechs Schema-6-Settings-Stores werden zur aktiven Lesequelle der App.
