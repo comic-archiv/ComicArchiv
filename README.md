@@ -1,7 +1,16 @@
-# Entenarchiv 4.5.3
+# Entenarchiv 4.6.0
 
-Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.5.3 ist ein technischer **Core-Cleanup ohne Datenmigration**. Datenformat und IndexedDB-Schema bleiben unverändert.
+Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.6.0 startet **Data Stack v2** mit einer bewusst konservativen Migrations-Foundation: Die bestehende App-Logik bleibt aktiv, während Schema 6 bereits die künftigen getrennten Speicherbereiche vorbereitet und vor weiteren Umbauten einen validierten lokalen Rückfall-Snapshot anlegt.
 
+## Neu in 4.6.0
+
+- IndexedDB-Schema 6 mit vorbereiteten Stores für Preferences, Kalender, Fehlbände, Flohmarkt, Release Radar und Sammelziele
+- automatischer lokaler Data-Stack-Snapshot aus Archivgraph, `comics`-Mirror und bisherigem Settings-Datensatz
+- harte Paritätsprüfung zwischen `seriesCatalog`/`issues`/`copies` und dem weiterhin gepflegten `comics`-Mirror
+- interne Restore-Funktion für den letzten Data-Stack-Snapshot
+- technischer Data-Stack-Status unter Backup & Sicherheit
+- Datenformat bleibt 9 und Archivmodell bleibt 1
+- **noch keine Ablösung** von `comics` oder dem bisherigen Settings-Datensatz; diese erfolgt erst in den nächsten 4.6-Schritten
 
 ## Neu in 4.5.3
 
@@ -12,7 +21,6 @@ Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung 
 - veraltete Duckipedia-Cache-Einträge werden beim Start automatisch nach der konfigurierten TTL entfernt
 - private Backups/Exporte und generiertes dist sind vor versehentlichen Commits geschützt
 - fest verdrahtete 2026er Kalender-URL als Default entfernt; Jahrespläne kommen über den Kalenderindex
-- keine Datenmigration; Datenformat 9, Archivmodell 1 und IndexedDB-Schema 5 bleiben unverändert
 
 ## Neu in 4.5.2
 
@@ -88,13 +96,14 @@ Die Gestaltung verwendet den Entenarchiv-Farbraum, klare Typografie, Druckraster
 
 ## Technische Eckdaten
 
-- App-Version: `4.5.3`
+- App-Version: `4.6.0`
 - Datenformat: `9`
 - Archivmodell: `1`
-- IndexedDB-Schema: `5`
-- keine Datenmigration für 4.5.3 erforderlich
-- neue Module `collector-goals.js` und `share-cards.js`
-- Service-Worker-Cache: `v4-5-3`
+- Data-Stack-Version: `1`
+- IndexedDB-Schema: `6`
+- Foundation-Migration mit lokalem Snapshot; bestehende Live-Stores bleiben aktiv
+- neue Module `data-stack.js`, `collector-goals.js` und `share-cards.js`
+- Service-Worker-Cache: `v4-6-0`
 - Scanner- und PDF-Bibliothek weiterhin nur bei Bedarf geladen
 - GitHub Pages mit vorgeschalteter GitHub-Actions-Prüfung
 
@@ -106,6 +115,7 @@ Entenarchiv/
 ├── style.css
 ├── app.js
 ├── archive-model.js
+├── data-stack.js
 ├── collector-goals.js
 ├── share-cards.js
 ├── statistics-dna.js

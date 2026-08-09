@@ -25,6 +25,7 @@ import {
   getAllMetadataCache,
   getAppSettings,
   getArchiveCoreStatus,
+  getDataStackStatus,
   getLatestMigrationSnapshot,
   restoreLatestMigrationSnapshot,
   getCoverMedia,
@@ -212,6 +213,7 @@ const state = {
   selectedCopyComicId: null,
   copyManagerDraft: [],
   archiveCoreStatus: null,
+  dataStackStatus: null,
   conditionGuideReturnTarget: null,
   conditionAssistantStep: 1,
   conditionAssistantAssessment: createConditionAssessment(),
@@ -483,6 +485,7 @@ const elements = {
   storagePersistence: document.querySelector("#storage-persistence"),
   storageUsage: document.querySelector("#storage-usage"),
   archiveCoreSummary: document.querySelector("#archive-core-summary"),
+  dataStackSummary: document.querySelector("#data-stack-summary"),
   openArchiveMigration: document.querySelector("#open-archive-migration"),
   requestPersistence: document.querySelector("#request-persistence"),
   openDiagnostics: document.querySelector("#open-diagnostics"),
@@ -749,6 +752,7 @@ async function initializeApp() {
   await initializeReleaseRadarIfNeeded();
   renderReleaseRadarIndicators();
   await refreshArchiveCoreStatus();
+  await refreshDataStackStatus();
   renderBackupStatus();
   await Promise.allSettled([
     runOptionalStartupTask("Speicherstatus", refreshStorageStatus),
@@ -815,6 +819,32 @@ async function refreshArchiveCoreStatus({ showReport = true } = {}) {
     elements.archiveCoreSummary.textContent = "Status nicht verfügbar";
     elements.archiveCoreSummary.dataset.type = "warning";
     recordDiagnosticError(error, "Archivkern-Status", "warning");
+    return null;
+  }
+}
+
+async function refreshDataStackStatus() {
+  if (!elements.dataStackSummary) return null;
+  try {
+    const status = await getDataStackStatus();
+    state.dataStackStatus = status;
+    if (status.ready && status.hasRollbackSnapshot && status.parity?.valid !== false) {
+      elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion} · Sicherung vorhanden`;
+      elements.dataStackSummary.dataset.type = "success";
+    } else if (status.ready) {
+      elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion}`;
+      elements.dataStackSummary.dataset.type = "warning";
+    } else {
+      elements.dataStackSummary.textContent = "Vorbereitung nicht abgeschlossen";
+      elements.dataStackSummary.dataset.type = "warning";
+      if (status.error) recordDiagnosticError(new Error(status.error), "Data Stack v2", "warning");
+    }
+    return status;
+  } catch (error) {
+    console.warn("Data-Stack-Status konnte nicht geladen werden:", error);
+    elements.dataStackSummary.textContent = "Status nicht verfügbar";
+    elements.dataStackSummary.dataset.type = "warning";
+    recordDiagnosticError(error, "Data Stack v2", "warning");
     return null;
   }
 }

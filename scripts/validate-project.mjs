@@ -14,6 +14,7 @@ const requiredFiles = [
   "style.css",
   "app.js",
   "archive-model.js",
+  "data-stack.js",
   "config.js",
   "storage.js",
   "missing.js",
@@ -73,6 +74,7 @@ const [html, appSource, shelfUiSource, configSource, storageSource, archiveModel
 const configVersion = matchOne(configSource, /appVersion:\s*"([^"]+)"/, "App-Version in config.js");
 const configDataVersion = Number(matchOne(configSource, /dataFormatVersion:\s*(\d+)/, "Datenformat in config.js"));
 const configArchiveModelVersion = Number(matchOne(configSource, /export const ARCHIVE_MODEL_VERSION = (\d+)/, "Archivmodell-Version in config.js"));
+const configDataStackVersion = Number(matchOne(configSource, /export const DATA_STACK_VERSION = (\d+)/, "Data-Stack-Version in config.js"));
 const swVersion = matchOne(serviceWorkerSource, /const APP_VERSION = "([^"]+)"/, "App-Version im Service Worker");
 const htmlVersion = matchOne(html, /id="app-version">v([^<]+)</, "sichtbare Version in index.html");
 const versions = new Set([packageJson.version, versionJson.appVersion, configVersion, swVersion, htmlVersion]);
@@ -84,6 +86,9 @@ if (Number(versionJson.dataFormatVersion) !== configDataVersion) {
 }
 if (Number(versionJson.archiveModelVersion) !== configArchiveModelVersion) {
   errors.push(`Archivmodell ist uneinheitlich: version.json=${versionJson.archiveModelVersion}, config.js=${configArchiveModelVersion}`);
+}
+if (Number(versionJson.dataStackVersion) !== configDataStackVersion) {
+  errors.push(`Data Stack ist uneinheitlich: version.json=${versionJson.dataStackVersion}, config.js=${configDataStackVersion}`);
 }
 const recoveryVersion = matchOne(recoverySource, /const APP_VERSION = "([^"]+)"/, "App-Version im sicheren Modus");
 const recoveryDataVersion = Number(matchOne(recoverySource, /const DATA_FORMAT_VERSION = (\d+)/, "Datenformat im sicheren Modus"));
@@ -125,6 +130,11 @@ const archiveStores = ["seriesCatalog", "issues", "copies", "archiveMeta", "migr
 for (const store of archiveStores) {
   if (!storageSource.includes(`"${store}"`)) errors.push(`Archivkern-Speicher fehlt in storage.js: ${store}`);
 }
+const dataStackStores = ["preferences", "calendarState", "missingState", "fleaMarketState", "releaseRadarState", "collectorState", "dataStackMeta", "dataStackSnapshots"];
+for (const store of dataStackStores) {
+  if (!storageSource.includes(`"${store}"`)) errors.push(`Data-Stack-Speicher fehlt in storage.js: ${store}`);
+}
+if (!storageSource.includes("const DATABASE_VERSION = 6")) errors.push("Data Stack v2 Foundation benötigt Datenbankversion 6.");
 if (!html.includes('id="archive-migration-modal"') || !html.includes('id="copy-manager-list"')) {
   errors.push("Migrationsbericht oder Exemplarmanager fehlt in index.html.");
 }

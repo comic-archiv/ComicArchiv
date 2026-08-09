@@ -1,6 +1,7 @@
 import {
   APP_CONFIG,
   ARCHIVE_MODEL_VERSION,
+  DATA_STACK_VERSION,
   DEFAULT_CONDITION_CODE,
   DEFAULT_SETTINGS,
   normalizeConditionCode,
@@ -23,10 +24,15 @@ import {
   migrateLegacyComicsToArchive,
   validateArchiveGraph
 } from "./archive-model.js";
+import {
+  createDataStackSnapshotRecord,
+  DATA_STACK_FOUNDATION_KIND,
+  validateDataStackFoundation
+} from "./data-stack.js";
 
 const DATABASE_NAME = resolveDatabaseName();
 const STORAGE_MODE = DATABASE_NAME.endsWith("-test") ? "test" : "production";
-const DATABASE_VERSION = 5;
+const DATABASE_VERSION = 6;
 const COMICS_STORE = "comics";
 const SETTINGS_STORE = "settings";
 const COVER_STORE = "coverMedia";
@@ -36,11 +42,22 @@ const ISSUES_STORE = "issues";
 const COPIES_STORE = "copies";
 const ARCHIVE_META_STORE = "archiveMeta";
 const MIGRATION_SNAPSHOT_STORE = "migrationSnapshots";
+const PREFERENCES_STORE = "preferences";
+const CALENDAR_STATE_STORE = "calendarState";
+const MISSING_STATE_STORE = "missingState";
+const FLEA_MARKET_STATE_STORE = "fleaMarketState";
+const RELEASE_RADAR_STATE_STORE = "releaseRadarState";
+const COLLECTOR_STATE_STORE = "collectorState";
+const DATA_STACK_META_STORE = "dataStackMeta";
+const DATA_STACK_SNAPSHOT_STORE = "dataStackSnapshots";
 const ARCHIVE_CORE_META_KEY = "archive-core";
+const DATA_STACK_META_KEY = "data-stack";
+const DATA_STACK_UPGRADE_META_KEY = "schema-upgrade-v6";
 const SETTINGS_KEY = "app";
 
 let databasePromise;
 let archiveCorePromise;
+let dataStackPromise;
 
 export function getStorageMode() {
   return STORAGE_MODE;
@@ -65,6 +82,69 @@ function resolveDatabaseName() {
   }
 }
 
+export function upgradeDatabaseSchema(database, transaction, oldVersion = 0, { upgradedAt = new Date().toISOString() } = {}) {
+  if (!database || !transaction) throw new Error("Datenbank-Upgrade benötigt Datenbank und Transaktion.");
+
+  if (!database.objectStoreNames.contains(COMICS_STORE)) {
+    const store = database.createObjectStore(COMICS_STORE, { keyPath: "id" });
+    store.createIndex("series", "series", { unique: false });
+    store.createIndex("numericBandNumber", "numericBandNumber", { unique: false });
+    store.createIndex("updatedAt", "updatedAt", { unique: false });
+  }
+  if (!database.objectStoreNames.contains(SETTINGS_STORE)) database.createObjectStore(SETTINGS_STORE, { keyPath: "key" });
+  if (!database.objectStoreNames.contains(COVER_STORE)) {
+    const coverStore = database.createObjectStore(COVER_STORE, { keyPath: "comicId" });
+    coverStore.createIndex("updatedAt", "updatedAt", { unique: false });
+  }
+  if (!database.objectStoreNames.contains(METADATA_STORE)) {
+    const metadataStore = database.createObjectStore(METADATA_STORE, { keyPath: "key" });
+    metadataStore.createIndex("fetchedAt", "fetchedAt", { unique: false });
+  }
+  if (!database.objectStoreNames.contains(SERIES_STORE)) {
+    const seriesStore = database.createObjectStore(SERIES_STORE, { keyPath: "id" });
+    seriesStore.createIndex("name", "name", { unique: false });
+    seriesStore.createIndex("category", "category", { unique: false });
+    seriesStore.createIndex("updatedAt", "updatedAt", { unique: false });
+  }
+  if (!database.objectStoreNames.contains(ISSUES_STORE)) {
+    const issueStore = database.createObjectStore(ISSUES_STORE, { keyPath: "id" });
+    issueStore.createIndex("seriesId", "seriesId", { unique: false });
+    issueStore.createIndex("seriesVolumeKey", "seriesVolumeKey", { unique: true });
+    issueStore.createIndex("numericBandNumber", "numericBandNumber", { unique: false });
+    issueStore.createIndex("updatedAt", "updatedAt", { unique: false });
+  }
+  if (!database.objectStoreNames.contains(COPIES_STORE)) {
+    const copyStore = database.createObjectStore(COPIES_STORE, { keyPath: "id" });
+    copyStore.createIndex("issueId", "issueId", { unique: false });
+    copyStore.createIndex("condition", "condition", { unique: false });
+    copyStore.createIndex("updatedAt", "updatedAt", { unique: false });
+  }
+  if (!database.objectStoreNames.contains(ARCHIVE_META_STORE)) database.createObjectStore(ARCHIVE_META_STORE, { keyPath: "key" });
+  if (!database.objectStoreNames.contains(MIGRATION_SNAPSHOT_STORE)) {
+    const snapshotStore = database.createObjectStore(MIGRATION_SNAPSHOT_STORE, { keyPath: "id" });
+    snapshotStore.createIndex("createdAt", "createdAt", { unique: false });
+  }
+
+  for (const storeName of [PREFERENCES_STORE, CALENDAR_STATE_STORE, MISSING_STATE_STORE, FLEA_MARKET_STATE_STORE, RELEASE_RADAR_STATE_STORE, COLLECTOR_STATE_STORE]) {
+    if (!database.objectStoreNames.contains(storeName)) database.createObjectStore(storeName, { keyPath: "key" });
+  }
+  if (!database.objectStoreNames.contains(DATA_STACK_META_STORE)) database.createObjectStore(DATA_STACK_META_STORE, { keyPath: "key" });
+  if (!database.objectStoreNames.contains(DATA_STACK_SNAPSHOT_STORE)) {
+    const snapshotStore = database.createObjectStore(DATA_STACK_SNAPSHOT_STORE, { keyPath: "id" });
+    snapshotStore.createIndex("createdAt", "createdAt", { unique: false });
+    snapshotStore.createIndex("kind", "kind", { unique: false });
+  }
+
+  if (Number(oldVersion || 0) < DATABASE_VERSION) {
+    transaction.objectStore(DATA_STACK_META_STORE).put({
+      key: DATA_STACK_UPGRADE_META_KEY,
+      fromDatabaseVersion: Number(oldVersion || 0),
+      toDatabaseVersion: DATABASE_VERSION,
+      upgradedAt
+    });
+  }
+}
+
 function createDatabaseConnection() {
   return new Promise((resolve, reject) => {
     if (!("indexedDB" in window)) {
@@ -74,60 +154,8 @@ function createDatabaseConnection() {
 
     const request = window.indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
 
-    request.onupgradeneeded = () => {
-      const database = request.result;
-
-      if (!database.objectStoreNames.contains(COMICS_STORE)) {
-        const store = database.createObjectStore(COMICS_STORE, { keyPath: "id" });
-        store.createIndex("series", "series", { unique: false });
-        store.createIndex("numericBandNumber", "numericBandNumber", { unique: false });
-        store.createIndex("updatedAt", "updatedAt", { unique: false });
-      }
-
-      if (!database.objectStoreNames.contains(SETTINGS_STORE)) {
-        database.createObjectStore(SETTINGS_STORE, { keyPath: "key" });
-      }
-
-      if (!database.objectStoreNames.contains(COVER_STORE)) {
-        const coverStore = database.createObjectStore(COVER_STORE, { keyPath: "comicId" });
-        coverStore.createIndex("updatedAt", "updatedAt", { unique: false });
-      }
-
-      if (!database.objectStoreNames.contains(METADATA_STORE)) {
-        const metadataStore = database.createObjectStore(METADATA_STORE, { keyPath: "key" });
-        metadataStore.createIndex("fetchedAt", "fetchedAt", { unique: false });
-      }
-
-      if (!database.objectStoreNames.contains(SERIES_STORE)) {
-        const seriesStore = database.createObjectStore(SERIES_STORE, { keyPath: "id" });
-        seriesStore.createIndex("name", "name", { unique: false });
-        seriesStore.createIndex("category", "category", { unique: false });
-        seriesStore.createIndex("updatedAt", "updatedAt", { unique: false });
-      }
-
-      if (!database.objectStoreNames.contains(ISSUES_STORE)) {
-        const issueStore = database.createObjectStore(ISSUES_STORE, { keyPath: "id" });
-        issueStore.createIndex("seriesId", "seriesId", { unique: false });
-        issueStore.createIndex("seriesVolumeKey", "seriesVolumeKey", { unique: true });
-        issueStore.createIndex("numericBandNumber", "numericBandNumber", { unique: false });
-        issueStore.createIndex("updatedAt", "updatedAt", { unique: false });
-      }
-
-      if (!database.objectStoreNames.contains(COPIES_STORE)) {
-        const copyStore = database.createObjectStore(COPIES_STORE, { keyPath: "id" });
-        copyStore.createIndex("issueId", "issueId", { unique: false });
-        copyStore.createIndex("condition", "condition", { unique: false });
-        copyStore.createIndex("updatedAt", "updatedAt", { unique: false });
-      }
-
-      if (!database.objectStoreNames.contains(ARCHIVE_META_STORE)) {
-        database.createObjectStore(ARCHIVE_META_STORE, { keyPath: "key" });
-      }
-
-      if (!database.objectStoreNames.contains(MIGRATION_SNAPSHOT_STORE)) {
-        const snapshotStore = database.createObjectStore(MIGRATION_SNAPSHOT_STORE, { keyPath: "id" });
-        snapshotStore.createIndex("createdAt", "createdAt", { unique: false });
-      }
+    request.onupgradeneeded = (event) => {
+      upgradeDatabaseSchema(request.result, request.transaction, Number(event.oldVersion || 0));
     };
 
     request.onsuccess = () => {
@@ -136,6 +164,7 @@ function createDatabaseConnection() {
         database.close();
         databasePromise = undefined;
         archiveCorePromise = undefined;
+        dataStackPromise = undefined;
       };
       resolve(database);
     };
@@ -150,6 +179,7 @@ function getDatabase() {
     databasePromise = createDatabaseConnection().catch((error) => {
       databasePromise = undefined;
       archiveCorePromise = undefined;
+      dataStackPromise = undefined;
       throw error;
     });
   }
@@ -213,6 +243,28 @@ async function writeArchiveMeta(database, meta) {
   const transaction = database.transaction(ARCHIVE_META_STORE, "readwrite");
   transaction.objectStore(ARCHIVE_META_STORE).put({ key: ARCHIVE_CORE_META_KEY, ...meta });
   await transactionDone(transaction);
+}
+
+async function readDataStackMeta(database) {
+  const transaction = database.transaction(DATA_STACK_META_STORE, "readonly");
+  const record = await requestToPromise(transaction.objectStore(DATA_STACK_META_STORE).get(DATA_STACK_META_KEY));
+  await transactionDone(transaction);
+  return record || null;
+}
+
+async function writeDataStackMeta(database, meta) {
+  const transaction = database.transaction(DATA_STACK_META_STORE, "readwrite");
+  transaction.objectStore(DATA_STACK_META_STORE).put({ key: DATA_STACK_META_KEY, ...meta });
+  await transactionDone(transaction);
+}
+
+async function getLatestDataStackSnapshotRecord(database, kind = "") {
+  const transaction = database.transaction(DATA_STACK_SNAPSHOT_STORE, "readonly");
+  const records = await requestToPromise(transaction.objectStore(DATA_STACK_SNAPSHOT_STORE).getAll());
+  await transactionDone(transaction);
+  return records
+    .filter((record) => !kind || record?.kind === kind)
+    .sort((first, second) => Date.parse(second.createdAt || 0) - Date.parse(first.createdAt || 0))[0] || null;
 }
 
 async function getLatestMigrationSnapshotRecord(database) {
@@ -380,11 +432,155 @@ async function readArchiveGraph(database) {
   return { series, issues, copies };
 }
 
+async function ensureDataStackFoundationReady() {
+  if (!dataStackPromise) {
+    dataStackPromise = migrateDataStackFoundation().catch((error) => ({
+      ready: false,
+      status: "failed",
+      error: error instanceof Error ? error.message : String(error)
+    }));
+  }
+  return dataStackPromise;
+}
+
+async function migrateDataStackFoundation() {
+  const database = await getDatabase();
+  const core = await ensureArchiveCoreReady();
+  if (!core.ready) throw new Error("Data Stack v2 kann erst vorbereitet werden, wenn der Archivkern vollständig verfügbar ist.");
+
+  const existingMeta = await readDataStackMeta(database);
+  if (existingMeta?.status === "complete" && existingMeta.dataStackVersion === DATA_STACK_VERSION) {
+    return { ready: true, justPrepared: false, ...existingMeta };
+  }
+
+  const startedAt = new Date().toISOString();
+  await writeDataStackMeta(database, { dataStackVersion: DATA_STACK_VERSION, status: "running", startedAt, completedAt: null, error: "" });
+
+  try {
+    const [graph, legacyComics, settings, archiveMeta, existingSnapshot, upgradeMeta] = await Promise.all([
+      readArchiveGraph(database),
+      readAll(database, COMICS_STORE),
+      readSettingsValue(database),
+      readArchiveMeta(database),
+      getLatestDataStackSnapshotRecord(database, DATA_STACK_FOUNDATION_KIND),
+      readRecord(database, DATA_STACK_META_STORE, DATA_STACK_UPGRADE_META_KEY)
+    ]);
+    const validation = validateDataStackFoundation({ ...graph, legacyComics });
+    if (!validation.valid) throw new Error(`Data-Stack-Prüfung fehlgeschlagen: ${validation.problems.slice(0, 4).join(" ")}`);
+
+    const completedAt = new Date().toISOString();
+    const transaction = database.transaction([DATA_STACK_SNAPSHOT_STORE, DATA_STACK_META_STORE], "readwrite");
+    let snapshot = existingSnapshot;
+    if (!snapshot) {
+      snapshot = createDataStackSnapshotRecord({
+        kind: DATA_STACK_FOUNDATION_KIND,
+        createdAt: completedAt,
+        appVersion: APP_CONFIG.appVersion,
+        databaseVersion: DATABASE_VERSION,
+        dataFormatVersion: APP_CONFIG.dataFormatVersion,
+        archiveModelVersion: ARCHIVE_MODEL_VERSION,
+        dataStackVersion: DATA_STACK_VERSION,
+        settings,
+        archiveMeta,
+        series: graph.series,
+        issues: graph.issues,
+        copies: graph.copies,
+        legacyComics
+      });
+      transaction.objectStore(DATA_STACK_SNAPSHOT_STORE).put(snapshot);
+    }
+    const meta = {
+      key: DATA_STACK_META_KEY,
+      dataStackVersion: DATA_STACK_VERSION,
+      status: "complete",
+      startedAt,
+      completedAt,
+      counts: validation.counts,
+      parity: validation.parity,
+      snapshotId: snapshot.id,
+      snapshotCreatedAt: snapshot.createdAt,
+      upgradedFromDatabaseVersion: Number(upgradeMeta?.fromDatabaseVersion ?? DATABASE_VERSION),
+      error: ""
+    };
+    transaction.objectStore(DATA_STACK_META_STORE).put(meta);
+    await transactionDone(transaction);
+    return { ready: true, justPrepared: true, ...meta };
+  } catch (error) {
+    await writeDataStackMeta(database, { dataStackVersion: DATA_STACK_VERSION, status: "failed", startedAt, completedAt: null, error: error instanceof Error ? error.message : String(error) }).catch(() => {});
+    throw error;
+  }
+}
+
 export async function getArchiveGraph() {
   const database = await getDatabase();
   const core = await ensureArchiveCoreReady();
   if (!core.ready) return null;
   return readArchiveGraph(database);
+}
+
+export async function verifyDataStackParity() {
+  const database = await getDatabase();
+  const core = await ensureArchiveCoreReady();
+  if (!core.ready) return { valid: false, problems: ["Archivkern ist nicht bereit."], counts: null, parity: null };
+  const [graph, legacyComics] = await Promise.all([readArchiveGraph(database), readAll(database, COMICS_STORE)]);
+  return validateDataStackFoundation({ ...graph, legacyComics });
+}
+
+export async function getDataStackStatus() {
+  const database = await getDatabase();
+  const result = await ensureDataStackFoundationReady();
+  const meta = await readDataStackMeta(database).catch(() => null);
+  const snapshot = await getLatestDataStackSnapshotRecord(database, DATA_STACK_FOUNDATION_KIND).catch(() => null);
+  return {
+    ready: Boolean(result.ready),
+    justPrepared: Boolean(result.justPrepared),
+    dataStackVersion: meta?.dataStackVersion || DATA_STACK_VERSION,
+    databaseVersion: DATABASE_VERSION,
+    status: meta?.status || result.status || "unknown",
+    startedAt: meta?.startedAt || null,
+    completedAt: meta?.completedAt || null,
+    counts: meta?.counts || null,
+    parity: meta?.parity || null,
+    error: meta?.error || result.error || "",
+    hasRollbackSnapshot: Boolean(snapshot),
+    rollbackSnapshotId: snapshot?.id || null,
+    rollbackSnapshotCreatedAt: snapshot?.createdAt || null
+  };
+}
+
+export async function getLatestDataStackSnapshot() {
+  const database = await getDatabase();
+  return getLatestDataStackSnapshotRecord(database);
+}
+
+export async function restoreLatestDataStackSnapshot() {
+  const database = await getDatabase();
+  const snapshot = await getLatestDataStackSnapshotRecord(database);
+  if (!snapshot || !Array.isArray(snapshot.series) || !Array.isArray(snapshot.issues) || !Array.isArray(snapshot.copies) || !Array.isArray(snapshot.comics)) {
+    throw new Error("Es ist kein vollständiger Data-Stack-Snapshot für eine Wiederherstellung vorhanden.");
+  }
+  const validation = validateDataStackFoundation({ series: snapshot.series, issues: snapshot.issues, copies: snapshot.copies, legacyComics: snapshot.comics });
+  if (!validation.valid) throw new Error(`Der Data-Stack-Snapshot ist nicht konsistent: ${validation.problems.slice(0, 4).join(" ")}`);
+
+  const transaction = database.transaction([SERIES_STORE, ISSUES_STORE, COPIES_STORE, COMICS_STORE, SETTINGS_STORE, ARCHIVE_META_STORE, DATA_STACK_META_STORE], "readwrite");
+  const seriesStore = transaction.objectStore(SERIES_STORE);
+  const issueStore = transaction.objectStore(ISSUES_STORE);
+  const copyStore = transaction.objectStore(COPIES_STORE);
+  const legacyStore = transaction.objectStore(COMICS_STORE);
+  seriesStore.clear(); issueStore.clear(); copyStore.clear(); legacyStore.clear();
+  snapshot.series.forEach((record) => seriesStore.put(record));
+  snapshot.issues.forEach((record) => issueStore.put(record));
+  snapshot.copies.forEach((record) => copyStore.put(record));
+  snapshot.comics.forEach((record) => legacyStore.put(record));
+  transaction.objectStore(SETTINGS_STORE).put({ key: SETTINGS_KEY, value: snapshot.settings || {} });
+  if (snapshot.archiveMeta) transaction.objectStore(ARCHIVE_META_STORE).put({ ...snapshot.archiveMeta, key: ARCHIVE_CORE_META_KEY });
+  const restoredAt = new Date().toISOString();
+  transaction.objectStore(DATA_STACK_META_STORE).put({
+    key: DATA_STACK_META_KEY, dataStackVersion: DATA_STACK_VERSION, status: "complete", startedAt: restoredAt, completedAt: restoredAt, counts: validation.counts, parity: validation.parity, snapshotId: snapshot.id, snapshotCreatedAt: snapshot.createdAt, restoredAt, error: ""
+  });
+  await transactionDone(transaction);
+  archiveCorePromise = undefined; dataStackPromise = undefined;
+  return { snapshotId: snapshot.id, createdAt: snapshot.createdAt, counts: validation.counts };
 }
 
 export async function getArchiveCoreStatus() {

@@ -32,17 +32,17 @@ test("Erscheinungsradar ist auf Startseite, Kalenderseite und in der Navigation 
   assert.match(css, /\.bottom-nav-badge/);
 });
 
-test("Erscheinungsradar bleibt mit Datenformat 9, Archivmodell 1 und Datenbank 5 migrationsfrei", async () => {
+test("Erscheinungsradar bleibt bei Data Stack v2 mit Datenformat 9 und Archivmodell 1 kompatibel", async () => {
   const [config, storage, version] = await Promise.all([read("config.js"), read("storage.js"), read("version.json")]);
   const metadata = JSON.parse(version);
-  assert.equal(metadata.appVersion, "4.5.3");
+  assert.equal(metadata.appVersion, "4.6.0");
   assert.equal(metadata.dataFormatVersion, 9);
   assert.equal(metadata.archiveModelVersion, 1);
   assert.match(config, /releaseRadarDecisions:\s*Object\.freeze\(\{\}\)/);
   assert.match(config, /releaseRadarKnownSignatures:\s*Object\.freeze\(\[\]\)/);
   assert.match(config, /releaseSeriesAliases:\s*Object\.freeze\(\{\}\)/);
   assert.match(config, /releaseEventLinks:\s*Object\.freeze\(\{\}\)/);
-  assert.match(storage, /const DATABASE_VERSION = 5/);
+  assert.match(storage, /const DATABASE_VERSION = 6/);
   assert.match(storage, /normalizeReleaseDecisionMap/);
   assert.match(storage, /normalizeKnownReleaseSignatures/);
 });

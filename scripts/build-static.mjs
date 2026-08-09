@@ -10,6 +10,7 @@ const runtimeEntries = [
   "style.css",
   "app.js",
   "archive-model.js",
+  "data-stack.js",
   "asset-loader.js",
   "calendar.js",
   "condition-assistant.js",

@@ -61,14 +61,14 @@ test("Kalender priorisiert Monatsansicht und versteckt Verwaltung in aufklappbar
   assert.ok(html.indexOf('id="calendar-grid"') < html.indexOf('id="calendar-search"'));
 });
 
-test("4.5.2-Version und Cache-Version sind synchron", async () => {
+test("App-Version und Cache-Version sind synchron", async () => {
   const [config, worker, metadata, recovery, packageSource] = await Promise.all([
     read("config.js"), read("service-worker.js"), read("version.json"), read("recovery.js"), read("package.json")
   ]);
-  assert.match(config, /appVersion:\s*"4\.5\.3"/);
-  assert.match(worker, /APP_VERSION\s*=\s*"4\.5\.3"/);
-  assert.match(worker, /v4-5-3/);
-  assert.match(recovery, /const APP_VERSION = "4\.5\.3"/);
-  assert.equal(JSON.parse(metadata).appVersion, "4.5.3");
-  assert.equal(JSON.parse(packageSource).version, "4.5.3");
+  assert.match(config, /appVersion:\s*"4\.6\.0"/);
+  assert.match(worker, /APP_VERSION\s*=\s*"4\.6\.0"/);
+  assert.match(worker, /v4-6-0/);
+  assert.match(recovery, /const APP_VERSION = "4\.6\.0"/);
+  assert.equal(JSON.parse(metadata).appVersion, "4.6.0");
+  assert.equal(JSON.parse(packageSource).version, "4.6.0");
 });

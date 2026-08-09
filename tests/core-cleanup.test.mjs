@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (file) => readFile(resolve(root, file), "utf8");
 
-test("4.5.3 nutzt einen schlanken, strategiegetrennten Service Worker", async () => {
+test("4.6.0 nutzt einen schlanken, strategiegetrennten Service Worker", async () => {
   const worker = await source("service-worker.js");
   const core = worker.match(/const CORE_SHELL = Object\.freeze\(\[([\s\S]*?)\]\);/)?.[1] || "";
   assert.doesNotMatch(core, /"\.\/",/);
@@ -39,7 +39,7 @@ test("Bulk-Speicherung und Metadaten-GC sind im Storage-Layer vorhanden", async 
 });
 
 test("Release-Versionstests werden beim Versionsbump synchron gehalten", async () => {
-  const script = await source("ComicArchiv-4.5.3-cleanup.mjs").catch(() => "");
+  const script = await source("ComicArchiv-4.6.0-cleanup.mjs").catch(() => "");
   if (!script) return;
   assert.match(script, /syncCurrentReleaseVersionTests/);
 });

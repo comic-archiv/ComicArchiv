@@ -1,5 +1,13 @@
 # Änderungen
 
+## 4.6.0 – Data Stack v2 Foundation
+
+- IndexedDB-Schema 6 legt getrennte Ziel-Stores für Einstellungen, Kalender, Fehlbände, Flohmarkt, Release Radar und Sammelziele an, ohne bestehende Daten bereits umzuziehen.
+- Vor der späteren Datenaufteilung wird automatisch ein lokaler Snapshot aus Archivgraph, Legacy-Mirror und Einstellungen angelegt.
+- Der Archivgraph und sein `comics`-Mirror werden vor Freigabe der Foundation vollständig auf Parität geprüft.
+- Eine interne Restore-Funktion kann den letzten Data-Stack-Snapshot atomar wiederherstellen.
+- `comics` und der bestehende Settings-Datensatz bleiben in 4.6.0 bewusst weiterhin aktiv; die eigentliche Ablösung folgt schrittweise.
+
 ## 4.5.3 – Core Cleanup
 ### Performance
 - statische App-Assets laufen nach Installation cache-first; Navigation, Versionsdatei und Kalenderdaten bleiben network-first

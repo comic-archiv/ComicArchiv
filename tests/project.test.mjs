@@ -53,24 +53,29 @@ test("Archivkern, Migrationsbericht und getrennte physische Exemplare sind einge
 });
 
 
-test("Version 4.5.3, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet", async () => {
-  const [config, storage, recovery, version, serviceWorker] = await Promise.all([
+test("Version 4.6.0, Datenformat 9 und Datenbank 6 sind durchgängig verdrahtet", async () => {
+  const [config, storage, dataStack, recovery, version, serviceWorker] = await Promise.all([
     read("config.js"),
     read("storage.js"),
+    read("data-stack.js"),
     read("recovery.js"),
     read("version.json"),
     read("service-worker.js")
   ]);
   const versionData = JSON.parse(version);
-  assert.equal(versionData.appVersion, "4.5.3");
+  assert.equal(versionData.appVersion, "4.6.0");
   assert.equal(versionData.dataFormatVersion, 9);
   assert.equal(versionData.archiveModelVersion, 1);
-  assert.match(config, /appVersion:\s*"4\.5\.3"/);
+  assert.equal(versionData.dataStackVersion, 1);
+  assert.match(config, /export const DATA_STACK_VERSION = 1/);
+  assert.match(config, /appVersion:\s*"4\.6\.0"/);
   assert.match(config, /dataFormatVersion:\s*9/);
-  assert.match(storage, /const DATABASE_VERSION = 5/);
-  assert.match(recovery, /const APP_VERSION = "4\.5\.3"/);
+  assert.match(storage, /const DATABASE_VERSION = 6/);
+  assert.match(storage, /getDataStackStatus/);
+  assert.match(dataStack, /validateDataStackFoundation/);
+  assert.match(recovery, /const APP_VERSION = "4\.6\.0"/);
   assert.match(recovery, /const DATA_FORMAT_VERSION = 9/);
-  assert.match(serviceWorker, /const APP_VERSION = "4\.5\.3"/);
+  assert.match(serviceWorker, /const APP_VERSION = "4\.6\.0"/);
 });
 
 test("Service Worker hält den Archivkern im kritischen Offline-Paket", async () => {
