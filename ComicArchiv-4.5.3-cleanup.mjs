@@ -344,6 +344,53 @@ async function main() {
     `for (const asset of shellAssets) {\n  if (!asset.startsWith("./") || asset === "./") continue;\n  const localPath = asset.slice(2).split(/[?#]/)[0];\n  if (!existsSync(join(root, localPath))) errors.push(\`Service Worker referenziert fehlende Datei: ${'${asset}'}\`);\n}\nconst coreShellAssets = extractArrayStrings(serviceWorkerSource, "CORE_SHELL");\nif (coreShellAssets.includes("./")) errors.push("Service Worker darf ./ und ./index.html nicht doppelt precachen.");\nif (coreShellAssets.includes("./icons/icon-1024.png")) errors.push("Das 1024er Icon darf nicht Teil des Core-Precaches sein.");\nif (!serviceWorkerSource.includes("async function cacheFirst(request)")) errors.push("Cache-first-Strategie für statische Assets fehlt im Service Worker.");`
   );
 
+  // Bestehende UI-Tests an die neue On-Demand-Modulstruktur anpassen.
+  // Funktionalität bleibt gleich: Scanner und Share Cards sind weiterhin App-, Build-
+  // und Offline-Bestandteil, werden im App-Code aber dynamisch statt statisch importiert.
+  {
+    const file = "tests/ui-45.test.mjs";
+    const source = await readText(file);
+    const lines = source.split(/\r?\n/);
+    let changedTest = false;
+
+    const replaceStaticImportAssertion = (moduleName) => {
+      const candidates = lines
+        .map((line, index) => ({ line, index }))
+        .filter(({ line }) =>
+          line.includes("assert.match(app") &&
+          line.includes(moduleName) &&
+          line.includes("from")
+        );
+
+      if (candidates.length > 1) {
+        throw new Error(`${file}: mehrere alte Static-Import-Tests für ${moduleName} gefunden.`);
+      }
+      if (candidates.length === 1) {
+        const { index } = candidates[0];
+        lines[index] = `  assert.match(app, /import\\("\\.\\/${moduleName.replace(/\./g, "\\.")}"\\)/);`;
+        changedTest = true;
+        console.log(`  ✓ ${file}: ${moduleName} auf Dynamic-Import-Test umgestellt`);
+        return;
+      }
+
+      const dynamicAlreadyPresent = lines.some((line) =>
+        line.includes("assert.match(app") &&
+        line.includes(moduleName) &&
+        line.includes("import")
+      );
+      if (!dynamicAlreadyPresent) {
+        throw new Error(`${file}: weder alter noch neuer Import-Test für ${moduleName} gefunden.`);
+      }
+    };
+
+    replaceStaticImportAssertion("share-cards.js");
+    replaceStaticImportAssertion("scanner.js");
+
+    if (changedTest) {
+      await writeText(file, `${lines.join("\n").replace(/\n+$/, "")}\n`);
+    }
+  }
+
   const cleanupTest = `import test from "node:test";\nimport assert from "node:assert/strict";\nimport { readFile } from "node:fs/promises";\nimport { dirname, resolve } from "node:path";\nimport { fileURLToPath } from "node:url";\n\nconst root = resolve(dirname(fileURLToPath(import.meta.url)), "..");\nconst source = (file) => readFile(resolve(root, file), "utf8");\n\ntest("4.5.3 nutzt einen schlanken, strategiegetrennten Service Worker", async () => {\n  const worker = await source("service-worker.js");\n  const core = worker.match(/const CORE_SHELL = Object\\.freeze\\(\\[([\\s\\S]*?)\\]\\);/)?.[1] || "";\n  assert.doesNotMatch(core, /\"\\.\\/\",/);\n  assert.doesNotMatch(core, /icon-1024\\.png/);\n  assert.match(worker, /async function cacheFirst\\(request\\)/);\n  assert.match(worker, /shouldUseNetworkFirst\\(request, requestUrl\\)/);\n  assert.doesNotMatch(core, /scanner\\.js|share-cards\\.js/);\n  const optional = worker.match(/const OPTIONAL_SHELL = Object\\.freeze\\(\\[([\\s\\S]*?)\\]\\);/)?.[1] || "";\n  assert.match(optional, /scanner\\.js/);\n  assert.match(optional, /share-cards\\.js/);\n});\n\ntest("versteckte Vollansichten werden nicht bei jedem Collection-Refresh gerendert", async () => {\n  const app = await source("app.js");\n  assert.match(app, /if \\(!elements\\.collectionPage\\.classList\\.contains\\(\"hidden\"\\)\\) renderCollection\\(\\);/);\n  assert.match(app, /if \\(!elements\\.missingPage\\.classList\\.contains\\(\"hidden\"\\)\\) renderMissingBands\\(\\);/);\n  assert.match(app, /if \\(!elements\\.progressPage\\.classList\\.contains\\(\"hidden\"\\)\\) renderSeriesProgress\\(\\);/);\n  assert.match(app, /if \\(elements\\.statisticsPage\\.classList\\.contains\\("hidden"\\)\\) return;/);\n  assert.match(app, /function openStatisticsPage\\(\\) \\{\\s+elements\\.statisticsPage\\.classList\\.remove\\("hidden"\\);\\s+renderStats\\(\\);/);\n  assert.doesNotMatch(app, /from "\\.\\/scanner\\.js"/);\n  assert.doesNotMatch(app, /from "\\.\\/share-cards\\.js"/);\n  assert.match(app, /import\\("\\.\\/scanner\\.js"\\)/);\n  assert.match(app, /import\\("\\.\\/share-cards\\.js"\\)/);\n});\n\ntest("Bulk-Speicherung und Metadaten-GC sind im Storage-Layer vorhanden", async () => {\n  const storage = await source("storage.js");\n  const app = await source("app.js");\n  assert.match(storage, /export async function saveComicsBatch\\(comics\\)/);\n  assert.match(storage, /database\\.transaction\\(stores, \"readwrite\"\\)/);\n  assert.match(storage, /export async function pruneMetadataCache/);\n  assert.match(app, /await upsertComics\\(entries\\);/);\n});\n\ntest("private Exporte und generiertes dist sind von Git ausgeschlossen", async () => {\n  const gitignore = await source(".gitignore");\n  assert.match(gitignore, /^dist\\/$/m);\n  assert.match(gitignore, /^Entenarchiv-Medien-Backup-\\*\\.json$/m);\n  assert.match(gitignore, /^Entenarchiv-Diagnose-\\*\\.json$/m);\n});\n`;
   const cleanupTestPath = "tests/core-cleanup.test.mjs";
   if (!existsSync(pathFor(cleanupTestPath)) || (await readText(cleanupTestPath)) !== cleanupTest) {
