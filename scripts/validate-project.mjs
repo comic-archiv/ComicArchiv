@@ -21,6 +21,7 @@ const requiredFiles = [
   "scanner-pro.js",
   "shelf.js",
   "shelf-ui.js",
+  "statistics-dna.js",
   "duckipedia.js",
   "media.js",
   "calendar.js",

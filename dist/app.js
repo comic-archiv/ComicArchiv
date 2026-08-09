@@ -270,6 +270,7 @@ const elements = {
   shareCardShare: document.querySelector("#share-card-share"),
   shareCardMessage: document.querySelector("#share-card-message"),
   milestoneCelebration: document.querySelector("#milestone-celebration"),
+  milestoneCelebrationMark: document.querySelector("#milestone-celebration .milestone-celebration-mark"),
   milestoneCelebrationTitle: document.querySelector("#milestone-celebration-title"),
   milestoneCelebrationCopy: document.querySelector("#milestone-celebration-copy"),
   milestoneCelebrationClose: document.querySelector("#milestone-celebration-close"),
@@ -3869,9 +3870,11 @@ function renderMilestones(milestones) {
     const item = document.createElement("article");
     item.className = "milestone-row";
     const mark = document.createElement("span");
-    mark.className = "milestone-row-mark";
+    const milestoneVisual = getMilestoneVisual(milestone);
+    mark.className = `milestone-row-mark milestone-rarity-${milestoneVisual.rarity}`;
+    mark.dataset.rarity = milestoneVisual.rarity;
     mark.setAttribute("aria-hidden", "true");
-    mark.textContent = milestone.type === "series-complete" ? "✓" : milestone.type === "progress" ? "%" : "★";
+    mark.textContent = milestoneVisual.icon;
     const copy = document.createElement("span");
     const eyebrow = document.createElement("small"); eyebrow.textContent = milestone.eyebrow;
     const title = document.createElement("strong"); title.textContent = milestone.title;
@@ -3880,6 +3883,33 @@ function renderMilestones(milestones) {
     item.append(mark, copy);
     elements.milestoneList.append(item);
   });
+}
+
+function getMilestoneVisual(milestone) {
+  if (!milestone) return { rarity: "common", icon: "•" };
+  if (milestone.type === "copies") {
+    const value = Number(milestone.value || 0);
+    if (value >= 1000) return { rarity: "legendary", icon: "✹" };
+    if (value >= 750) return { rarity: "epic", icon: "✦" };
+    if (value >= 500) return { rarity: "rare", icon: "★" };
+    if (value >= 250) return { rarity: "uncommon", icon: "◆" };
+    return { rarity: "common", icon: "●" };
+  }
+  if (milestone.type === "progress") {
+    const value = Number(milestone.value || 0);
+    if (value >= 100) return { rarity: "legendary", icon: "✹" };
+    if (value >= 90) return { rarity: "epic", icon: "✦" };
+    if (value >= 75) return { rarity: "rare", icon: "★" };
+    return { rarity: "uncommon", icon: "◆" };
+  }
+  if (milestone.type === "series-complete") {
+    const value = Number(milestone.value || 0);
+    if (value >= 100) return { rarity: "legendary", icon: "✹" };
+    if (value >= 50) return { rarity: "epic", icon: "✦" };
+    if (value >= 20) return { rarity: "rare", icon: "★" };
+    return { rarity: "uncommon", icon: "◆" };
+  }
+  return { rarity: "common", icon: "●" };
 }
 
 function scheduleMilestoneSync(milestones) {
@@ -3912,6 +3942,12 @@ function scheduleMilestoneSync(milestones) {
 
 function showMilestoneCelebration(milestone) {
   if (!milestone || !elements.milestoneCelebration) return;
+  const milestoneVisual = getMilestoneVisual(milestone);
+  if (elements.milestoneCelebrationMark) {
+    elements.milestoneCelebrationMark.textContent = milestoneVisual.icon;
+    elements.milestoneCelebrationMark.className = `milestone-celebration-mark milestone-rarity-${milestoneVisual.rarity}`;
+  }
+  elements.milestoneCelebration.dataset.rarity = milestoneVisual.rarity;
   elements.milestoneCelebrationTitle.textContent = milestone.title;
   elements.milestoneCelebrationCopy.textContent = milestone.copy;
   elements.milestoneCelebration.classList.remove("hidden");
@@ -8181,7 +8217,7 @@ function renderReleaseRadarIndicators() {
     : `${summary.upcoming} geplant`;
 
   if (summary.next) {
-    elements.releaseRadarHomeTitle.textContent = badgeCount > 0 ? "Erscheinungsradar" : "Nächste Neuerscheinung";
+    elements.releaseRadarHomeTitle.textContent = "Nächste Neuerscheinung";
     elements.releaseRadarHomeNext.textContent = summary.next.event.title;
     elements.releaseRadarHomeDate.textContent = `${getReleaseTimingLabel(summary.next)} · ${formatCalendarDate(summary.next.event.startDate, { includeYear: true })}`;
     elements.calendarRadarTitle.textContent = badgeCount > 0

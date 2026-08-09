@@ -35,7 +35,7 @@ test("Erscheinungsradar ist auf Startseite, Kalenderseite und in der Navigation 
 test("Erscheinungsradar bleibt mit Datenformat 9, Archivmodell 1 und Datenbank 5 migrationsfrei", async () => {
   const [config, storage, version] = await Promise.all([read("config.js"), read("storage.js"), read("version.json")]);
   const metadata = JSON.parse(version);
-  assert.equal(metadata.appVersion, "4.5.1");
+  assert.equal(metadata.appVersion, "4.5.2");
   assert.equal(metadata.dataFormatVersion, 9);
   assert.equal(metadata.archiveModelVersion, 1);
   assert.match(config, /releaseRadarDecisions:\s*Object\.freeze\(\{\}\)/);

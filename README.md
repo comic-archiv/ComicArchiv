@@ -1,68 +1,87 @@
-# Entenarchiv 4.3.1
+# Entenarchiv 4.5.2
 
-Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.3 ergänzt den Archivkern, die digitalen Regale und Scanner Pro um ein **Erscheinungsradar**, das offizielle Verlagstermine mit der eigenen Sammlung verbindet.
+Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.5.2 ist ein gezielter **UI-Polish für Dashboard, Share Cards und Kalender** auf Basis des Design-Systems von 4.5.1.
 
-## Neu in 4.3.1
 
-- Nicht zugeordnete Verlagstermine können einer bestehenden Reihe zugeordnet oder direkt als neue Reihe angelegt werden.
-- Kalender-Aliase werden gespeichert und erkennen spätere Bände derselben Reihe automatisch.
-- Manuelle Einzelzuordnungen sichern auch ungewöhnlich benannte Termine ab.
+## Neu in 4.5.2
 
-## Neu in Version 4.3
+- Dashboard mit bewusst voller Fehlband-Zeile statt einer verlorenen Einzelkachel
+- Sammelziel und Neuerscheinung mit identischen gelben SVG-Icons, Größen und Strichstärken
+- kompaktere Sammelziel-Karte ohne sichtbare redundante Dachzeile
+- Neuerscheinungs-Karte priorisiert Titel und Datum statt Zähler
+- redundante Dachzeilen über „Meine Sammlung“ und „Fehlende Bände“ entfernt
+- JSON-Backup ist wieder gleich breit wie die übrigen Exportaktionen
+- größeres, sauber ausgerichtetes Entenarchiv-Icon im Startseiten-Header
+- Share-Card-Dialog berücksichtigt iOS-Safe-Areas; Share Cards erhalten ein handgezeichnetes Archiv-/Bücherregal-Motiv
+- Sammlungs-DNA bricht lange Texte früher um und hält Abstand zum Navigationspfeil
+- Meilensteine besitzen fünf visuelle Seltenheitsstufen von dezent bis legendär
+- Kalender grundlegend entschlackt: Jahr/Monat/Termine zuerst, Suche und Verwaltung in diskreten aufklappbaren Werkzeugen
+- keine Datenmigration; Datenformat, Archivmodell und IndexedDB bleiben unverändert
 
-### Erscheinungsradar
+## Neu in 4.5.0
 
-Das Radar wertet die in Entenarchiv geladenen offiziellen LTB-Jahrespläne aus und bildet daraus eine persönliche Release-Inbox. Jede zuordenbare Neuerscheinung wird mit dem Archiv abgeglichen und erhält einen Status:
+### Wunschlisten-Prioritäten
 
-- **Im Besitz** – die Ausgabe ist bereits gespeichert.
-- **Fehlt** – die Ausgabe liegt innerhalb eines persönlichen Reihenziels.
-- **Nicht vorgemerkt** – der Termin ist bekannt, aber noch nicht Teil der Wunschliste.
-- **Vorgemerkt** – die Ausgabe soll gesucht oder gekauft werden.
-- **Bestellt** – die Ausgabe ist bereits bestellt.
-- **Ignoriert** – der Termin soll nicht mehr als offen erscheinen.
+Fehlende Bände können optional markiert werden als:
 
-Das Radar ist über die Startseite und die Kalenderansicht erreichbar. Neue oder heute fällige Veröffentlichungen können zusätzlich als Zahl am Kalender-Icon und – nach ausdrücklicher Freigabe – am Home-Screen-Symbol angezeigt werden.
+- **Gesucht** – höchste Priorität
+- **Mitnehmen** – interessant, wenn Zustand und Gelegenheit passen
+- **Irgendwann** – ohne Zeitdruck
+- **Ignorieren** – nicht Teil der aktiven Suche
 
-### Direkte Aktionen
+Die Priorität ist in Fehlbanddetails, Erscheinungsradar und Flohmarkt-Modus verfügbar. Der Flohmarkt-Modus sortiert zuerst nach Reihe und innerhalb der Reihe nach Suchpriorität. CSV- und kompakter PDF-Export übernehmen die Priorität ebenfalls.
 
-Aus einer Neuerscheinung heraus kann Entenarchiv:
+### Nächstes Sammelziel
 
-- ein Reihenziel bis zur betreffenden Bandnummer erweitern,
-- den Band auf die Wunschliste setzen,
-- eine Bestellung markieren,
-- eine bereits erschienene Ausgabe zum Hinzufügen vorbereiten,
-- eine vorhandene Ausgabe in der Sammlung öffnen,
-- die zugehörige Duckipedia-Seite aufrufen,
-- vorgemerkte und bestellte Termine als iCal-Datei für Apple Kalender exportieren.
+Auf dem Dashboard gibt es genau eine kompakte Missionskarte. Entenarchiv wählt automatisch ein sinnvolles nächstes Ziel, zum Beispiel:
 
-### Automatische Jahresplan-Erkennung
+- eine Reihe mit nur noch ein bis drei fehlenden Zielbänden,
+- einen als **Gesucht** markierten Fehlband,
+- den nächsten 50/75/90/100-Prozent-Schritt der Hauptreihe,
+- eine offene aktive Lücke.
 
-Der GitHub-Actions-Workflow kann den offiziellen LTB-Downloadbereich einmal pro Woche prüfen. Neue oder korrigierte iCal-Dateien werden validiert, nach Kalenderjahr geordnet und unmittelbar in das veröffentlichte GitHub-Pages-Paket aufgenommen.
+Ein Tap führt direkt zur passenden Fehlbandansicht. Die Startseite erhält dadurch keine zusätzliche lange Aufgabenliste.
 
-Schlägt die Online-Prüfung vorübergehend fehl, bleibt der vorhandene Kalenderstand erhalten und die Veröffentlichung wird nicht blockiert.
+### Meilensteine
 
-### Reparierte Unterseiten-Navigation
+Entenarchiv berechnet Meilensteine lokal aus der Sammlung, unter anderem:
 
-Während eine Unterseite geöffnet ist, wird die globale Kopfzeile ausgeblendet. Die jeweilige Unterseiten-Kopfzeile mit Zurück-Button liegt auf einer eigenen Ebene. Dadurch sind die Zurück-Buttons wieder erreichbar und scrollende Karten können sie nicht verdecken.
+- 100 / 250 / 500 / 750 / 1.000 physische Exemplare,
+- 50 / 75 / 90 / 100 Prozent der Hauptreihe bei festgelegtem Ziel,
+- vollständig erreichte Reihen mit festgelegtem Ziel.
+
+Beim ersten Start von 4.5 werden bereits erreichte Meilensteine still als bekannt markiert. Nur künftig neu erreichte Meilensteine erscheinen kurz als dezente Meldung. Die vollständige Historie liegt eingeklappt auf der Statistikseite.
+
+### Share Cards
+
+Auf der Statistikseite lassen sich feste Editorial-Templates lokal als PNG erzeugen:
+
+- **Meine Sammlung**
+- **Hauptreihe**
+- **Meilenstein**
+- **Sammlungs-DNA**
+
+Die Gestaltung verwendet den Entenarchiv-Farbraum, klare Typografie, Druckraster und feste Layoutregeln. Es werden ausschließlich lokale Sammlungsdaten verwendet. Die Karte kann über das iOS-Teilen-Menü geteilt oder als PNG gespeichert werden.
 
 ## Datenschutz und Speicherung
 
-- Sammlung, Exemplare, Entscheidungen im Erscheinungsradar und eigene Termine bleiben lokal in IndexedDB.
-- Der GitHub-Workflow verarbeitet ausschließlich öffentlich bereitgestellte iCal-Jahrespläne.
-- Das optionale App-Badge wird lokal beim Öffnen der installierten Web-App berechnet.
-- Es gibt kein Benutzerkonto und keine Server-Datenbank für die Sammlung.
+- Alle Sammlungsdaten bleiben lokal in IndexedDB.
+- Prioritäten und Meilensteinstatus sind Bestandteil der App-Einstellungen und damit des JSON-Backups.
+- Share Cards werden vollständig lokal auf dem Gerät gerendert.
+- Für Share Cards werden weder Sammlungsdaten noch Bilder an einen externen Dienst übertragen.
 - Regelmäßige JSON- und Medien-Backups bleiben notwendig.
 
 ## Technische Eckdaten
 
-- App-Version: `4.3.1`
+- App-Version: `4.5.2`
 - Datenformat: `9`
 - Archivmodell: `1`
 - IndexedDB-Schema: `5`
-- Vanilla HTML, CSS und JavaScript
+- keine Datenmigration von 4.4.0 erforderlich
+- neue Module `collector-goals.js` und `share-cards.js`
+- Service-Worker-Cache: `v4-5-2`
+- Scanner- und PDF-Bibliothek weiterhin nur bei Bedarf geladen
 - GitHub Pages mit vorgeschalteter GitHub-Actions-Prüfung
-- wöchentliche, fehlertolerante Jahresplan-Erkennung
-- Scanner- und PDF-Bibliothek werden weiterhin nur bei Bedarf geladen
 
 ## Projektstruktur
 
@@ -72,6 +91,9 @@ Entenarchiv/
 ├── style.css
 ├── app.js
 ├── archive-model.js
+├── collector-goals.js
+├── share-cards.js
+├── statistics-dna.js
 ├── release-radar.js
 ├── calendar.js
 ├── scanner.js
@@ -85,16 +107,15 @@ Entenarchiv/
 ├── data/
 ├── tests/
 ├── scripts/
-│   └── sync-release-calendars.mjs
 └── .github/workflows/
-    └── deploy-pages.yml
 ```
 
-## Lokale Qualitätsprüfung
+## Qualitätsprüfung
 
 ```bash
 npm run check
+npm run calendar:verify
 npm run build
 ```
 
-Für die normale Veröffentlichung sind auf dem Mac keine Installationen erforderlich. GitHub Actions führt dieselben Prüfungen nach jedem Commit aus und veröffentlicht nur eine erfolgreiche Version.
+GitHub Actions führt die Prüfungen nach jedem Commit aus und veröffentlicht nur eine erfolgreiche Version.

@@ -1,7 +1,7 @@
 (function initializeEntenarchivRecovery() {
   "use strict";
 
-  const APP_VERSION = "4.5.1";
+  const APP_VERSION = "4.5.2";
   const DATA_FORMAT_VERSION = 9;
   const ARCHIVE_MODEL_VERSION = 1;
   const IS_TEST_MODE = new URLSearchParams(window.location.search).get("testmode") === "1";

@@ -9999,3 +9999,450 @@ textarea,
     max-height: calc(100dvh - 12px - env(safe-area-inset-top));
   }
 }
+
+/* --------------------------------------------------------------------------
+   Entenarchiv 4.5.2: Dashboard-, Share-Card- und Kalender-Polish
+   -------------------------------------------------------------------------- */
+
+/* Startseiten-Branding: Icon und Wortmarke teilen eine saubere optische Höhe. */
+.app-header .brand {
+  align-items: center;
+  gap: 12px;
+}
+
+.app-header .brand-mark.brand-logo {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  border-radius: 15px;
+}
+
+.app-header .brand > div {
+  display: grid;
+  align-content: center;
+  min-height: 52px;
+}
+
+.app-header .brand .eyebrow {
+  margin-bottom: 3px;
+}
+
+/* Dashboard: die siebte Kennzahl nutzt bewusst die komplette 3er-Zeile. */
+.stat-card-wide,
+.stat-card-highlight {
+  grid-column: 1 / -1 !important;
+}
+
+.stat-card-wide {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 72px;
+  padding-inline: 18px;
+  text-align: left;
+}
+
+.stat-card-wide .stat-label {
+  order: 1;
+  font-size: 0.8rem;
+}
+
+.stat-card-wide .stat-value {
+  order: 2;
+  font-size: clamp(1.8rem, 8vw, 2.3rem);
+}
+
+/* Mission und Neuerscheinung sind ein zusammengehöriges Kartenpaar. */
+.collector-mission-slot {
+  margin-top: 14px;
+}
+
+#dashboard + .release-radar-home {
+  margin-top: 14px;
+}
+
+.dashboard-feature-icon,
+.collector-mission-mark,
+.release-radar-home-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  place-items: center;
+  border-radius: var(--radius-control);
+  background: var(--secondary);
+  color: var(--secondary-text);
+  box-shadow: 0 7px 18px color-mix(in srgb, var(--secondary) 22%, transparent);
+}
+
+.dashboard-feature-icon svg,
+.collector-mission-mark svg,
+.release-radar-home-icon svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.collector-mission-card,
+.release-radar-home-card {
+  min-height: 84px;
+  padding: 13px 14px;
+  gap: 12px;
+}
+
+.collector-mission-card {
+  grid-template-columns: 46px minmax(0, 1fr) 20px;
+}
+
+.collector-mission-copy {
+  gap: 4px;
+}
+
+.collector-mission-copy strong {
+  font-size: 0.96rem;
+  line-height: 1.22;
+}
+
+.release-radar-home-card {
+  grid-template-columns: 46px minmax(0, 1fr) 20px;
+}
+
+.release-radar-home-copy {
+  gap: 4px;
+}
+
+.release-radar-home-copy .eyebrow {
+  margin: 0;
+  color: var(--secondary-strong);
+  font-size: 0.64rem;
+}
+
+.release-radar-home-copy strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 850;
+  line-height: 1.2;
+  white-space: normal;
+  text-overflow: clip;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.release-radar-home-date {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.release-radar-home-side {
+  display: grid;
+  min-width: 20px;
+  place-items: center;
+}
+
+.release-radar-home-side svg {
+  width: 20px;
+  height: 20px;
+  color: var(--primary);
+}
+
+/* Abschnittstitel ohne redundante Dachzeilen sitzen enger an ihrem Inhalt. */
+#collection > .section-heading,
+#missing > .section-heading {
+  margin-bottom: 12px;
+}
+
+/* Backup: keine Einzelaktion darf künstlich über beide Spalten laufen. */
+.backup-actions .primary-button {
+  grid-column: auto;
+}
+
+/* DNA: Pfeil bekommt reservierten Raum und Text darf früher umbrechen. */
+.dna-insight-card {
+  padding-right: 46px;
+}
+
+.dna-insight-card > strong {
+  overflow: visible;
+  font-size: clamp(1.2rem, 5vw, 1.48rem);
+  line-height: 1.08;
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+
+.dna-insight-card > small {
+  padding-right: 4px;
+  -webkit-line-clamp: 3;
+}
+
+.dna-insight-arrow {
+  right: 14px;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+}
+
+/* Meilensteine: Seltenheit wird sichtbar, ohne die Typografie zu überladen. */
+.milestone-row-mark,
+.milestone-celebration-mark {
+  border: 1px solid transparent;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.milestone-rarity-common {
+  background: color-mix(in srgb, var(--text-muted) 15%, var(--surface-soft));
+  border-color: color-mix(in srgb, var(--text-muted) 30%, var(--border));
+  color: var(--text-muted);
+}
+
+.milestone-rarity-uncommon {
+  background: color-mix(in srgb, var(--success) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+  color: var(--success);
+}
+
+.milestone-rarity-rare {
+  background: color-mix(in srgb, var(--primary) 16%, var(--surface));
+  border-color: color-mix(in srgb, var(--primary) 58%, var(--border));
+  color: var(--primary-strong);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.milestone-rarity-epic {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--secondary) 24%, var(--surface)), color-mix(in srgb, var(--primary) 16%, var(--surface)));
+  border-color: color-mix(in srgb, var(--secondary) 66%, var(--border));
+  color: var(--secondary-strong);
+  font-size: 1.05rem;
+  box-shadow: 0 7px 18px color-mix(in srgb, var(--secondary) 24%, transparent);
+}
+
+.milestone-rarity-legendary {
+  background: radial-gradient(circle at 35% 25%, var(--secondary-strong), var(--secondary) 48%, color-mix(in srgb, var(--primary) 55%, var(--secondary)) 100%);
+  border-color: color-mix(in srgb, var(--secondary-strong) 78%, white 22%);
+  color: var(--secondary-text);
+  font-size: 1.15rem;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--secondary) 12%, transparent), 0 8px 24px color-mix(in srgb, var(--secondary) 34%, transparent);
+}
+
+.milestone-celebration[data-rarity="epic"],
+.milestone-celebration[data-rarity="legendary"] {
+  border-color: color-mix(in srgb, var(--secondary) 78%, var(--border));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--secondary) 8%, var(--surface-raised)), var(--surface-raised));
+}
+
+/* Share Card Dialog respektiert Notch/Dynamic Island und Home-Indikator. */
+#share-card-modal {
+  align-items: center;
+  padding-top: calc(16px + env(safe-area-inset-top));
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
+#share-card-modal .share-card-modal-card {
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overscroll-behavior: contain;
+}
+
+/* Kalender 4.5.2: zuerst Datum und Termine, Verwaltung bewusst nach hinten. */
+.calendar-page-content {
+  display: grid;
+  gap: 12px;
+}
+
+.calendar-command-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+}
+
+.calendar-command-bar .calendar-year-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  gap: 7px;
+}
+
+.calendar-command-bar .small-icon-button {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+}
+
+.calendar-primary-actions {
+  display: flex;
+  gap: 7px;
+}
+
+.calendar-primary-actions .compact-button {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+.calendar-radar-compact {
+  min-height: 72px;
+  margin: 0;
+}
+
+.calendar-radar-compact .release-radar-launch-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-control);
+}
+
+.calendar-radar-compact .release-radar-launch-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.calendar-month-tabs {
+  margin: 0;
+}
+
+.calendar-main-month {
+  margin: 0;
+  box-shadow: var(--shadow-soft);
+}
+
+.calendar-main-events {
+  margin: 2px 0 0;
+}
+
+.calendar-main-events > .section-heading {
+  margin-bottom: 9px;
+}
+
+.calendar-tools-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.calendar-tools-panel > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.calendar-tools-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.calendar-tools-panel > summary > span:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.calendar-tools-panel > summary strong {
+  font-size: 0.86rem;
+}
+
+.calendar-tools-panel > summary small {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.calendar-tools-panel[open] .disclosure-icon {
+  transform: rotate(180deg);
+}
+
+.calendar-tools-panel .collapsible-content {
+  display: grid;
+  gap: 12px;
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.calendar-tools-panel .calendar-filter-panel {
+  grid-template-columns: 1fr;
+  margin: 0;
+  padding-top: 14px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.calendar-management-content {
+  padding-top: 14px !important;
+}
+
+.calendar-reminder-compact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin: 0;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+}
+
+.calendar-reminder-compact h3,
+.calendar-reminder-compact p {
+  margin-bottom: 0;
+}
+
+.calendar-reminder-actions {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.calendar-reminder-actions .calendar-reminder-time {
+  width: 112px;
+}
+
+.calendar-catalog-toolbar {
+  margin-top: 0;
+}
+
+.calendar-import-actions {
+  margin: 0;
+}
+
+@media (max-width: 520px) {
+  .calendar-command-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-primary-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .calendar-reminder-compact {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .calendar-reminder-actions {
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 350px) {
+  .app-header .brand-mark.brand-logo {
+    width: 48px;
+    height: 48px;
+    flex-basis: 48px;
+  }
+
+  .calendar-reminder-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-reminder-actions .calendar-reminder-time {
+    width: 100%;
+  }
+}

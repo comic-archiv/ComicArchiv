@@ -102,6 +102,7 @@ export async function renderShareCard(canvas, payload, { iconUrl = "./icons/icon
     blue: "#005EA8",
     blueSoft: "#E8F2FA",
     yellow: "#EFB423",
+    yellowSoft: "#FFF1BF",
     green: "#16834A",
     muted: "#657083",
     line: "#D7D0C4"
@@ -113,9 +114,7 @@ export async function renderShareCard(canvas, payload, { iconUrl = "./icons/icon
   drawBlueTexture(context);
 
   const icon = await loadImage(iconUrl).catch(() => null);
-  if (icon) {
-    drawRoundedImage(context, icon, 72, 54, 98, 98, 24);
-  }
+  if (icon) drawRoundedImage(context, icon, 72, 54, 98, 98, 24);
 
   context.textBaseline = "alphabetic";
   context.textAlign = "left";
@@ -133,51 +132,57 @@ export async function renderShareCard(canvas, payload, { iconUrl = "./icons/icon
   context.textAlign = "left";
 
   const cardX = 54;
-  const cardY = 188;
+  const cardY = 182;
   const cardW = 972;
-  const cardH = 1058;
+  const cardH = 1070;
   fillRoundedRect(context, cardX, cardY, cardW, cardH, 42, colors.paper);
 
   context.fillStyle = colors.blue;
   context.font = "800 25px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
-  context.fillText(String(payload.sectionLabel || "Meine Sammlung").toUpperCase(), 108, 266);
-
-  context.fillStyle = colors.yellow;
-  fillRoundedRect(context, 108, 296, 116, 10, 5, colors.yellow);
+  context.fillText(String(payload.sectionLabel || "Meine Sammlung").toUpperCase(), 108, 258);
+  fillRoundedRect(context, 108, 286, 116, 10, 5, colors.yellow);
 
   const headline = String(payload.headline || "Entenarchiv");
-  const headlineFont = getHeadlineFont(headline);
-  context.fillStyle = colors.navy;
-  context.font = headlineFont;
-  const headlineLines = wrapText(context, headline, 760, 106, 2);
-  let headlineY = 424;
-  headlineLines.forEach((line) => {
-    context.fillText(line, 108, headlineY);
-    headlineY += 108;
+  const longHeadline = headline.length > 22;
+  drawArchiveMotif(context, payload, colors, {
+    x: longHeadline ? 790 : 704,
+    y: 318,
+    width: longHeadline ? 150 : 250,
+    height: longHeadline ? 190 : 278,
+    quiet: longHeadline
   });
 
-  context.font = "600 34px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
+  context.fillStyle = colors.navy;
+  context.font = getHeadlineFont(headline);
+  const headlineWidth = longHeadline ? 760 : 570;
+  const headlineLines = wrapText(context, headline, headlineWidth, 102, 2);
+  let headlineY = 408;
+  headlineLines.forEach((line) => {
+    context.fillText(line, 108, headlineY);
+    headlineY += 104;
+  });
+
+  context.font = "600 32px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
   context.fillStyle = colors.muted;
-  const sublines = wrapText(context, String(payload.subline || ""), 770, 48, 3);
-  let sublineY = Math.max(566, headlineY + 14);
+  const sublineWidth = longHeadline ? 790 : 575;
+  const sublines = wrapText(context, String(payload.subline || ""), sublineWidth, 44, 3);
+  let sublineY = Math.max(548, headlineY + 8);
   sublines.forEach((line) => {
     context.fillText(line, 108, sublineY);
-    sublineY += 48;
+    sublineY += 44;
   });
 
   if (Number.isFinite(Number(payload.progress))) {
-    const progressY = Math.min(720, sublineY + 30);
-    fillRoundedRect(context, 108, progressY, 864, 18, 9, colors.blueSoft);
-    const progressWidth = Math.max(0, Math.min(864, 864 * Number(payload.progress) / 100));
+    const progressY = Math.min(672, sublineY + 22);
+    fillRoundedRect(context, 108, progressY, 560, 18, 9, colors.blueSoft);
+    const progressWidth = Math.max(0, Math.min(560, 560 * Number(payload.progress) / 100));
     if (progressWidth > 0) fillRoundedRect(context, 108, progressY, progressWidth, 18, 9, colors.yellow);
-    sublineY = progressY + 54;
   }
 
   const stats = normalizeStats(payload.stats);
-  const gridTop = Math.max(738, sublineY + 20);
-  drawStatsGrid(context, stats, { x: 108, y: gridTop, width: 864, colors });
+  drawStatsGrid(context, stats, { x: 108, y: 724, width: 864, colors });
 
-  const footerTop = 1094;
+  const footerTop = 1072;
   context.strokeStyle = colors.line;
   context.lineWidth = 2;
   context.beginPath();
@@ -188,18 +193,71 @@ export async function renderShareCard(canvas, payload, { iconUrl = "./icons/icon
   context.fillStyle = colors.navy;
   context.font = "800 25px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
   const noteLines = wrapText(context, String(payload.note || "Entenarchiv"), 650, 34, 2);
-  noteLines.forEach((line, index) => context.fillText(line, 108, 1145 + index * 34));
+  noteLines.forEach((line, index) => context.fillText(line, 108, 1123 + index * 34));
 
   context.fillStyle = colors.muted;
   context.font = "600 20px -apple-system, BlinkMacSystemFont, Arial, sans-serif";
-  context.fillText("Erstellt mit Entenarchiv", 108, 1208);
+  context.fillText("Erstellt mit Entenarchiv", 108, 1190);
 
-  if (icon) context.drawImage(icon, 868, 1120, 92, 92);
-
-  context.fillStyle = colors.yellow;
-  fillRoundedRect(context, 54, 1284, 972, 12, 6, colors.yellow);
-
+  if (icon) context.drawImage(icon, 876, 1096, 82, 82);
+  fillRoundedRect(context, 54, 1290, 972, 12, 6, colors.yellow);
   return canvas;
+}
+
+function drawArchiveMotif(context, payload, colors, { x, y, width, height, quiet = false }) {
+  context.save();
+  context.globalAlpha = quiet ? 0.28 : 1;
+  fillRoundedRect(context, x, y, width, height, Math.min(32, width * 0.12), quiet ? colors.blueSoft : colors.paperRaised);
+
+  const pad = width * 0.09;
+  const shelfY = y + height * 0.79;
+  const available = width - pad * 2;
+  const gap = Math.max(5, width * 0.025);
+  const bookW = (available - gap * 3) / 4;
+  const heights = [0.57, 0.69, 0.62, 0.76];
+  const fills = [colors.blue, colors.yellow, colors.navy, colors.blue];
+  const labels = payload.template === "main-series" ? ["1", "2", "3", "4"] : payload.template === "dna" ? ["97", "98", "99", "00"] : ["LTB", "S", "P", "+"];
+
+  heights.forEach((ratio, index) => {
+    const bookH = height * ratio;
+    const bookX = x + pad + index * (bookW + gap);
+    const bookY = shelfY - bookH;
+    fillRoundedRect(context, bookX, bookY, bookW, bookH, Math.max(4, bookW * 0.12), fills[index]);
+    context.fillStyle = index === 1 ? colors.navy : "#FFFFFF";
+    context.font = `800 ${Math.max(10, Math.round(bookW * 0.33))}px -apple-system, BlinkMacSystemFont, Arial, sans-serif`;
+    context.textAlign = "center";
+    context.fillText(labels[index], bookX + bookW / 2, bookY + Math.max(18, bookW * 0.58));
+    context.textAlign = "left";
+  });
+
+  context.fillStyle = colors.navy;
+  fillRoundedRect(context, x + pad * 0.55, shelfY, width - pad * 1.1, Math.max(8, height * 0.035), 4, colors.navy);
+  fillRoundedRect(context, x + width * 0.12, shelfY + height * 0.055, width * 0.76, Math.max(6, height * 0.026), 3, colors.yellow);
+
+  if (payload.template === "milestone") {
+    const badgeR = Math.max(21, width * 0.12);
+    context.beginPath();
+    context.arc(x + width * 0.76, y + height * 0.2, badgeR, 0, Math.PI * 2);
+    context.fillStyle = colors.yellow;
+    context.fill();
+    context.fillStyle = colors.navy;
+    context.font = `900 ${Math.max(18, badgeR)}px -apple-system, BlinkMacSystemFont, Arial, sans-serif`;
+    context.textAlign = "center";
+    context.fillText("★", x + width * 0.76, y + height * 0.2 + badgeR * 0.35);
+    context.textAlign = "left";
+  }
+
+  if (payload.template === "dna") {
+    context.strokeStyle = colors.yellow;
+    context.lineWidth = Math.max(2, width * 0.012);
+    [0.22, 0.31, 0.4].forEach((ratio) => {
+      context.beginPath();
+      context.arc(x + width * 0.74, y + height * 0.23, width * ratio, Math.PI * 0.9, Math.PI * 1.72);
+      context.stroke();
+    });
+  }
+
+  context.restore();
 }
 
 export function canvasToPngBlob(canvas) {

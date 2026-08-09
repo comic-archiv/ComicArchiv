@@ -1,5 +1,30 @@
 # Änderungen
 
+## 4.5.2 – Dashboard-, Share-Card- und Kalender-Polish
+
+### Design
+
+- Fehlende Bände spannt auf dem Dashboard die komplette Kennzahlenzeile auf
+- identische gelbe Icon-Systematik für Sammelziel und nächste Neuerscheinung
+- redundante Dachzeilen auf der Startseite entfernt
+- Neuerscheinungs-Karte zeigt den kommenden Titel statt Statuszählern im Vordergrund
+- Entenarchiv-Icon im Header größer und sauber auf die Wortmarke ausgerichtet
+- Backup-Aktionen besitzen wieder ein konsistentes Zweispaltenraster
+- Sammlungs-DNA reserviert festen Raum für den blauen Navigationspfeil
+- Meilensteine unterscheiden Common, Uncommon, Rare, Epic und Legendary visuell
+- Share Cards erhalten ein lokales, handgezeichnetes Archiv-/Regalmotiv und eine dichtere Komposition
+- Share-Card-Modal berücksichtigt Notch, Dynamic Island und Home-Indikator
+- Kalender priorisiert Jahr, Monat und Termine; Suche, Jahrespläne und Erinnerungen sind in aufklappbare Werkzeuge verschoben
+
+### Technik
+
+- App-Version und Service-Worker-Cache auf 4.5.2 angehoben
+- Datenformat bleibt Version 9
+- Archivmodell bleibt Version 1
+- IndexedDB-Schema bleibt Version 5
+- keine Datenmigration erforderlich
+- 131 automatisierte Tests
+
 ## 4.5.1 – Design-System & Layout-Polish
 
 ### Design

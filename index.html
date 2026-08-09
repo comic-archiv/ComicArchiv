@@ -53,12 +53,12 @@
 <button aria-label="Ungelesen 0 öffnen" class="stat-card" data-dashboard-action="unread" type="button"><span class="stat-label">Ungelesen</span><strong class="stat-value" id="stat-unread">0</strong></button>
 <button aria-label="Foliert 0 öffnen" class="stat-card" data-dashboard-action="sealed" type="button"><span class="stat-label">Foliert</span><strong class="stat-value" id="stat-sealed">0</strong></button>
 <button aria-label="Doppelt 0 öffnen" class="stat-card" data-dashboard-action="duplicate" type="button"><span class="stat-label">Doppelt</span><strong class="stat-value" id="stat-duplicate">0</strong></button>
-<button aria-label="Fehlende Bände 0 öffnen" class="stat-card stat-card-highlight" data-dashboard-action="missing" type="button"><span class="stat-label">Fehlende Bände</span><strong class="stat-value" id="stat-missing">0</strong></button>
+<button aria-label="Fehlende Bände 0 öffnen" class="stat-card stat-card-highlight stat-card-wide" data-dashboard-action="missing" type="button"><span class="stat-label">Fehlende Bände</span><strong class="stat-value" id="stat-missing">0</strong></button>
 </div>
 <div class="collector-mission-slot" id="collector-mission-slot">
 <button class="collector-mission-card" id="collector-mission" type="button">
-<span class="collector-mission-mark" aria-hidden="true">◎</span>
-<span class="collector-mission-copy"><small id="collector-mission-eyebrow">Nächstes Sammelziel</small><strong id="collector-mission-title">Wird berechnet …</strong><span id="collector-mission-text"></span></span>
+<span class="collector-mission-mark dashboard-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="2.5"></circle><path d="M12 2v3M22 12h-3M12 22v-3M2 12h3"></path></svg></span>
+<span class="collector-mission-copy"><small class="visually-hidden" id="collector-mission-eyebrow">Nächstes Sammelziel</small><strong id="collector-mission-title">Wird berechnet …</strong><span id="collector-mission-text"></span></span>
 <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"></path></svg>
 </button>
 </div>
@@ -66,15 +66,15 @@
 </section>
 <section aria-labelledby="release-radar-home-title" class="release-radar-home section-anchor" id="release-radar-home">
 <button class="release-radar-home-card" id="open-release-radar-home" type="button">
-<span aria-hidden="true" class="release-radar-home-icon"><svg viewBox="0 0 24 24"><path d="M4 18h16M6 16V9a6 6 0 0 1 12 0v7M9 18a3 3 0 0 0 6 0M12 3V1M4.8 5.2 3.4 3.8M19.2 5.2l1.4-1.4"></path></svg></span>
-<span class="release-radar-home-copy"><span class="eyebrow">Neuerscheinungen im Blick</span><strong id="release-radar-home-title">Erscheinungsradar</strong><small id="release-radar-home-next">Kalenderdaten werden ausgewertet …</small><span class="release-radar-home-date" id="release-radar-home-date"></span></span>
-<span class="release-radar-home-side"><span class="release-radar-home-count" id="release-radar-home-count">0</span><small id="release-radar-home-meta">offen</small><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"></path></svg></span>
+<span aria-hidden="true" class="release-radar-home-icon dashboard-feature-icon"><svg viewBox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 8.5h15M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path><path d="M8 13h8M8 16h5"></path></svg></span>
+<span class="release-radar-home-copy"><span class="eyebrow" id="release-radar-home-title">Nächste Neuerscheinung</span><strong id="release-radar-home-next">Kalenderdaten werden ausgewertet …</strong><span class="release-radar-home-date" id="release-radar-home-date"></span></span>
+<span class="release-radar-home-side"><span class="visually-hidden" id="release-radar-home-count">0</span><small class="visually-hidden" id="release-radar-home-meta">offen</small><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"></path></svg></span>
 </button>
 </section>
 
 <section aria-labelledby="collection-title" class="collection-section section-anchor" id="collection">
 <div class="section-heading collection-heading">
-<div><p class="eyebrow">Gespeicherte Einträge</p><h2 id="collection-title">Meine Sammlung</h2></div>
+<div><h2 id="collection-title">Meine Sammlung</h2></div>
 </div>
 <div class="collection-hub-grid">
 <button class="collection-hub-card" id="open-main-collection" type="button">
@@ -93,7 +93,7 @@
 </section>
 <section aria-labelledby="missing-title" class="section-anchor" id="missing">
 <div class="section-heading collection-heading">
-<div><p class="eyebrow">Automatische Prüfung</p><h2 id="missing-title">Fehlende Bände</h2></div>
+<div><h2 id="missing-title">Fehlende Bände</h2></div>
 <span class="count-badge" id="missing-count">0 fehlen</span>
 </div>
 <div class="collection-hub-grid">
@@ -136,7 +136,7 @@
 </div>
 <p aria-live="polite" class="form-message" id="export-message" role="status"></p>
 <p class="backup-help">JSON sichert deine Daten. Eigene Coverbilder sicherst du separat unter „Medien &amp; Metadaten“.</p>
-<p class="app-version-footer">Entenarchiv <span id="app-version">v4.5.1</span></p></section>
+<p class="app-version-footer">Entenarchiv <span id="app-version">v4.5.2</span></p></section>
 </main>
 <nav aria-label="Hauptnavigation" class="bottom-nav"><button class="bottom-nav-item" id="nav-calendar" type="button"><span class="bottom-nav-icon-wrap"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M7 3v3M17 3v3M4.5 8.5h15M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path></svg><span aria-label="0 neue Veröffentlichungen" class="bottom-nav-badge hidden" id="calendar-nav-badge">0</span></span><span>Kalender</span></button><button class="bottom-nav-item bottom-nav-primary" id="nav-add" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg><span>Hinzufügen</span></button><button class="bottom-nav-item" id="nav-statistics" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"></path></svg><span>Statistiken</span></button></nav><section aria-hidden="true" aria-labelledby="add-page-title" class="app-page hidden" id="add-page">
 <header class="app-page-header">
@@ -491,67 +491,60 @@
 <span class="count-badge" id="calendar-page-summary">0 Termine</span>
 </header>
 <div class="app-page-content calendar-page-content">
-<button class="release-radar-launch" id="open-release-radar-calendar" type="button">
-<span aria-hidden="true" class="release-radar-launch-icon"><svg viewBox="0 0 24 24"><path d="M4 18h16M6 16V9a6 6 0 0 1 12 0v7M9 18a3 3 0 0 0 6 0M12 3V1M4.8 5.2 3.4 3.8M19.2 5.2l1.4-1.4"></path></svg></span>
-<span class="release-radar-launch-copy"><small>Erscheinungsradar</small><strong id="calendar-radar-title">Neuerscheinungen prüfen</strong><span id="calendar-radar-next">Jahrespläne werden ausgewertet.</span></span>
-<span class="release-radar-launch-count" id="calendar-radar-count">0 neu</span>
-<svg aria-hidden="true" class="release-radar-launch-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"></path></svg>
-</button>
-<section aria-label="Kalender steuern" class="panel calendar-toolbar">
+<section aria-label="Kalender steuern" class="calendar-command-bar">
 <div class="calendar-year-row">
 <button aria-label="Vorheriges Jahr" class="icon-button small-icon-button" id="calendar-prev-year" type="button">‹</button>
 <label class="visually-hidden" for="calendar-year-select">Kalenderjahr</label>
 <select aria-label="Kalenderjahr" class="calendar-year-select" id="calendar-year-select"></select>
 <button aria-label="Nächstes Jahr" class="icon-button small-icon-button" id="calendar-next-year" type="button">›</button>
 </div>
-<div class="calendar-toolbar-actions">
+<div class="calendar-primary-actions">
 <button class="secondary-button compact-button" id="calendar-today" type="button">Heute</button>
-<button class="primary-button compact-button" id="calendar-add-event" type="button">Termin hinzufügen</button>
-<button class="secondary-button compact-button" id="calendar-export-reminders" type="button">In Apple Kalender</button>
+<button class="primary-button compact-button" id="calendar-add-event" type="button">＋ Termin</button>
 </div>
 </section>
-<section aria-label="Kalender filtern" class="panel calendar-filter-panel">
-<label class="field field-full"><span>Termine durchsuchen</span><input id="calendar-search" maxlength="120" placeholder="Titel, Ort oder Notiz" type="search"/></label>
-<label class="field"><span>Anzeige</span><select id="calendar-category-filter"><option value="all">Alle Termine</option><option value="release">Neuerscheinungen</option><option value="flea-market">Flohmärkte</option><option value="comic-fair">Comicbörsen / Messen</option><option value="other">Sonstige Termine</option></select></label>
-</section>
-<details class="panel calendar-import-panel">
-<summary><span><strong>Jahrespläne verwalten</strong><small id="calendar-import-summary">Kalenderindex wird geprüft</small></span><span aria-hidden="true" class="disclosure-icon">⌄</span></summary>
-<div class="collapsible-content">
-<div class="calendar-catalog-toolbar">
-<div>
-<strong>Verfügbare LTB-Jahre</strong>
-<p class="muted-copy" id="calendar-catalog-status">Noch nicht geprüft</p>
-</div>
-<button class="secondary-button compact-button" id="calendar-refresh-catalog" type="button">Jahre prüfen</button>
-</div>
-<label class="check-row calendar-auto-sync-row"><input checked="" id="calendar-auto-sync" type="checkbox"/><span>Aktuelles und folgendes Jahr automatisch laden und aktualisieren</span></label>
-<div class="calendar-catalog-list" id="calendar-catalog-list"></div>
-<div class="calendar-import-actions">
-<label class="secondary-button file-button" for="calendar-file">Andere iCal-Datei importieren</label>
-<input accept=".ics,text/calendar" class="visually-hidden" id="calendar-file" type="file"/>
-</div>
-<p class="muted-copy compact-help">Neue Jahrgänge werden künftig nur als weitere iCal-Datei und als Eintrag in <code>data/kalender-index.json</code> ergänzt. Die App-Adresse bleibt unverändert.</p>
-<p aria-live="polite" class="form-message" id="calendar-import-message" role="status"></p>
-</div>
-</details>
-<section aria-labelledby="calendar-reminder-title" class="panel calendar-reminder-panel">
-<div>
-<h3 id="calendar-reminder-title">Erinnerungen auf dem iPhone</h3>
-<p class="muted-copy">Exportiere die Termine in Apple Kalender. Die Erinnerungen werden dort am Erscheinungstag ausgelöst – auch wenn Entenarchiv geschlossen ist.</p>
-</div>
-<label class="field calendar-reminder-time"><span>Uhrzeit</span><input id="calendar-reminder-time" type="time" value="09:00"/></label>
-</section>
+<button class="release-radar-launch calendar-radar-compact" id="open-release-radar-calendar" type="button">
+<span aria-hidden="true" class="release-radar-launch-icon"><svg viewBox="0 0 24 24"><path d="M4 18h16M6 16V9a6 6 0 0 1 12 0v7M9 18a3 3 0 0 0 6 0M12 3V1M4.8 5.2 3.4 3.8M19.2 5.2l1.4-1.4"></path></svg></span>
+<span class="release-radar-launch-copy"><small>Erscheinungsradar</small><strong id="calendar-radar-title">Neuerscheinungen prüfen</strong><span id="calendar-radar-next">Jahrespläne werden ausgewertet.</span></span>
+<span class="release-radar-launch-count" id="calendar-radar-count">0 neu</span>
+<svg aria-hidden="true" class="release-radar-launch-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
 <div aria-label="Monat auswählen" class="calendar-month-tabs" id="calendar-month-tabs"></div>
-<section class="panel month-calendar-panel">
+<section class="panel month-calendar-panel calendar-main-month">
 <div class="subsection-heading"><h3 id="calendar-month-title">Januar</h3><span class="muted-copy" id="calendar-month-count">0 Termine</span></div>
 <div aria-hidden="true" class="calendar-weekdays"><span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span></div>
 <div class="calendar-grid" id="calendar-grid" role="grid"></div>
 </section>
-<section aria-labelledby="calendar-event-list-title" class="calendar-event-section">
-<div class="section-heading compact-heading"><div><p class="eyebrow">Monatsübersicht</p><h3 id="calendar-event-list-title">Termine</h3></div></div>
+<section aria-labelledby="calendar-event-list-title" class="calendar-event-section calendar-main-events">
+<div class="section-heading compact-heading"><div><h3 id="calendar-event-list-title">Termine</h3></div></div>
 <div class="calendar-event-list" id="calendar-event-list"></div>
 <div class="panel empty-state hidden" id="calendar-empty"><div aria-hidden="true" class="empty-icon">□</div><h3>Keine passenden Termine</h3><p>Ändere den Filter, lade einen Jahresplan oder füge einen eigenen Termin hinzu.</p></div>
 </section>
+<details class="panel calendar-tools-panel">
+<summary><span><strong>Suche &amp; Filter</strong><small>Termine eingrenzen</small></span><span aria-hidden="true" class="disclosure-icon">⌄</span></summary>
+<div class="collapsible-content calendar-filter-panel">
+<label class="field field-full"><span>Termine durchsuchen</span><input id="calendar-search" maxlength="120" placeholder="Titel, Ort oder Notiz" type="search"/></label>
+<label class="field field-full"><span>Anzeige</span><select id="calendar-category-filter"><option value="all">Alle Termine</option><option value="release">Neuerscheinungen</option><option value="flea-market">Flohmärkte</option><option value="comic-fair">Comicbörsen / Messen</option><option value="other">Sonstige Termine</option></select></label>
+</div>
+</details>
+<details class="panel calendar-tools-panel calendar-management-panel">
+<summary><span><strong>Kalender verwalten</strong><small>Jahrespläne, iCal &amp; Erinnerungen</small></span><span aria-hidden="true" class="disclosure-icon">⌄</span></summary>
+<div class="collapsible-content calendar-management-content">
+<section aria-labelledby="calendar-reminder-title" class="calendar-reminder-panel calendar-reminder-compact">
+<div><h3 id="calendar-reminder-title">Apple Kalender</h3><p class="muted-copy">Neuerscheinungen und eigene Termine mit Erinnerung exportieren.</p></div>
+<div class="calendar-reminder-actions"><label class="field calendar-reminder-time"><span>Uhrzeit</span><input id="calendar-reminder-time" type="time" value="09:00"/></label><button class="secondary-button compact-button" id="calendar-export-reminders" type="button">In Apple Kalender</button></div>
+</section>
+<div class="calendar-catalog-toolbar">
+<div><strong>LTB-Jahrespläne</strong><p class="muted-copy" id="calendar-catalog-status">Noch nicht geprüft</p></div>
+<button class="secondary-button compact-button" id="calendar-refresh-catalog" type="button">Jahre prüfen</button>
+</div>
+<label class="check-row calendar-auto-sync-row"><input checked="" id="calendar-auto-sync" type="checkbox"/><span>Aktuelles und folgendes Jahr automatisch laden und aktualisieren</span></label>
+<div class="calendar-catalog-list" id="calendar-catalog-list"></div>
+<div class="calendar-import-actions"><label class="secondary-button file-button" for="calendar-file">Andere iCal-Datei importieren</label><input accept=".ics,text/calendar" class="visually-hidden" id="calendar-file" type="file"/></div>
+<p class="muted-copy compact-help" id="calendar-import-summary">Kalenderindex wird geprüft</p>
+<p aria-live="polite" class="form-message" id="calendar-import-message" role="status"></p>
+</div>
+</details>
 </div>
 </section>
 <section aria-hidden="true" aria-labelledby="release-radar-title" class="app-page hidden" id="release-radar-page">
