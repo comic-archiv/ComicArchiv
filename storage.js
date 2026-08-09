@@ -680,8 +680,214 @@ export async function removeSeriesDefinition(seriesId) {
   return { removed: Boolean(series && issueCount === 0), archived: Boolean(series && issueCount > 0), issueCount };
 }
 
+export async function saveComicsBatch(comics) {
+  const entries = Array.isArray(comics) ? comics.filter(Boolean) : [];
+  if (!entries.length) return [];
+  if (entries.length === 1) return [await saveComic(entries[0])];
+
+  const database = await getDatabase();
+  const core = await ensureArchiveCoreReady();
+  if (!core.ready) {
+    const transaction = database.transaction(COMICS_STORE, "readwrite");
+    const store = transaction.objectStore(COMICS_STORE);
+    entries.forEach((comic) => store.put(comic));
+    await transactionDone(transaction);
+    return entries;
+  }
+
+  const [settings, existingSeries, graph] = await Promise.all([
+    readSettingsValue(database),
+    readAll(database, SERIES_STORE),
+    readArchiveGraph(database)
+  ]);
+  const catalog = buildSeriesCatalog({ legacyComics: entries, settings, existingSeries });
+  const issuesById = new Map(graph.issues.map((issue) => [String(issue.id), issue]));
+  const issuesByIdentity = new Map(graph.issues.map((issue) => [String(issue.seriesVolumeKey || ""), issue]).filter(([key]) => key));
+  const copiesByIssue = new Map();
+  graph.copies.forEach((copy) => {
+    const issueId = String(copy.issueId || "");
+    if (!issueId) return;
+    if (!copiesByIssue.has(issueId)) copiesByIssue.set(issueId, []);
+    copiesByIssue.get(issueId).push(copy);
+  });
+  copiesByIssue.forEach((copies) => copies.sort((first, second) => Number(first.displayOrder || 0) - Number(second.displayOrder || 0)));
+
+  const seriesWrites = new Map();
+  const issueWrites = new Map();
+  const issueDeletes = new Set();
+  const copyWrites = new Map();
+  const copyDeletes = new Set();
+  const legacyWrites = new Map();
+  const legacyDeletes = new Set();
+  const coverWrites = new Map();
+  const coverDeletes = new Set();
+  const coverCache = new Map();
+  const projectedRecords = [];
+  const batchNonce = Date.now();
+
+  const readBatchCover = async (comicId) => {
+    const normalizedId = String(comicId || "");
+    if (!normalizedId || coverDeletes.has(normalizedId)) return null;
+    if (coverWrites.has(normalizedId)) return coverWrites.get(normalizedId);
+    if (coverCache.has(normalizedId)) return coverCache.get(normalizedId);
+    const record = await readRecord(database, COVER_STORE, normalizedId);
+    coverCache.set(normalizedId, record || null);
+    return record || null;
+  };
+
+  for (const [entryIndex, comic] of entries.entries()) {
+    const firstPass = legacyComicToArchiveRecords(comic, catalog.series, [], {
+      dataFormatVersion: APP_CONFIG.dataFormatVersion
+    });
+    const identityMatch = issuesByIdentity.get(firstPass.issue.seriesVolumeKey) || null;
+    const requestedIssueId = String(comic.issueId || comic.id || firstPass.issue.id);
+    const targetIssueId = identityMatch?.id || requestedIssueId;
+    const sourceIssueId = requestedIssueId;
+    const previousCopies = [...(copiesByIssue.get(String(targetIssueId)) || [])];
+    const sourceCopies = sourceIssueId !== targetIssueId
+      ? [...(copiesByIssue.get(String(sourceIssueId)) || [])]
+      : [];
+    const isAdditionalLegacyEntry = Boolean(identityMatch && sourceIssueId !== identityMatch.id);
+    const [sourceCover, targetCover] = sourceIssueId !== targetIssueId
+      ? await Promise.all([readBatchCover(sourceIssueId), readBatchCover(targetIssueId)])
+      : [null, null];
+
+    let records = legacyComicToArchiveRecords({
+      ...comic,
+      id: targetIssueId,
+      issueId: targetIssueId,
+      seriesId: firstPass.series.id,
+      createdAt: identityMatch?.createdAt || comic.createdAt
+    }, catalog.series, isAdditionalLegacyEntry ? [] : previousCopies, {
+      dataFormatVersion: APP_CONFIG.dataFormatVersion
+    });
+
+    if (identityMatch) {
+      records.issue = {
+        ...identityMatch,
+        ...records.issue,
+        id: identityMatch.id,
+        createdAt: identityMatch.createdAt || records.issue.createdAt,
+        title: records.issue.title || identityMatch.title || "",
+        publicationYear: records.issue.publicationYear ?? identityMatch.publicationYear ?? null,
+        duckipediaPageUrl: records.issue.duckipediaPageUrl || identityMatch.duckipediaPageUrl || "",
+        duckipediaCoverUrl: records.issue.duckipediaCoverUrl || identityMatch.duckipediaCoverUrl || "",
+        duckipediaCoverFileName: records.issue.duckipediaCoverFileName || identityMatch.duckipediaCoverFileName || "",
+        duckipediaCoverSource: records.issue.duckipediaCoverSource || identityMatch.duckipediaCoverSource || "",
+        duckipediaCoverLookupVersion: Math.max(
+          Number(records.issue.duckipediaCoverLookupVersion || 0),
+          Number(identityMatch.duckipediaCoverLookupVersion || 0)
+        ),
+        legacyComicIds: [...new Set([
+          ...(identityMatch.legacyComicIds || []),
+          ...(records.issue.legacyComicIds || []),
+          requestedIssueId
+        ].filter(Boolean))]
+      };
+      if (isAdditionalLegacyEntry) {
+        const incomingCopies = records.copies.map((copy, index) => ({
+          ...copy,
+          id: previousCopies.some((existing) => existing.id === copy.id) ? `${copy.id}-${batchNonce}-${entryIndex + 1}-${index + 1}` : copy.id,
+          issueId: identityMatch.id,
+          displayOrder: previousCopies.length + index + 1
+        }));
+        records.copies = [
+          ...previousCopies.map((copy, index) => ({ ...copy, issueId: identityMatch.id, displayOrder: index + 1 })),
+          ...incomingCopies
+        ];
+      } else {
+        records.copies = records.copies.map((copy, index) => ({
+          ...copy,
+          issueId: identityMatch.id,
+          displayOrder: index + 1
+        }));
+      }
+    }
+
+    const projected = materializeLegacyComics([records.issue], records.copies, [records.series])[0];
+    const oldCopyIds = [...new Set([
+      ...previousCopies.map((copy) => copy.id),
+      ...sourceCopies.map((copy) => copy.id)
+    ])];
+
+    const previousTargetIssue = issuesById.get(String(targetIssueId));
+    if (previousTargetIssue?.seriesVolumeKey && previousTargetIssue.seriesVolumeKey !== records.issue.seriesVolumeKey) {
+      if (issuesByIdentity.get(previousTargetIssue.seriesVolumeKey)?.id === previousTargetIssue.id) {
+        issuesByIdentity.delete(previousTargetIssue.seriesVolumeKey);
+      }
+    }
+    if (sourceIssueId !== targetIssueId) {
+      const sourceIssue = issuesById.get(String(sourceIssueId));
+      if (sourceIssue?.seriesVolumeKey && issuesByIdentity.get(sourceIssue.seriesVolumeKey)?.id === sourceIssue.id) {
+        issuesByIdentity.delete(sourceIssue.seriesVolumeKey);
+      }
+      issuesById.delete(String(sourceIssueId));
+      copiesByIssue.delete(String(sourceIssueId));
+      issueDeletes.add(String(sourceIssueId));
+    }
+
+    issuesById.set(String(records.issue.id), records.issue);
+    if (records.issue.seriesVolumeKey) issuesByIdentity.set(records.issue.seriesVolumeKey, records.issue);
+    copiesByIssue.set(String(records.issue.id), records.copies);
+    seriesWrites.set(String(records.series.id), records.series);
+    issueWrites.set(String(records.issue.id), records.issue);
+    oldCopyIds.forEach((copyId) => {
+      copyDeletes.add(String(copyId));
+      copyWrites.delete(String(copyId));
+    });
+    records.copies.forEach((copy) => copyWrites.set(String(copy.id), copy));
+    legacyWrites.set(String(projected.id), projected);
+    if (sourceIssueId !== projected.id) {
+      legacyDeletes.add(String(sourceIssueId));
+      legacyWrites.delete(String(sourceIssueId));
+    }
+
+    if (sourceIssueId !== targetIssueId) {
+      if (sourceCover) {
+        const sourceIsNewer = Date.parse(sourceCover.updatedAt || 0) > Date.parse(targetCover?.updatedAt || 0);
+        if (!targetCover || sourceIsNewer) {
+          const remappedCover = { ...sourceCover, comicId: targetIssueId };
+          coverWrites.set(String(targetIssueId), remappedCover);
+          coverDeletes.delete(String(targetIssueId));
+          coverCache.set(String(targetIssueId), remappedCover);
+        }
+      }
+      coverDeletes.add(String(sourceIssueId));
+      coverWrites.delete(String(sourceIssueId));
+      coverCache.set(String(sourceIssueId), null);
+    }
+
+    projectedRecords.push(projected);
+  }
+
+  const stores = [SERIES_STORE, ISSUES_STORE, COPIES_STORE, COMICS_STORE];
+  if (coverWrites.size || coverDeletes.size) stores.push(COVER_STORE);
+  const transaction = database.transaction(stores, "readwrite");
+  const seriesStore = transaction.objectStore(SERIES_STORE);
+  const issuesStore = transaction.objectStore(ISSUES_STORE);
+  const copiesStore = transaction.objectStore(COPIES_STORE);
+  const legacyStore = transaction.objectStore(COMICS_STORE);
+
+  seriesWrites.forEach((record) => seriesStore.put(record));
+  issueDeletes.forEach((issueId) => issuesStore.delete(issueId));
+  issueWrites.forEach((record) => issuesStore.put(record));
+  copyDeletes.forEach((copyId) => copiesStore.delete(copyId));
+  copyWrites.forEach((record) => copiesStore.put(record));
+  legacyDeletes.forEach((issueId) => legacyStore.delete(issueId));
+  legacyWrites.forEach((record) => legacyStore.put(record));
+
+  if (stores.includes(COVER_STORE)) {
+    const coverStore = transaction.objectStore(COVER_STORE);
+    coverDeletes.forEach((comicId) => coverStore.delete(comicId));
+    coverWrites.forEach((record) => coverStore.put(record));
+  }
+
+  await transactionDone(transaction);
+  return projectedRecords;
+}
+
 export async function upsertComics(comics) {
-  for (const comic of comics) await saveComic(comic);
+  return saveComicsBatch(comics);
 }
 
 async function readCopiesForIssue(database, issueId) {
@@ -871,6 +1077,41 @@ export async function clearMetadataCache() {
   const transaction = database.transaction(METADATA_STORE, "readwrite");
   transaction.objectStore(METADATA_STORE).clear();
   await transactionDone(transaction);
+}
+
+export async function pruneMetadataCache({ maximumAgeDays = APP_CONFIG.metadataCacheMaximumAgeDays, now = Date.now() } = {}) {
+  const ageDays = Number(maximumAgeDays);
+  const referenceTime = Number(now);
+  if (!Number.isFinite(ageDays) || ageDays <= 0 || !Number.isFinite(referenceTime)) {
+    return { removed: 0, kept: 0 };
+  }
+  const cutoff = referenceTime - ageDays * 24 * 60 * 60 * 1000;
+  const database = await getDatabase();
+  const transaction = database.transaction(METADATA_STORE, "readwrite");
+  const store = transaction.objectStore(METADATA_STORE);
+  const result = { removed: 0, kept: 0 };
+
+  await new Promise((resolve, reject) => {
+    const request = store.openCursor();
+    request.onerror = () => reject(request.error || new Error("Metadaten-Cache konnte nicht bereinigt werden."));
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve();
+        return;
+      }
+      const fetchedAt = Date.parse(cursor.value?.fetchedAt || "");
+      if (!Number.isFinite(fetchedAt) || fetchedAt < cutoff) {
+        cursor.delete();
+        result.removed += 1;
+      } else {
+        result.kept += 1;
+      }
+      cursor.continue();
+    };
+  });
+  await transactionDone(transaction);
+  return result;
 }
 
 function normalizeSettings(settings) {

@@ -9,6 +9,7 @@ const errors = [];
 const notes = [];
 
 const requiredFiles = [
+  ".gitignore",
   "index.html",
   "style.css",
   "app.js",
@@ -160,6 +161,10 @@ for (const asset of shellAssets) {
   const localPath = asset.slice(2).split(/[?#]/)[0];
   if (!existsSync(join(root, localPath))) errors.push(`Service Worker referenziert fehlende Datei: ${asset}`);
 }
+const coreShellAssets = extractArrayStrings(serviceWorkerSource, "CORE_SHELL");
+if (coreShellAssets.includes("./")) errors.push("Service Worker darf ./ und ./index.html nicht doppelt precachen.");
+if (coreShellAssets.includes("./icons/icon-1024.png")) errors.push("Das 1024er Icon darf nicht Teil des Core-Precaches sein.");
+if (!serviceWorkerSource.includes("async function cacheFirst(request)")) errors.push("Cache-first-Strategie für statische Assets fehlt im Service Worker.");
 
 for (const icon of manifest.icons || []) {
   const src = String(icon.src || "").replace(/^\.\//, "");
@@ -170,6 +175,20 @@ if (!String(manifest.name || "").startsWith("Entenarchiv") || manifest.short_nam
 }
 
 const sourceFiles = await walk(root);
+const privateExportPatterns = [
+  /^Entenarchiv-(?:Backup|Medien-Backup|Diagnose|TEST-Diagnose|Migrationsbericht)-.*\.json$/i,
+  /^Entenarchiv-(?:Sammlung|Fehlende-Baende)-.*\.csv$/i,
+  /^Entenarchiv-Flohmarkt-Suchliste-.*\.pdf$/i,
+  /^Entenarchiv-Share-.*\.png$/i,
+  /^Entenarchiv-Erscheinungsradar-.*\.ics$/i
+];
+const privateExports = sourceFiles.filter((file) => {
+  const name = relative(root, file).split(/[\\/]/).pop() || "";
+  return privateExportPatterns.some((pattern) => pattern.test(name));
+});
+if (privateExports.length) {
+  errors.push(`Private Entenarchiv-Exporte im Repository gefunden: ${privateExports.map((file) => relative(root, file)).join(", ")}`);
+}
 const syntaxFiles = sourceFiles.filter((file) => [".js", ".mjs"].includes(extname(file)) && !file.includes(`${join(root, "vendor")}`));
 for (const file of syntaxFiles) {
   try {

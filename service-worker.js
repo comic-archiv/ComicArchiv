@@ -1,9 +1,8 @@
-const APP_VERSION = "4.5.2";
+const APP_VERSION = "4.5.3";
 const CACHE_PREFIX = "entenarchiv-shell-";
-const CACHE_NAME = `${CACHE_PREFIX}v4-5-2`;
+const CACHE_NAME = `${CACHE_PREFIX}v4-5-3`;
 
 const CORE_SHELL = Object.freeze([
-  "./",
   "./index.html",
   "./style.css",
   "./recovery.js",
@@ -31,7 +30,6 @@ const CORE_SHELL = Object.freeze([
   "./version.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
-  "./icons/icon-1024.png",
   "./icons/apple-touch-icon.png"
 ]);
 
@@ -39,6 +37,11 @@ const OPTIONAL_SHELL = Object.freeze([
   "./data/kalender-index.json",
   "./data/ltb-2026.ics"
 ]);
+const NETWORK_FIRST_PATHS = Object.freeze(new Set([
+  "index.html",
+  "version.json",
+  "data/kalender-index.json"
+]));
 
 // Diese großen Module werden erst angefordert, wenn Scanner oder PDF-Export
 // tatsächlich geöffnet werden. Vorhandene Cache-Kopien aus einer älteren
@@ -118,7 +121,7 @@ self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(request.url);
   if (requestUrl.origin !== self.location.origin) return;
 
-  event.respondWith(networkFirst(request));
+  event.respondWith(shouldUseNetworkFirst(request, requestUrl) ? networkFirst(request) : cacheFirst(request));
 });
 
 async function reusePreviouslyCachedAssets(targetCache, urls) {
@@ -133,6 +136,29 @@ async function fetchAndCache(cache, url) {
   const response = await fetch(request);
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
   await cache.put(request, response);
+}
+
+function shouldUseNetworkFirst(request, requestUrl) {
+  if (request.mode === "navigate") return true;
+  const scopeUrl = new URL(self.registration.scope);
+  const relativePath = requestUrl.pathname.startsWith(scopeUrl.pathname)
+    ? requestUrl.pathname.slice(scopeUrl.pathname.length)
+    : requestUrl.pathname.replace(/^\/+/, "");
+  return NETWORK_FIRST_PATHS.has(relativePath) || relativePath.endsWith(".ics");
+}
+
+async function cacheFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cachedResponse = await cache.match(request, { ignoreSearch: true });
+  if (cachedResponse) return cachedResponse;
+
+  const networkResponse = await fetch(request);
+  if (networkResponse.ok) {
+    cache.put(request, networkResponse.clone()).catch((error) => {
+      console.warn("Datei konnte nicht im Offline-Cache gespeichert werden:", error);
+    });
+  }
+  return networkResponse;
 }
 
 async function networkFirst(request) {

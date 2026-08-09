@@ -1,5 +1,27 @@
 # Änderungen
 
+## 4.5.3 – Core Cleanup
+### Performance
+- statische App-Assets laufen nach Installation cache-first; Navigation, Versionsdatei und Kalenderdaten bleiben network-first
+- 1024er Icon und doppelter Root-Einstieg aus dem Core-Precache entfernt
+- schwere Collection-Unterseiten und die Statistik rendern nur noch, wenn sie sichtbar sind
+- Scanner und Share Cards bleiben unverändert als App- und Offline-Bestandteile erhalten
+- Bulk-Speicherpfad bündelt Änderungen in einer IndexedDB-Transaktion
+
+### Datenhygiene
+- Duckipedia-Metadaten-Cache wird anhand der bestehenden 90-Tage-TTL automatisch bereinigt
+- feste 2026er Kalender-URL aus den Defaults entfernt; der Kalenderindex ist die Quelle für Jahrespläne
+- private Backups/Exporte und generiertes dist werden über .gitignore geschützt
+- Duckipedia-Nutzung in den Drittanbieterhinweisen dokumentiert
+
+### Technik
+- App-Version und Service-Worker-Cache auf 4.5.3 angehoben
+- Datenformat bleibt Version 9
+- Archivmodell bleibt Version 1
+- IndexedDB-Schema bleibt Version 5
+- keine Datenmigration erforderlich
+- zusätzliche Regressionstests für Cache-, Render-, Batch- und Repo-Hygiene
+
 ## 4.5.2 – Dashboard-, Share-Card- und Kalender-Polish
 
 ### Design

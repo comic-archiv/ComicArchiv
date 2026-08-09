@@ -1,7 +1,18 @@
-# Entenarchiv 4.5.2
+# Entenarchiv 4.5.3
 
-Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.5.2 ist ein gezielter **UI-Polish für Dashboard, Share Cards und Kalender** auf Basis des Design-Systems von 4.5.1.
+Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.5.3 ist ein technischer **Core-Cleanup ohne Datenmigration**. Datenformat und IndexedDB-Schema bleiben unverändert.
 
+
+## Neu in 4.5.3
+
+- statische App-Dateien werden nach der Installation cache-first geladen; Navigation, Versions- und Kalenderdaten bleiben frisch
+- das 1024er App-Icon und der doppelte Root-Einstieg wurden aus dem Core-Precache entfernt
+- Collection-Refreshes rendern schwere Unterseiten und die Statistik nur noch, wenn sie tatsächlich sichtbar sind
+- Bulk-Änderungen laufen über einen gemeinsamen Storage-Batch statt über viele einzelne Save-Zyklen
+- veraltete Duckipedia-Cache-Einträge werden beim Start automatisch nach der konfigurierten TTL entfernt
+- private Backups/Exporte und generiertes dist sind vor versehentlichen Commits geschützt
+- fest verdrahtete 2026er Kalender-URL als Default entfernt; Jahrespläne kommen über den Kalenderindex
+- keine Datenmigration; Datenformat 9, Archivmodell 1 und IndexedDB-Schema 5 bleiben unverändert
 
 ## Neu in 4.5.2
 
@@ -69,17 +80,21 @@ Die Gestaltung verwendet den Entenarchiv-Farbraum, klare Typografie, Druckraster
 - Prioritäten und Meilensteinstatus sind Bestandteil der App-Einstellungen und damit des JSON-Backups.
 - Share Cards werden vollständig lokal auf dem Gerät gerendert.
 - Für Share Cards werden weder Sammlungsdaten noch Bilder an einen externen Dienst übertragen.
+- Eigene Coverfotos werden lokal komprimiert in IndexedDB gespeichert und nicht in das GitHub-Repository hochgeladen.
+- Cover-Priorität: eigenes Foto → optionale Duckipedia-Remotevorschau → Platzhalter.
+- Duckipedia-Vorschaubilder werden nur bei Bedarf extern geladen und nicht in den Entenarchiv-Service-Worker-Cache übernommen.
+- Medien-Backups enthalten eigene Coverfotos und gehören deshalb nicht in das öffentliche Repository.
 - Regelmäßige JSON- und Medien-Backups bleiben notwendig.
 
 ## Technische Eckdaten
 
-- App-Version: `4.5.2`
+- App-Version: `4.5.3`
 - Datenformat: `9`
 - Archivmodell: `1`
 - IndexedDB-Schema: `5`
-- keine Datenmigration von 4.4.0 erforderlich
+- keine Datenmigration für 4.5.3 erforderlich
 - neue Module `collector-goals.js` und `share-cards.js`
-- Service-Worker-Cache: `v4-5-2`
+- Service-Worker-Cache: `v4-5-3`
 - Scanner- und PDF-Bibliothek weiterhin nur bei Bedarf geladen
 - GitHub Pages mit vorgeschalteter GitHub-Actions-Prüfung
 

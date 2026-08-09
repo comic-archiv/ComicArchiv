@@ -30,6 +30,7 @@ import {
   getCoverMedia,
   getCoverMediaStats,
   getMetadataCache,
+  pruneMetadataCache,
   replaceAllComics,
   replaceAllCoverMedia,
   replaceMetadataCache,
@@ -706,6 +707,10 @@ async function initializeApp() {
   renderBackupStatus();
   await Promise.allSettled([
     runOptionalStartupTask("Speicherstatus", refreshStorageStatus),
+    runOptionalStartupTask("Duckipedia-Cache", async () => {
+      const result = await pruneMetadataCache();
+      if (result.removed > 0) console.info(`${result.removed} veraltete Duckipedia-Cache-Einträge entfernt.`);
+    }),
     runOptionalStartupTask("Medienstatus", refreshMediaStatus)
   ]);
   renderCalendarOverview();
@@ -1680,8 +1685,8 @@ function closeAddPage({ returnFocus = true } = {}) {
 }
 
 function openStatisticsPage() {
-  renderStatistics();
   elements.statisticsPage.classList.remove("hidden");
+  renderStats();
   elements.statisticsPage.setAttribute("aria-hidden", "false");
   document.body.classList.add("app-page-open");
   elements.statisticsPage.scrollTop = 0;
@@ -2300,12 +2305,12 @@ async function refreshCollection() {
     renderCollectionHub();
     renderMissingHub();
     shelfUI?.refresh({ comics: state.comics, missingGroups: state.missingGroups, settings: state.settings, localCoverIds: state.localCoverIds });
-    renderCollection();
+    if (!elements.collectionPage.classList.contains("hidden")) renderCollection();
     renderStats();
-    renderMissingBands();
+    if (!elements.missingPage.classList.contains("hidden")) renderMissingBands();
     renderFleaMarketHubStatus();
     if (!elements.fleaMarketPage.classList.contains("hidden")) renderFleaMarket();
-    renderSeriesProgress();
+    if (!elements.progressPage.classList.contains("hidden")) renderSeriesProgress();
     renderBackupStatus();
     renderCalendarOverview();
     if (!elements.calendarPage.classList.contains("hidden")) renderCalendarPage();
@@ -2344,9 +2349,7 @@ async function recordDataChange(changeAmount = 1) {
 async function saveShelfBulkComics(updatedComics, { action = "bulk" } = {}) {
   const entries = Array.isArray(updatedComics) ? updatedComics : [];
   if (!entries.length) return;
-  for (const comic of entries) {
-    await saveComic(comic);
-  }
+  await upsertComics(entries);
   await recordDataChange(entries.length);
   await refreshCollection();
   await refreshArchiveCoreStatus({ showReport: false });
@@ -3768,6 +3771,8 @@ function renderStats() {
   });
 
   renderCollectorMission();
+
+  if (elements.statisticsPage.classList.contains("hidden")) return;
 
   elements.conditionStatsTotal.textContent = physicalCopies === 1 ? "1 Exemplar" : `${physicalCopies} Exemplare`;
 

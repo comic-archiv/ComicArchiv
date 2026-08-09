@@ -46,7 +46,7 @@ export const LEGACY_CONDITION_MAP = Object.freeze({
 });
 
 export const APP_CONFIG = Object.freeze({
-  appVersion: "4.5.2",
+  appVersion: "4.5.3",
   dataFormatVersion: 9,
   archiveModelVersion: ARCHIVE_MODEL_VERSION,
   minimumSupportedBackupVersion: 1,
@@ -144,7 +144,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   showCovers: true,
   duckipediaAutoEnrich: true,
   calendarEvents: Object.freeze([]),
-  calendarSourceUrl: "https://www.lustiges-taschenbuch.de/sites/default/files/2025-11/ltb_evt_2026v2.ics",
+  calendarSourceUrl: "",
   calendarSourceName: "LTB Jahresplan",
   calendarLastImportAt: null,
   calendarImportedSources: Object.freeze({}),

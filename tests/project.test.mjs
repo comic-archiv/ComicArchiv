@@ -53,7 +53,7 @@ test("Archivkern, Migrationsbericht und getrennte physische Exemplare sind einge
 });
 
 
-test("Version 4.5.2, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet", async () => {
+test("Version 4.5.3, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet", async () => {
   const [config, storage, recovery, version, serviceWorker] = await Promise.all([
     read("config.js"),
     read("storage.js"),
@@ -62,15 +62,15 @@ test("Version 4.5.2, Datenformat 9 und Datenbank 5 sind durchgängig verdrahtet"
     read("service-worker.js")
   ]);
   const versionData = JSON.parse(version);
-  assert.equal(versionData.appVersion, "4.5.2");
+  assert.equal(versionData.appVersion, "4.5.3");
   assert.equal(versionData.dataFormatVersion, 9);
   assert.equal(versionData.archiveModelVersion, 1);
-  assert.match(config, /appVersion:\s*"4\.5\.2"/);
+  assert.match(config, /appVersion:\s*"4\.5\.3"/);
   assert.match(config, /dataFormatVersion:\s*9/);
   assert.match(storage, /const DATABASE_VERSION = 5/);
-  assert.match(recovery, /const APP_VERSION = "4\.5\.2"/);
+  assert.match(recovery, /const APP_VERSION = "4\.5\.3"/);
   assert.match(recovery, /const DATA_FORMAT_VERSION = 9/);
-  assert.match(serviceWorker, /const APP_VERSION = "4\.5\.2"/);
+  assert.match(serviceWorker, /const APP_VERSION = "4\.5\.3"/);
 });
 
 test("Service Worker hält den Archivkern im kritischen Offline-Paket", async () => {
