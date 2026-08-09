@@ -60,6 +60,74 @@ async function appendSection(file, marker, section) {
   return true;
 }
 
+async function updateServiceWorker() {
+  const file = "service-worker.js";
+  const original = await readText(file);
+  let source = original.replace(/\r\n/g, "\n");
+
+  source = source
+    .replace(/const APP_VERSION = "4\.5\.[23]";/, 'const APP_VERSION = "4.5.3";')
+    .replace(/const CACHE_NAME = `\$\{CACHE_PREFIX\}v4-5-[23]`;/, 'const CACHE_NAME = `${CACHE_PREFIX}v4-5-3`;');
+
+  // CORE_SHELL schlank halten. Die Ersetzungen sind absichtlich zeilenbasiert,
+  // damit kleine Formatunterschiede im bestehenden 4.5.2-Worker nicht zum Abbruch führen.
+  source = source
+    .replace(/^\s*"\.\/",\s*\n/m, "")
+    .replace(/^\s*"\.\/scanner\.js",\s*\n/m, "")
+    .replace(/^\s*"\.\/share-cards\.js",\s*\n/m, "")
+    .replace(/^\s*"\.\/icons\/icon-1024\.png",\s*\n/m, "");
+
+  const optionalBlock = `const OPTIONAL_SHELL = Object.freeze([\n  "./data/kalender-index.json",\n  "./data/ltb-2026.ics",\n  "./scanner.js",\n  "./share-cards.js"\n]);`;
+  source = source.replace(
+    /const OPTIONAL_SHELL = Object\.freeze\(\[\s*"\.\/data\/kalender-index\.json",\s*"\.\/data\/ltb-2026\.ics"(?:,\s*"\.\/scanner\.js",\s*"\.\/share-cards\.js")?\s*\]\);/m,
+    optionalBlock
+  );
+
+  if (!source.includes("const NETWORK_FIRST_PATHS")) {
+    source = source.replace(
+      optionalBlock,
+      `${optionalBlock}\nconst NETWORK_FIRST_PATHS = Object.freeze(new Set([\n  "index.html",\n  "version.json",\n  "data/kalender-index.json"\n]));`
+    );
+  }
+
+  if (!source.includes("shouldUseNetworkFirst(request, requestUrl) ?")) {
+    source = source.replace(
+      /event\.respondWith\(networkFirst\(request\)\);/,
+      'event.respondWith(shouldUseNetworkFirst(request, requestUrl) ? networkFirst(request) : cacheFirst(request));'
+    );
+  }
+
+  if (!source.includes("async function cacheFirst(request)")) {
+    source = source.replace(
+      /async function networkFirst\(request\) \{/,
+      `function shouldUseNetworkFirst(request, requestUrl) {\n  if (request.mode === "navigate") return true;\n  const scopeUrl = new URL(self.registration.scope);\n  const relativePath = requestUrl.pathname.startsWith(scopeUrl.pathname)\n    ? requestUrl.pathname.slice(scopeUrl.pathname.length)\n    : requestUrl.pathname.replace(/^\\/+/, "");\n  return NETWORK_FIRST_PATHS.has(relativePath) || relativePath.endsWith(".ics");\n}\n\nasync function cacheFirst(request) {\n  const cache = await caches.open(CACHE_NAME);\n  const cachedResponse = await cache.match(request, { ignoreSearch: true });\n  if (cachedResponse) return cachedResponse;\n\n  const networkResponse = await fetch(request);\n  if (networkResponse.ok) {\n    cache.put(request, networkResponse.clone()).catch((error) => {\n      console.warn("Datei konnte nicht im Offline-Cache gespeichert werden:", error);\n    });\n  }\n  return networkResponse;\n}\n\nasync function networkFirst(request) {`
+    );
+  }
+
+  const requiredChecks = [
+    ['const APP_VERSION = "4.5.3";', "App-Version 4.5.3"],
+    ['const CACHE_NAME = `${CACHE_PREFIX}v4-5-3`;', "Cache-Version v4-5-3"],
+    [optionalBlock, "On-Demand-Assets"],
+    ["const NETWORK_FIRST_PATHS", "Network-first-Pfade"],
+    ["async function cacheFirst(request)", "Cache-first-Strategie"],
+    ["shouldUseNetworkFirst(request, requestUrl) ?", "Strategieauswahl"]
+  ];
+  for (const [needle, label] of requiredChecks) {
+    if (!source.includes(needle)) {
+      throw new Error(`${file}: ${label} konnte nicht sicher hergestellt werden.`);
+    }
+  }
+
+  const coreMatch = source.match(/const CORE_SHELL = Object\.freeze\(\[([\s\S]*?)\]\);/);
+  if (!coreMatch) throw new Error(`${file}: CORE_SHELL konnte nicht gelesen werden.`);
+  const core = coreMatch[1];
+  if (/"\.\/",/.test(core) || /icon-1024\.png/.test(core) || /scanner\.js/.test(core) || /share-cards\.js/.test(core)) {
+    throw new Error(`${file}: Core-Precache enthält nach dem Cleanup noch Altlasten.`);
+  }
+
+  if (source !== original) await writeText(file, source);
+}
+
 async function ensureGitignore() {
   const file = ".gitignore";
   const required = [
@@ -136,46 +204,7 @@ async function main() {
     '<span id="app-version">v4.5.3</span>'
   );
 
-  await replaceOnce(
-    "service-worker.js",
-    `const APP_VERSION = "4.5.2";\nconst CACHE_PREFIX = "entenarchiv-shell-";\nconst CACHE_NAME = \`${'${CACHE_PREFIX}'}v4-5-2\`;\nconst CORE_SHELL = Object.freeze([\n  "./",\n  "./index.html",`,
-    `const APP_VERSION = "4.5.3";\nconst CACHE_PREFIX = "entenarchiv-shell-";\nconst CACHE_NAME = \`${'${CACHE_PREFIX}'}v4-5-3\`;\nconst CORE_SHELL = Object.freeze([\n  "./index.html",`
-  );
-  await replaceOnce(
-    "service-worker.js",
-    `  "./icons/icon-192.png",\n  "./icons/icon-512.png",\n  "./icons/icon-1024.png",\n  "./icons/apple-touch-icon.png"`,
-    `  "./icons/icon-192.png",\n  "./icons/icon-512.png",\n  "./icons/apple-touch-icon.png"`
-  );
-  await replaceOnce(
-    "service-worker.js",
-    `  "./export.js",\n  "./scanner.js",\n  "./shelf.js",`,
-    `  "./export.js",\n  "./shelf.js",`
-  );
-  await replaceOnce(
-    "service-worker.js",
-    `  "./collector-goals.js",\n  "./share-cards.js",\n  "./scanner-pro.js",`,
-    `  "./collector-goals.js",\n  "./scanner-pro.js",`
-  );
-  await replaceOnce(
-    "service-worker.js",
-    `const OPTIONAL_SHELL = Object.freeze([\n  "./data/kalender-index.json",\n  "./data/ltb-2026.ics"\n]);`,
-    `const OPTIONAL_SHELL = Object.freeze([\n  "./data/kalender-index.json",\n  "./data/ltb-2026.ics",\n  "./scanner.js",\n  "./share-cards.js"\n]);`
-  );
-  await replaceOnce(
-    "service-worker.js",
-    `const OPTIONAL_SHELL = Object.freeze([\n  "./data/kalender-index.json",\n  "./data/ltb-2026.ics",\n  "./scanner.js",\n  "./share-cards.js"\n]);`,
-    `const OPTIONAL_SHELL = Object.freeze([\n  "./data/kalender-index.json",\n  "./data/ltb-2026.ics",\n  "./scanner.js",\n  "./share-cards.js"\n]);\nconst NETWORK_FIRST_PATHS = Object.freeze(new Set([\n  "index.html",\n  "version.json",\n  "data/kalender-index.json"\n]));`
-  );
-  await replaceOnce(
-    "service-worker.js",
-    `  event.respondWith(networkFirst(request));\n});`,
-    `  event.respondWith(shouldUseNetworkFirst(request, requestUrl) ? networkFirst(request) : cacheFirst(request));\n});`
-  );
-  await replaceOnce(
-    "service-worker.js",
-    `async function networkFirst(request) {`,
-    `function shouldUseNetworkFirst(request, requestUrl) {\n  if (request.mode === "navigate") return true;\n  const scopeUrl = new URL(self.registration.scope);\n  const relativePath = requestUrl.pathname.startsWith(scopeUrl.pathname)\n    ? requestUrl.pathname.slice(scopeUrl.pathname.length)\n    : requestUrl.pathname.replace(/^\\/+/, "");\n  return NETWORK_FIRST_PATHS.has(relativePath) || relativePath.endsWith(".ics");\n}\n\nasync function cacheFirst(request) {\n  const cache = await caches.open(CACHE_NAME);\n  const cachedResponse = await cache.match(request, { ignoreSearch: true });\n  if (cachedResponse) return cachedResponse;\n\n  const networkResponse = await fetch(request);\n  if (networkResponse.ok) {\n    cache.put(request, networkResponse.clone()).catch((error) => {\n      console.warn("Datei konnte nicht im Offline-Cache gespeichert werden:", error);\n    });\n  }\n  return networkResponse;\n}\n\nasync function networkFirst(request) {`
-  );
+  await updateServiceWorker();
 
   const batchImplementation = `export async function saveComicsBatch(comics) {\n  const entries = Array.isArray(comics) ? comics.filter(Boolean) : [];\n  if (!entries.length) return [];\n  if (entries.length === 1) return [await saveComic(entries[0])];\n\n  const database = await getDatabase();\n  const core = await ensureArchiveCoreReady();\n  if (!core.ready) {\n    const transaction = database.transaction(COMICS_STORE, "readwrite");\n    const store = transaction.objectStore(COMICS_STORE);\n    entries.forEach((comic) => store.put(comic));\n    await transactionDone(transaction);\n    return entries;\n  }\n\n  const [settings, existingSeries, graph] = await Promise.all([\n    readSettingsValue(database),\n    readAll(database, SERIES_STORE),\n    readArchiveGraph(database)\n  ]);\n  const catalog = buildSeriesCatalog({ legacyComics: entries, settings, existingSeries });\n  const issuesById = new Map(graph.issues.map((issue) => [String(issue.id), issue]));\n  const issuesByIdentity = new Map(graph.issues.map((issue) => [String(issue.seriesVolumeKey || ""), issue]).filter(([key]) => key));\n  const copiesByIssue = new Map();\n  graph.copies.forEach((copy) => {\n    const issueId = String(copy.issueId || "");\n    if (!issueId) return;\n    if (!copiesByIssue.has(issueId)) copiesByIssue.set(issueId, []);\n    copiesByIssue.get(issueId).push(copy);\n  });\n  copiesByIssue.forEach((copies) => copies.sort((first, second) => Number(first.displayOrder || 0) - Number(second.displayOrder || 0)));\n\n  const seriesWrites = new Map();\n  const issueWrites = new Map();\n  const issueDeletes = new Set();\n  const copyWrites = new Map();\n  const copyDeletes = new Set();\n  const legacyWrites = new Map();\n  const legacyDeletes = new Set();\n  const coverWrites = new Map();\n  const coverDeletes = new Set();\n  const coverCache = new Map();\n  const projectedRecords = [];\n  const batchNonce = Date.now();\n\n  const readBatchCover = async (comicId) => {\n    const normalizedId = String(comicId || "");\n    if (!normalizedId || coverDeletes.has(normalizedId)) return null;\n    if (coverWrites.has(normalizedId)) return coverWrites.get(normalizedId);\n    if (coverCache.has(normalizedId)) return coverCache.get(normalizedId);\n    const record = await readRecord(database, COVER_STORE, normalizedId);\n    coverCache.set(normalizedId, record || null);\n    return record || null;\n  };\n\n  for (const [entryIndex, comic] of entries.entries()) {\n    const firstPass = legacyComicToArchiveRecords(comic, catalog.series, [], {\n      dataFormatVersion: APP_CONFIG.dataFormatVersion\n    });\n    const identityMatch = issuesByIdentity.get(firstPass.issue.seriesVolumeKey) || null;\n    const requestedIssueId = String(comic.issueId || comic.id || firstPass.issue.id);\n    const targetIssueId = identityMatch?.id || requestedIssueId;\n    const sourceIssueId = requestedIssueId;\n    const previousCopies = [...(copiesByIssue.get(String(targetIssueId)) || [])];\n    const sourceCopies = sourceIssueId !== targetIssueId\n      ? [...(copiesByIssue.get(String(sourceIssueId)) || [])]\n      : [];\n    const isAdditionalLegacyEntry = Boolean(identityMatch && sourceIssueId !== identityMatch.id);\n    const [sourceCover, targetCover] = sourceIssueId !== targetIssueId\n      ? await Promise.all([readBatchCover(sourceIssueId), readBatchCover(targetIssueId)])\n      : [null, null];\n\n    let records = legacyComicToArchiveRecords({\n      ...comic,\n      id: targetIssueId,\n      issueId: targetIssueId,\n      seriesId: firstPass.series.id,\n      createdAt: identityMatch?.createdAt || comic.createdAt\n    }, catalog.series, isAdditionalLegacyEntry ? [] : previousCopies, {\n      dataFormatVersion: APP_CONFIG.dataFormatVersion\n    });\n\n    if (identityMatch) {\n      records.issue = {\n        ...identityMatch,\n        ...records.issue,\n        id: identityMatch.id,\n        createdAt: identityMatch.createdAt || records.issue.createdAt,\n        title: records.issue.title || identityMatch.title || "",\n        publicationYear: records.issue.publicationYear ?? identityMatch.publicationYear ?? null,\n        duckipediaPageUrl: records.issue.duckipediaPageUrl || identityMatch.duckipediaPageUrl || "",\n        duckipediaCoverUrl: records.issue.duckipediaCoverUrl || identityMatch.duckipediaCoverUrl || "",\n        duckipediaCoverFileName: records.issue.duckipediaCoverFileName || identityMatch.duckipediaCoverFileName || "",\n        duckipediaCoverSource: records.issue.duckipediaCoverSource || identityMatch.duckipediaCoverSource || "",\n        duckipediaCoverLookupVersion: Math.max(\n          Number(records.issue.duckipediaCoverLookupVersion || 0),\n          Number(identityMatch.duckipediaCoverLookupVersion || 0)\n        ),\n        legacyComicIds: [...new Set([\n          ...(identityMatch.legacyComicIds || []),\n          ...(records.issue.legacyComicIds || []),\n          requestedIssueId\n        ].filter(Boolean))]\n      };\n      if (isAdditionalLegacyEntry) {\n        const incomingCopies = records.copies.map((copy, index) => ({\n          ...copy,\n          id: previousCopies.some((existing) => existing.id === copy.id) ? \`${'${copy.id}'}-${'${batchNonce}'}-${'${entryIndex + 1}'}-${'${index + 1}'}\` : copy.id,\n          issueId: identityMatch.id,\n          displayOrder: previousCopies.length + index + 1\n        }));\n        records.copies = [\n          ...previousCopies.map((copy, index) => ({ ...copy, issueId: identityMatch.id, displayOrder: index + 1 })),\n          ...incomingCopies\n        ];\n      } else {\n        records.copies = records.copies.map((copy, index) => ({\n          ...copy,\n          issueId: identityMatch.id,\n          displayOrder: index + 1\n        }));\n      }\n    }\n\n    const projected = materializeLegacyComics([records.issue], records.copies, [records.series])[0];\n    const oldCopyIds = [...new Set([\n      ...previousCopies.map((copy) => copy.id),\n      ...sourceCopies.map((copy) => copy.id)\n    ])];\n\n    const previousTargetIssue = issuesById.get(String(targetIssueId));\n    if (previousTargetIssue?.seriesVolumeKey && previousTargetIssue.seriesVolumeKey !== records.issue.seriesVolumeKey) {\n      if (issuesByIdentity.get(previousTargetIssue.seriesVolumeKey)?.id === previousTargetIssue.id) {\n        issuesByIdentity.delete(previousTargetIssue.seriesVolumeKey);\n      }\n    }\n    if (sourceIssueId !== targetIssueId) {\n      const sourceIssue = issuesById.get(String(sourceIssueId));\n      if (sourceIssue?.seriesVolumeKey && issuesByIdentity.get(sourceIssue.seriesVolumeKey)?.id === sourceIssue.id) {\n        issuesByIdentity.delete(sourceIssue.seriesVolumeKey);\n      }\n      issuesById.delete(String(sourceIssueId));\n      copiesByIssue.delete(String(sourceIssueId));\n      issueDeletes.add(String(sourceIssueId));\n    }\n\n    issuesById.set(String(records.issue.id), records.issue);\n    if (records.issue.seriesVolumeKey) issuesByIdentity.set(records.issue.seriesVolumeKey, records.issue);\n    copiesByIssue.set(String(records.issue.id), records.copies);\n    seriesWrites.set(String(records.series.id), records.series);\n    issueWrites.set(String(records.issue.id), records.issue);\n    oldCopyIds.forEach((copyId) => {\n      copyDeletes.add(String(copyId));\n      copyWrites.delete(String(copyId));\n    });\n    records.copies.forEach((copy) => copyWrites.set(String(copy.id), copy));\n    legacyWrites.set(String(projected.id), projected);\n    if (sourceIssueId !== projected.id) {\n      legacyDeletes.add(String(sourceIssueId));\n      legacyWrites.delete(String(sourceIssueId));\n    }\n\n    if (sourceIssueId !== targetIssueId) {\n      if (sourceCover) {\n        const sourceIsNewer = Date.parse(sourceCover.updatedAt || 0) > Date.parse(targetCover?.updatedAt || 0);\n        if (!targetCover || sourceIsNewer) {\n          const remappedCover = { ...sourceCover, comicId: targetIssueId };\n          coverWrites.set(String(targetIssueId), remappedCover);\n          coverDeletes.delete(String(targetIssueId));\n          coverCache.set(String(targetIssueId), remappedCover);\n        }\n      }\n      coverDeletes.add(String(sourceIssueId));\n      coverWrites.delete(String(sourceIssueId));\n      coverCache.set(String(sourceIssueId), null);\n    }\n\n    projectedRecords.push(projected);\n  }\n\n  const stores = [SERIES_STORE, ISSUES_STORE, COPIES_STORE, COMICS_STORE];\n  if (coverWrites.size || coverDeletes.size) stores.push(COVER_STORE);\n  const transaction = database.transaction(stores, "readwrite");\n  const seriesStore = transaction.objectStore(SERIES_STORE);\n  const issuesStore = transaction.objectStore(ISSUES_STORE);\n  const copiesStore = transaction.objectStore(COPIES_STORE);\n  const legacyStore = transaction.objectStore(COMICS_STORE);\n\n  seriesWrites.forEach((record) => seriesStore.put(record));\n  issueDeletes.forEach((issueId) => issuesStore.delete(issueId));\n  issueWrites.forEach((record) => issuesStore.put(record));\n  copyDeletes.forEach((copyId) => copiesStore.delete(copyId));\n  copyWrites.forEach((record) => copiesStore.put(record));\n  legacyDeletes.forEach((issueId) => legacyStore.delete(issueId));\n  legacyWrites.forEach((record) => legacyStore.put(record));\n\n  if (stores.includes(COVER_STORE)) {\n    const coverStore = transaction.objectStore(COVER_STORE);\n    coverDeletes.forEach((comicId) => coverStore.delete(comicId));\n    coverWrites.forEach((record) => coverStore.put(record));\n  }\n\n  await transactionDone(transaction);\n  return projectedRecords;\n}\n\nexport async function upsertComics(comics) {\n  return saveComicsBatch(comics);\n}`;
 
