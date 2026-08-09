@@ -19,17 +19,47 @@ async function writeText(file, content) {
   if (!changed.includes(file)) changed.push(file);
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function flexibleWhitespacePattern(value) {
+  return value
+    .split(/(\s+)/)
+    .filter(Boolean)
+    .map((part) => /\s/.test(part) ? "\\s+" : escapeRegExp(part))
+    .join("");
+}
+
 async function replaceOnce(file, before, after) {
   const source = await readText(file);
   if (source.includes(after)) return false;
-  const index = source.indexOf(before);
-  if (index < 0) {
-    throw new Error(`${file}: erwarteter 4.5.2-Kontext wurde nicht gefunden. Abbruch ohne unsichere Ersetzung.`);
+
+  const exactIndex = source.indexOf(before);
+  if (exactIndex >= 0) {
+    if (source.indexOf(before, exactIndex + before.length) >= 0) {
+      throw new Error(`${file}: erwarteter Kontext ist nicht eindeutig: ${before.split(/\r?\n/)[0].slice(0, 100)}`);
+    }
+    await writeText(file, `${source.slice(0, exactIndex)}${after}${source.slice(exactIndex + before.length)}`);
+    console.log(`  ✓ ${file}: ${before.split(/\r?\n/).find((line) => line.trim())?.trim().slice(0, 90) || "Kontext"}`);
+    return true;
   }
-  if (source.indexOf(before, index + before.length) >= 0) {
-    throw new Error(`${file}: erwarteter Kontext ist nicht eindeutig.`);
+
+  const pattern = new RegExp(flexibleWhitespacePattern(before), "g");
+  const matches = [...source.matchAll(pattern)];
+  if (matches.length === 0) {
+    const label = before.split(/\r?\n/).find((line) => line.trim())?.trim().slice(0, 120) || "unbekannter Kontext";
+    throw new Error(`${file}: erwarteter Kontext wurde nicht gefunden (${label}). Abbruch ohne unsichere Ersetzung.`);
   }
-  await writeText(file, `${source.slice(0, index)}${after}${source.slice(index + before.length)}`);
+  if (matches.length > 1) {
+    const label = before.split(/\r?\n/).find((line) => line.trim())?.trim().slice(0, 120) || "unbekannter Kontext";
+    throw new Error(`${file}: erwarteter Kontext ist nicht eindeutig (${label}).`);
+  }
+
+  const match = matches[0];
+  const index = match.index;
+  await writeText(file, `${source.slice(0, index)}${after}${source.slice(index + match[0].length)}`);
+  console.log(`  ✓ ${file}: ${before.split(/\r?\n/).find((line) => line.trim())?.trim().slice(0, 90) || "Kontext"} (flexibel)`);
   return true;
 }
 
