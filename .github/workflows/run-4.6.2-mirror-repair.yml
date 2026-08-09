@@ -1,0 +1,74 @@
+name: Entenarchiv 4.6.2 Mirror Repair
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: entenarchiv-data-stack-write
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    name: Legacy Mirror sicher reparieren
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Projekt laden
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Geprueften 4.6.2-Stand anwenden
+        run: node ComicArchiv-4.6.2-mirror-repair.mjs
+
+      - name: Vollstaendige Projekt-CI
+        run: npm run ci
+
+      - name: Einmaligen Installer und Workflow entfernen
+        run: |
+          rm -f ComicArchiv-4.6.2-mirror-repair.mjs
+          rm -f .github/workflows/run-4.6.2-mirror-repair.yml
+
+      - name: Commit vorbereiten und mit aktuellem main synchronisieren
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Keine Aenderungen zu committen."
+            exit 0
+          fi
+          git commit -m "fix: repair legacy mirror parity"
+          git fetch origin main
+          if ! git rebase origin/main; then
+            git rebase --abort || true
+            echo "::error::main hat sich in einer betroffenen Datei geaendert. Es wurde nichts gepusht."
+            exit 1
+          fi
+
+      - name: CI nach Synchronisierung erneut pruefen
+        run: npm run ci
+
+      - name: Sicher nach main pushen
+        run: |
+          if ! git push origin HEAD:main; then
+            echo "main wurde unmittelbar vor dem Push aktualisiert. Sicherer zweiter Versuch."
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo "::error::Konflikt beim zweiten Synchronisationsversuch. Es wurde nichts ueberschrieben."
+              exit 1
+            fi
+            npm run ci
+            git push origin HEAD:main
+          fi
