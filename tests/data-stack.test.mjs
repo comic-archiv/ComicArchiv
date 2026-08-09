@@ -8,8 +8,14 @@ import {
 } from "../archive-model.js";
 import {
   compareLegacyMirror,
+  compareSettingsSplit,
   createDataStackSnapshotRecord,
   DATA_STACK_FOUNDATION_KIND,
+  mergeSplitSettings,
+  SETTINGS_GROUP_FIELDS,
+  SETTINGS_SPLIT_SNAPSHOT_KIND,
+  SETTINGS_SPLIT_VERSION,
+  splitAppSettings,
   validateDataStackFoundation
 } from "../data-stack.js";
 import { upgradeDatabaseSchema } from "../storage.js";
@@ -118,7 +124,7 @@ test("Schema 6 bereitet getrennte Data-Stack-Stores vor, ohne Legacy-Stores zu e
   ]) assert.match(storage, new RegExp(`"${store}"`));
   assert.match(storage, /restoreLatestDataStackSnapshot/);
   assert.match(storage, /verifyDataStackParity/);
-  assert.match(config, /DATA_STACK_VERSION = 1/);
+  assert.match(config, /DATA_STACK_VERSION = 2/);
   assert.match(worker, /\.\/data-stack\.js/);
   assert.match(build, /"data-stack\.js"/);
 });
@@ -163,3 +169,54 @@ function createFakeStore(name, options = {}) {
     }
   };
 }
+
+test("Settings Split verteilt alle normalisierten Settings genau einmal auf sechs Bereiche", () => {
+  const expectedFields = [
+    "theme", "lastBackupAt", "lastMediaBackupAt", "customSeries", "customSeriesConfigs",
+    "knownHighestBandBySeries", "missingBandDetails", "fleaMarketSession", "changesSinceBackup",
+    "mediaChangesSinceBackup", "lastBackupComicCount", "showCovers", "duckipediaAutoEnrich",
+    "calendarEvents", "calendarSourceUrl", "calendarSourceName", "calendarLastImportAt",
+    "calendarImportedSources", "calendarCatalogLastCheckAt", "calendarAutoSync", "calendarSelectedYear",
+    "calendarSelectedMonth", "calendarReminderTime", "releaseRadarDecisions", "releaseRadarKnownSignatures",
+    "releaseRadarInitializedAt", "releaseRadarLastOpenedAt", "releaseRadarFilter", "releaseRadarBadgeEnabled",
+    "releaseSeriesAliases", "releaseEventLinks", "archiveMigrationAcknowledgedAt", "scannerMode",
+    "milestoneSeenIds", "milestonesInitializedAt"
+  ].sort();
+  const actualFields = Object.values(SETTINGS_GROUP_FIELDS).flat().sort();
+  assert.deepEqual(actualFields, expectedFields);
+  assert.equal(new Set(actualFields).size, actualFields.length);
+  assert.equal(Object.keys(SETTINGS_GROUP_FIELDS).length, 6);
+});
+
+test("Settings Split lässt sich verlustfrei spiegeln und wieder zusammensetzen", () => {
+  const settings = Object.fromEntries(
+    Object.values(SETTINGS_GROUP_FIELDS).flat().map((field, index) => [field, { field, index }])
+  );
+  const groups = splitAppSettings(settings);
+  assert.equal(compareSettingsSplit(settings, groups).valid, true);
+  assert.deepEqual(mergeSplitSettings(groups), settings);
+});
+
+test("Settings Split erkennt fehlende und abweichende Gruppen", () => {
+  const settings = { theme: "dark", calendarSelectedMonth: 7, fleaMarketSession: { active: true } };
+  const groups = splitAppSettings(settings);
+  delete groups.calendarState;
+  groups.preferences.theme = "light";
+  const parity = compareSettingsSplit(settings, groups);
+  assert.equal(parity.valid, false);
+  assert.deepEqual(parity.missingGroups, ["calendarState"]);
+  assert.deepEqual(parity.mismatchedGroups, ["preferences"]);
+  assert.equal(parity.splitVersion, SETTINGS_SPLIT_VERSION);
+  assert.equal(SETTINGS_SPLIT_SNAPSHOT_KIND, "pre-settings-split-v1");
+});
+
+test("Storage spiegelt Settings weiterhin in Legacy und die sechs Schema-6-Stores", async () => {
+  const storage = await read("storage.js");
+  assert.match(storage, /const SETTINGS_SPLIT_META_KEY = "settings-split"/);
+  assert.match(storage, /putSettingsSplitRecords\(transaction, normalizedSettings\)/);
+  assert.match(storage, /verifySettingsSplitParity/);
+  assert.match(storage, /ensureSettingsSplitReady/);
+  assert.match(storage, /settingsSplit,/);
+  assert.match(storage, /SETTINGS_SPLIT_SNAPSHOT_KIND/);
+});
+

@@ -828,8 +828,8 @@ async function refreshDataStackStatus() {
   try {
     const status = await getDataStackStatus();
     state.dataStackStatus = status;
-    if (status.ready && status.hasRollbackSnapshot && status.parity?.valid !== false) {
-      elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion} · Sicherung vorhanden`;
+    if (status.ready && status.hasRollbackSnapshot && status.parity?.valid !== false && status.settingsSplit?.parity?.valid !== false) {
+      elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion} · Einstellungen gespiegelt`;
       elements.dataStackSummary.dataset.type = "success";
     } else if (status.ready) {
       elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion}`;

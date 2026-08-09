@@ -1,5 +1,13 @@
 # Änderungen
 
+## 4.6.1 – Settings Split Mirror
+
+- Data Stack v2 spiegelt den bisherigen Settings-Datensatz verlustfrei in sechs fachlich getrennte Schema-6-Stores.
+- Vor der ersten Spiegelung wird ein eigener `pre-settings-split-v1`-Snapshot angelegt.
+- Paritätsprüfungen erkennen fehlende oder abweichende Settings-Gruppen und verhindern einen stillen Cutover.
+- `saveAppSettings()` hält Legacy-Settings und die neuen Stores in einer gemeinsamen IndexedDB-Transaktion synchron.
+- Der Legacy-Settings-Datensatz bleibt bewusst noch aktiv; der eigentliche Read/Write-Cutover folgt erst nach erfolgreicher Bewährung dieser Spiegelphase.
+
 ## 4.6.0 – Data Stack v2 Foundation
 
 - IndexedDB-Schema 6 legt getrennte Ziel-Stores für Einstellungen, Kalender, Fehlbände, Flohmarkt, Release Radar und Sammelziele an, ohne bestehende Daten bereits umzuziehen.

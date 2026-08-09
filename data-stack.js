@@ -88,6 +88,103 @@ export function createDataStackSnapshotRecord({
   };
 }
 
+
+export const SETTINGS_SPLIT_VERSION = 1;
+export const SETTINGS_SPLIT_SNAPSHOT_KIND = "pre-settings-split-v1";
+
+export const SETTINGS_GROUP_FIELDS = Object.freeze({
+  preferences: Object.freeze([
+    "theme",
+    "showCovers",
+    "duckipediaAutoEnrich",
+    "scannerMode"
+  ]),
+  calendarState: Object.freeze([
+    "calendarEvents",
+    "calendarSourceUrl",
+    "calendarSourceName",
+    "calendarLastImportAt",
+    "calendarImportedSources",
+    "calendarCatalogLastCheckAt",
+    "calendarAutoSync",
+    "calendarSelectedYear",
+    "calendarSelectedMonth",
+    "calendarReminderTime"
+  ]),
+  missingState: Object.freeze([
+    "knownHighestBandBySeries",
+    "missingBandDetails"
+  ]),
+  fleaMarketState: Object.freeze([
+    "fleaMarketSession"
+  ]),
+  releaseRadarState: Object.freeze([
+    "releaseRadarDecisions",
+    "releaseRadarKnownSignatures",
+    "releaseRadarInitializedAt",
+    "releaseRadarLastOpenedAt",
+    "releaseRadarFilter",
+    "releaseRadarBadgeEnabled",
+    "releaseSeriesAliases",
+    "releaseEventLinks"
+  ]),
+  collectorState: Object.freeze([
+    "lastBackupAt",
+    "lastMediaBackupAt",
+    "customSeries",
+    "customSeriesConfigs",
+    "changesSinceBackup",
+    "mediaChangesSinceBackup",
+    "lastBackupComicCount",
+    "archiveMigrationAcknowledgedAt",
+    "milestoneSeenIds",
+    "milestonesInitializedAt"
+  ])
+});
+
+export function splitAppSettings(settings = {}) {
+  const source = settings && typeof settings === "object" ? settings : {};
+  return Object.fromEntries(
+    Object.entries(SETTINGS_GROUP_FIELDS).map(([groupName, fields]) => [
+      groupName,
+      Object.fromEntries(fields.map((field) => [field, canonicalize(source[field])]))
+    ])
+  );
+}
+
+export function mergeSplitSettings(groups = {}, fallback = {}) {
+  const merged = canonicalize(fallback && typeof fallback === "object" ? fallback : {});
+  for (const groupName of Object.keys(SETTINGS_GROUP_FIELDS)) {
+    const group = groups?.[groupName];
+    if (!group || typeof group !== "object" || Array.isArray(group)) continue;
+    Object.assign(merged, canonicalize(group));
+  }
+  return merged;
+}
+
+export function compareSettingsSplit(settings = {}, groups = {}) {
+  const expected = splitAppSettings(settings);
+  const missingGroups = [];
+  const mismatchedGroups = [];
+
+  for (const groupName of Object.keys(SETTINGS_GROUP_FIELDS)) {
+    const actual = groups?.[groupName];
+    if (!actual || typeof actual !== "object" || Array.isArray(actual)) {
+      missingGroups.push(groupName);
+      continue;
+    }
+    if (stableStringify(expected[groupName]) !== stableStringify(actual)) mismatchedGroups.push(groupName);
+  }
+
+  return {
+    valid: missingGroups.length === 0 && mismatchedGroups.length === 0,
+    splitVersion: SETTINGS_SPLIT_VERSION,
+    groupCount: Object.keys(SETTINGS_GROUP_FIELDS).length,
+    missingGroups,
+    mismatchedGroups
+  };
+}
+
 function createComicMap(comics) {
   const map = new Map();
   for (const comic of Array.isArray(comics) ? comics : []) {

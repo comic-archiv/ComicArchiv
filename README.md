@@ -1,8 +1,14 @@
-# Entenarchiv 4.6.0
+# Entenarchiv 4.6.1
 
-Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.6.0 startet **Data Stack v2** mit einer bewusst konservativen Migrations-Foundation: Die bestehende App-Logik bleibt aktiv, während Schema 6 bereits die künftigen getrennten Speicherbereiche vorbereitet und vor weiteren Umbauten einen validierten lokalen Rückfall-Snapshot anlegt.
+Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.6.1 führt **Data Stack v2** kontrolliert weiter: Die bisherige `settings`-Struktur bleibt als aktiver Rückfallpfad erhalten, während alle normalisierten Einstellungen zusätzlich verlustfrei in sechs fachlich getrennte Schema-6-Stores gespiegelt werden. Vor der Aufteilung wird ein eigener lokaler Snapshot angelegt und die Parität automatisch geprüft.
 
-## Neu in 4.6.0
+## Neu in 4.6.1
+
+- Einstellungen werden in `preferences`, `calendarState`, `missingState`, `fleaMarketState`, `releaseRadarState` und `collectorState` gespiegelt.
+- Ein eigener `pre-settings-split-v1`-Snapshot sichert den Zustand vor der ersten Aufteilung.
+- Legacy-`settings` bleibt in dieser Zwischenstufe weiterhin aktiv und wird bei Änderungen synchron mit den sechs neuen Stores geschrieben.
+- Data-Stack-Status prüft zusätzlich die Settings-Parität; bei Abweichungen bleibt die bisherige Struktur funktionsfähig und der neue Stack wird als nicht bereit markiert.
+
 
 - IndexedDB-Schema 6 mit vorbereiteten Stores für Preferences, Kalender, Fehlbände, Flohmarkt, Release Radar und Sammelziele
 - automatischer lokaler Data-Stack-Snapshot aus Archivgraph, `comics`-Mirror und bisherigem Settings-Datensatz
@@ -96,14 +102,14 @@ Die Gestaltung verwendet den Entenarchiv-Farbraum, klare Typografie, Druckraster
 
 ## Technische Eckdaten
 
-- App-Version: `4.6.0`
+- App-Version: `4.6.1`
 - Datenformat: `9`
 - Archivmodell: `1`
 - Data-Stack-Version: `1`
 - IndexedDB-Schema: `6`
 - Foundation-Migration mit lokalem Snapshot; bestehende Live-Stores bleiben aktiv
 - neue Module `data-stack.js`, `collector-goals.js` und `share-cards.js`
-- Service-Worker-Cache: `v4-6-0`
+- Service-Worker-Cache: `v4-6-1`
 - Scanner- und PDF-Bibliothek weiterhin nur bei Bedarf geladen
 - GitHub Pages mit vorgeschalteter GitHub-Actions-Prüfung
 

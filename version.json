@@ -1,9 +1,9 @@
 {
-  "appVersion": "4.6.0",
+  "appVersion": "4.6.1",
   "dataFormatVersion": 9,
   "releaseChannel": "stable",
   "releasedAt": "2026-08-10",
   "minimumBackupVersion": 1,
   "archiveModelVersion": 1,
-  "dataStackVersion": 1
+  "dataStackVersion": 2
 }

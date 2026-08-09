@@ -37,8 +37,8 @@ test("Flohmarkt und Fehlbanddetails sind mit Suchprioritäten verdrahtet", async
 
 test("App-Version und Cache-Version sind synchron", async () => {
   const [config, worker, metadata] = await Promise.all([read("config.js"), read("service-worker.js"), read("version.json")]);
-  assert.match(config, /appVersion:\s*"4\.6\.0"/);
-  assert.match(worker, /APP_VERSION\s*=\s*"4\.6\.0"/);
-  assert.match(worker, /v4-6-0/);
-  assert.equal(JSON.parse(metadata).appVersion, "4.6.0");
+  assert.match(config, /appVersion:\s*"4\.6\.1"/);
+  assert.match(worker, /APP_VERSION\s*=\s*"4\.6\.1"/);
+  assert.match(worker, /v4-6-1/);
+  assert.equal(JSON.parse(metadata).appVersion, "4.6.1");
 });

@@ -25,8 +25,13 @@ import {
   validateArchiveGraph
 } from "./archive-model.js";
 import {
+  compareSettingsSplit,
   createDataStackSnapshotRecord,
   DATA_STACK_FOUNDATION_KIND,
+  SETTINGS_GROUP_FIELDS,
+  SETTINGS_SPLIT_SNAPSHOT_KIND,
+  SETTINGS_SPLIT_VERSION,
+  splitAppSettings,
   validateDataStackFoundation
 } from "./data-stack.js";
 
@@ -53,11 +58,22 @@ const DATA_STACK_SNAPSHOT_STORE = "dataStackSnapshots";
 const ARCHIVE_CORE_META_KEY = "archive-core";
 const DATA_STACK_META_KEY = "data-stack";
 const DATA_STACK_UPGRADE_META_KEY = "schema-upgrade-v6";
+const SETTINGS_SPLIT_META_KEY = "settings-split";
 const SETTINGS_KEY = "app";
+const SETTINGS_SPLIT_STORE_BY_GROUP = Object.freeze({
+  preferences: PREFERENCES_STORE,
+  calendarState: CALENDAR_STATE_STORE,
+  missingState: MISSING_STATE_STORE,
+  fleaMarketState: FLEA_MARKET_STATE_STORE,
+  releaseRadarState: RELEASE_RADAR_STATE_STORE,
+  collectorState: COLLECTOR_STATE_STORE
+});
+const SETTINGS_SPLIT_STORES = Object.freeze(Object.values(SETTINGS_SPLIT_STORE_BY_GROUP));
 
 let databasePromise;
 let archiveCorePromise;
 let dataStackPromise;
+let settingsSplitPromise;
 
 export function getStorageMode() {
   return STORAGE_MODE;
@@ -165,6 +181,7 @@ function createDatabaseConnection() {
         databasePromise = undefined;
         archiveCorePromise = undefined;
         dataStackPromise = undefined;
+        settingsSplitPromise = undefined;
       };
       resolve(database);
     };
@@ -180,6 +197,7 @@ function getDatabase() {
       databasePromise = undefined;
       archiveCorePromise = undefined;
       dataStackPromise = undefined;
+      settingsSplitPromise = undefined;
       throw error;
     });
   }
@@ -220,6 +238,38 @@ async function readSettingsValue(database) {
   const record = await requestToPromise(transaction.objectStore(SETTINGS_STORE).get(SETTINGS_KEY));
   await transactionDone(transaction);
   return record?.value || {};
+}
+
+async function readSettingsSplitRecords(database) {
+  const transaction = database.transaction(SETTINGS_SPLIT_STORES, "readonly");
+  const entries = await Promise.all(
+    Object.entries(SETTINGS_SPLIT_STORE_BY_GROUP).map(async ([groupName, storeName]) => {
+      const record = await requestToPromise(transaction.objectStore(storeName).get(SETTINGS_KEY));
+      return [groupName, record?.value || null];
+    })
+  );
+  await transactionDone(transaction);
+  return Object.fromEntries(entries);
+}
+
+async function readSettingsSplitMeta(database) {
+  const transaction = database.transaction(DATA_STACK_META_STORE, "readonly");
+  const record = await requestToPromise(transaction.objectStore(DATA_STACK_META_STORE).get(SETTINGS_SPLIT_META_KEY));
+  await transactionDone(transaction);
+  return record || null;
+}
+
+function putSettingsSplitRecords(transaction, normalizedSettings, updatedAt = new Date().toISOString()) {
+  const groups = splitAppSettings(normalizedSettings);
+  for (const [groupName, storeName] of Object.entries(SETTINGS_SPLIT_STORE_BY_GROUP)) {
+    transaction.objectStore(storeName).put({
+      key: SETTINGS_KEY,
+      version: SETTINGS_SPLIT_VERSION,
+      updatedAt,
+      value: groups[groupName]
+    });
+  }
+  return groups;
 }
 
 async function readIssueByIdentity(database, seriesVolumeKey) {
@@ -511,6 +561,134 @@ async function migrateDataStackFoundation() {
   }
 }
 
+async function ensureSettingsSplitReady() {
+  if (!settingsSplitPromise) {
+    settingsSplitPromise = migrateSettingsSplitMirror().catch((error) => ({
+      ready: false,
+      status: "failed",
+      error: error instanceof Error ? error.message : String(error)
+    }));
+  }
+  return settingsSplitPromise;
+}
+
+async function migrateSettingsSplitMirror() {
+  const database = await getDatabase();
+  const foundation = await ensureDataStackFoundationReady();
+  if (!foundation.ready) throw new Error("Die Settings-Aufteilung benötigt eine vollständig vorbereitete Data-Stack-Foundation.");
+
+  const legacySettings = normalizeSettings(await readSettingsValue(database));
+  const existingMeta = await readSettingsSplitMeta(database);
+  if (existingMeta?.status === "complete" && existingMeta.settingsSplitVersion === SETTINGS_SPLIT_VERSION) {
+    const groups = await readSettingsSplitRecords(database);
+    const parity = compareSettingsSplit(legacySettings, groups);
+    if (parity.valid) return { ready: true, justPrepared: false, ...existingMeta, parity };
+  }
+
+  const startedAt = new Date().toISOString();
+  const [graph, legacyComics, archiveMeta, existingSnapshot] = await Promise.all([
+    readArchiveGraph(database),
+    readAll(database, COMICS_STORE),
+    readArchiveMeta(database),
+    getLatestDataStackSnapshotRecord(database, SETTINGS_SPLIT_SNAPSHOT_KIND)
+  ]);
+  const foundationValidation = validateDataStackFoundation({ ...graph, legacyComics });
+  if (!foundationValidation.valid) {
+    throw new Error(`Settings-Aufteilung abgebrochen: ${foundationValidation.problems.slice(0, 4).join(" ")}`);
+  }
+
+  const transaction = database.transaction(
+    [...SETTINGS_SPLIT_STORES, DATA_STACK_SNAPSHOT_STORE, DATA_STACK_META_STORE],
+    "readwrite"
+  );
+  let snapshot = existingSnapshot;
+  const preparedAt = new Date().toISOString();
+  if (!snapshot) {
+    snapshot = createDataStackSnapshotRecord({
+      kind: SETTINGS_SPLIT_SNAPSHOT_KIND,
+      createdAt: preparedAt,
+      appVersion: APP_CONFIG.appVersion,
+      databaseVersion: DATABASE_VERSION,
+      dataFormatVersion: APP_CONFIG.dataFormatVersion,
+      archiveModelVersion: ARCHIVE_MODEL_VERSION,
+      dataStackVersion: DATA_STACK_VERSION,
+      settings: legacySettings,
+      archiveMeta,
+      series: graph.series,
+      issues: graph.issues,
+      copies: graph.copies,
+      legacyComics
+    });
+    transaction.objectStore(DATA_STACK_SNAPSHOT_STORE).put(snapshot);
+  }
+  putSettingsSplitRecords(transaction, legacySettings, preparedAt);
+  transaction.objectStore(DATA_STACK_META_STORE).put({
+    key: SETTINGS_SPLIT_META_KEY,
+    settingsSplitVersion: SETTINGS_SPLIT_VERSION,
+    status: "running",
+    startedAt,
+    completedAt: null,
+    snapshotId: snapshot.id,
+    snapshotCreatedAt: snapshot.createdAt,
+    error: ""
+  });
+  await transactionDone(transaction);
+
+  const groups = await readSettingsSplitRecords(database);
+  const parity = compareSettingsSplit(legacySettings, groups);
+  if (!parity.valid) {
+    const error = new Error(`Settings-Parität fehlgeschlagen: ${[...parity.missingGroups, ...parity.mismatchedGroups].join(", ") || "unbekannte Abweichung"}.`);
+    const failedTransaction = database.transaction(DATA_STACK_META_STORE, "readwrite");
+    failedTransaction.objectStore(DATA_STACK_META_STORE).put({
+      key: SETTINGS_SPLIT_META_KEY,
+      settingsSplitVersion: SETTINGS_SPLIT_VERSION,
+      status: "failed",
+      startedAt,
+      completedAt: null,
+      snapshotId: snapshot.id,
+      snapshotCreatedAt: snapshot.createdAt,
+      parity,
+      error: error.message
+    });
+    await transactionDone(failedTransaction);
+    throw error;
+  }
+
+  const completedAt = new Date().toISOString();
+  const completeTransaction = database.transaction(DATA_STACK_META_STORE, "readwrite");
+  completeTransaction.objectStore(DATA_STACK_META_STORE).put({
+    key: SETTINGS_SPLIT_META_KEY,
+    settingsSplitVersion: SETTINGS_SPLIT_VERSION,
+    status: "complete",
+    startedAt,
+    completedAt,
+    snapshotId: snapshot.id,
+    snapshotCreatedAt: snapshot.createdAt,
+    parity,
+    error: ""
+  });
+  await transactionDone(completeTransaction);
+  return {
+    ready: true,
+    justPrepared: true,
+    settingsSplitVersion: SETTINGS_SPLIT_VERSION,
+    status: "complete",
+    startedAt,
+    completedAt,
+    snapshotId: snapshot.id,
+    snapshotCreatedAt: snapshot.createdAt,
+    parity,
+    error: ""
+  };
+}
+
+export async function verifySettingsSplitParity() {
+  const database = await getDatabase();
+  const legacySettings = normalizeSettings(await readSettingsValue(database));
+  const groups = await readSettingsSplitRecords(database);
+  return compareSettingsSplit(legacySettings, groups);
+}
+
 export async function getArchiveGraph() {
   const database = await getDatabase();
   const core = await ensureArchiveCoreReady();
@@ -529,19 +707,41 @@ export async function verifyDataStackParity() {
 export async function getDataStackStatus() {
   const database = await getDatabase();
   const result = await ensureDataStackFoundationReady();
-  const meta = await readDataStackMeta(database).catch(() => null);
-  const snapshot = await getLatestDataStackSnapshotRecord(database, DATA_STACK_FOUNDATION_KIND).catch(() => null);
+  const splitResult = result.ready
+    ? await ensureSettingsSplitReady()
+    : { ready: false, status: "waiting", error: "Data-Stack-Foundation ist noch nicht bereit." };
+  const [meta, splitMeta, splitSnapshot, foundationSnapshot] = await Promise.all([
+    readDataStackMeta(database).catch(() => null),
+    readSettingsSplitMeta(database).catch(() => null),
+    getLatestDataStackSnapshotRecord(database, SETTINGS_SPLIT_SNAPSHOT_KIND).catch(() => null),
+    getLatestDataStackSnapshotRecord(database, DATA_STACK_FOUNDATION_KIND).catch(() => null)
+  ]);
+  const snapshot = splitSnapshot || foundationSnapshot;
+  const settingsSplit = {
+    ready: Boolean(splitResult.ready),
+    justPrepared: Boolean(splitResult.justPrepared),
+    version: splitMeta?.settingsSplitVersion || splitResult.settingsSplitVersion || SETTINGS_SPLIT_VERSION,
+    status: splitMeta?.status || splitResult.status || "unknown",
+    completedAt: splitMeta?.completedAt || splitResult.completedAt || null,
+    parity: splitMeta?.parity || splitResult.parity || null,
+    error: splitMeta?.error || splitResult.error || "",
+    hasSnapshot: Boolean(splitSnapshot),
+    snapshotId: splitSnapshot?.id || null,
+    snapshotCreatedAt: splitSnapshot?.createdAt || null
+  };
   return {
-    ready: Boolean(result.ready),
-    justPrepared: Boolean(result.justPrepared),
+    ready: Boolean(result.ready && settingsSplit.ready),
+    foundationReady: Boolean(result.ready),
+    justPrepared: Boolean(result.justPrepared || splitResult.justPrepared),
     dataStackVersion: meta?.dataStackVersion || DATA_STACK_VERSION,
     databaseVersion: DATABASE_VERSION,
-    status: meta?.status || result.status || "unknown",
+    status: settingsSplit.ready ? (meta?.status || result.status || "complete") : settingsSplit.status,
     startedAt: meta?.startedAt || null,
-    completedAt: meta?.completedAt || null,
+    completedAt: settingsSplit.completedAt || meta?.completedAt || null,
     counts: meta?.counts || null,
     parity: meta?.parity || null,
-    error: meta?.error || result.error || "",
+    settingsSplit,
+    error: settingsSplit.error || meta?.error || result.error || "",
     hasRollbackSnapshot: Boolean(snapshot),
     rollbackSnapshotId: snapshot?.id || null,
     rollbackSnapshotCreatedAt: snapshot?.createdAt || null
@@ -562,7 +762,7 @@ export async function restoreLatestDataStackSnapshot() {
   const validation = validateDataStackFoundation({ series: snapshot.series, issues: snapshot.issues, copies: snapshot.copies, legacyComics: snapshot.comics });
   if (!validation.valid) throw new Error(`Der Data-Stack-Snapshot ist nicht konsistent: ${validation.problems.slice(0, 4).join(" ")}`);
 
-  const transaction = database.transaction([SERIES_STORE, ISSUES_STORE, COPIES_STORE, COMICS_STORE, SETTINGS_STORE, ARCHIVE_META_STORE, DATA_STACK_META_STORE], "readwrite");
+  const transaction = database.transaction([SERIES_STORE, ISSUES_STORE, COPIES_STORE, COMICS_STORE, SETTINGS_STORE, ...SETTINGS_SPLIT_STORES, ARCHIVE_META_STORE, DATA_STACK_META_STORE], "readwrite");
   const seriesStore = transaction.objectStore(SERIES_STORE);
   const issueStore = transaction.objectStore(ISSUES_STORE);
   const copyStore = transaction.objectStore(COPIES_STORE);
@@ -572,14 +772,16 @@ export async function restoreLatestDataStackSnapshot() {
   snapshot.issues.forEach((record) => issueStore.put(record));
   snapshot.copies.forEach((record) => copyStore.put(record));
   snapshot.comics.forEach((record) => legacyStore.put(record));
-  transaction.objectStore(SETTINGS_STORE).put({ key: SETTINGS_KEY, value: snapshot.settings || {} });
+  const restoredSettings = normalizeSettings(snapshot.settings || {});
+  transaction.objectStore(SETTINGS_STORE).put({ key: SETTINGS_KEY, value: restoredSettings });
+  putSettingsSplitRecords(transaction, restoredSettings);
   if (snapshot.archiveMeta) transaction.objectStore(ARCHIVE_META_STORE).put({ ...snapshot.archiveMeta, key: ARCHIVE_CORE_META_KEY });
   const restoredAt = new Date().toISOString();
   transaction.objectStore(DATA_STACK_META_STORE).put({
     key: DATA_STACK_META_KEY, dataStackVersion: DATA_STACK_VERSION, status: "complete", startedAt: restoredAt, completedAt: restoredAt, counts: validation.counts, parity: validation.parity, snapshotId: snapshot.id, snapshotCreatedAt: snapshot.createdAt, restoredAt, error: ""
   });
   await transactionDone(transaction);
-  archiveCorePromise = undefined; dataStackPromise = undefined;
+  archiveCorePromise = undefined; dataStackPromise = undefined; settingsSplitPromise = undefined;
   return { snapshotId: snapshot.id, createdAt: snapshot.createdAt, counts: validation.counts };
 }
 
@@ -1111,11 +1313,14 @@ export async function getAppSettings() {
 export async function saveAppSettings(settings) {
   const normalizedSettings = normalizeSettings(settings);
   const database = await getDatabase();
-  const transaction = database.transaction(SETTINGS_STORE, "readwrite");
+  const splitStatus = await ensureSettingsSplitReady();
+  const stores = splitStatus.ready ? [SETTINGS_STORE, ...SETTINGS_SPLIT_STORES] : [SETTINGS_STORE];
+  const transaction = database.transaction(stores, "readwrite");
   transaction.objectStore(SETTINGS_STORE).put({
     key: SETTINGS_KEY,
     value: normalizedSettings
   });
+  if (splitStatus.ready) putSettingsSplitRecords(transaction, normalizedSettings);
   await transactionDone(transaction);
   return normalizedSettings;
 }

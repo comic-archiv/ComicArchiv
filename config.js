@@ -2,7 +2,7 @@ export const DEFAULT_CONDITION_CODE = "2";
 
 
 export const ARCHIVE_MODEL_VERSION = 1;
-export const DATA_STACK_VERSION = 1;
+export const DATA_STACK_VERSION = 2;
 
 export const STANDARD_SERIES_DEFINITIONS = Object.freeze([
   Object.freeze({ id: "ltb-main", name: "Lustiges Taschenbuch", category: "main", duckipediaPattern: "LTB_{band}", aliases: Object.freeze(["LTB"]) }),
@@ -47,7 +47,7 @@ export const LEGACY_CONDITION_MAP = Object.freeze({
 });
 
 export const APP_CONFIG = Object.freeze({
-  appVersion: "4.6.0",
+  appVersion: "4.6.1",
   dataFormatVersion: 9,
   archiveModelVersion: ARCHIVE_MODEL_VERSION,
   dataStackVersion: DATA_STACK_VERSION,
