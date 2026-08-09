@@ -1091,13 +1091,6 @@ textarea[aria-invalid="true"] {
 }
 
 @media (min-width: 560px) {
-  .stats-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .stat-card-highlight {
-    grid-column: auto;
-  }
 
   .field-grid,
   .filter-grid {
@@ -1543,7 +1536,6 @@ textarea[aria-invalid="true"] {
   font-weight: 750;
 }
 
-
 /* Version 3.0.2: präzise Feld-Ausrichtung und kompakte Kartensteuerung */
 .paired-field {
   align-self: start;
@@ -1849,14 +1841,6 @@ textarea[aria-invalid="true"] {
   font-weight: 700;
 }
 
-.scanner-status[data-type="success"] {
-  color: var(--success);
-}
-
-.scanner-status[data-type="error"] {
-  color: var(--danger);
-}
-
 .scanner-source-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2096,14 +2080,6 @@ textarea[aria-invalid="true"] {
   padding-block: 1.25rem;
 }
 
-.scanner-queue {
-  display: grid;
-  gap: 0.8rem;
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
-}
-
 .scanner-queue-heading,
 .scanner-queue-heading > div {
   display: flex;
@@ -2116,11 +2092,6 @@ textarea[aria-invalid="true"] {
   display: grid;
   grid-template-columns: 1fr;
   gap: 0.65rem;
-}
-
-.scanner-queue-list {
-  display: grid;
-  gap: 0.75rem;
 }
 
 .scanner-queue-empty {
@@ -2190,7 +2161,6 @@ textarea[aria-invalid="true"] {
     width: 100%;
   }
 }
-
 
 /* Version 3.2.1: kompakte Fortschrittskarte und eigene Detailansicht */
 .progress-overview-card {
@@ -3887,11 +3857,6 @@ input[type="radio"] {
 
 .backup-panel {
   padding: 15px;
-}
-
-.backup-status-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
 }
 
 .backup-status-card {
@@ -6130,15 +6095,6 @@ html[data-storage-mode="test"] .app-header {
   transform: translateZ(0);
 }
 
-.app-page {
-  isolation: isolate;
-}
-
-.app-page-content {
-  position: relative;
-  z-index: 0;
-}
-
 .scanner-pro-modal {
   z-index: 150;
   align-items: stretch;
@@ -6804,10 +6760,6 @@ html[data-storage-mode="test"] .app-header {
   line-height: 1.55;
 }
 
-.assistant-result-reasons {
-  padding-left: 1.2rem;
-}
-
 .assistant-result-warning {
   padding: 10px 12px;
   border-radius: 12px;
@@ -6938,9 +6890,6 @@ html[data-storage-mode="test"] .app-header {
 }
 
 /* Scanner-Pro-Kompatibilität für die dynamisch erzeugten Warteschlangenelemente */
-.scanner-queue-card.is-success { border-left-color: var(--success); }
-.scanner-queue-card.is-warning { border-left-color: var(--secondary); }
-.scanner-queue-card.is-error { border-left-color: var(--danger); }
 
 .scanner-queue-identity {
   display: flex;
@@ -6960,10 +6909,6 @@ html[data-storage-mode="test"] .app-header {
   color: var(--primary);
   font-size: 1.15rem;
   font-weight: 950;
-}
-
-.scanner-queue-identity > div {
-  min-width: 0;
 }
 
 .scanner-queue-identity h4 {
@@ -7031,10 +6976,6 @@ html[data-storage-mode="test"] .app-header {
   font-weight: 850;
 }
 
-.scanner-queue-editor > summary::-webkit-details-marker {
-  display: none;
-}
-
 .scanner-queue-editor > summary::after {
   content: "+";
   font-size: 1.2rem;
@@ -7100,10 +7041,6 @@ html[data-storage-mode="test"] .app-header {
 .scanner-copy-flags {
   display: grid;
   gap: 6px;
-}
-
-.scanner-copy-notes {
-  grid-column: 1 / -1;
 }
 
 .scanner-queue-card-footer {
@@ -8706,7 +8643,6 @@ body.app-page-open > .app-header {
     transition: none;
   }
 }
-
 
 /* Entenarchiv 4.3.1: Kalendertermine intelligent Reihen zuordnen */
 .release-link-card {
