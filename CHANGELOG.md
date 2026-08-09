@@ -1,5 +1,17 @@
 # Änderungen
 
+## 4.6.3 – Settings Cutover
+
+- Die sechs Schema-6-Settings-Stores werden zur aktiven Lesequelle der App.
+- Alle 35 normalisierten Einstellungen werden beim Cutover zusätzlich als einzelne Feld-Datensätze gespeichert.
+- Änderungen schreiben nur noch die tatsächlich geänderten Feld-Datensätze; ein Monatswechsel im Kalender schreibt dadurch nicht mehr den kompletten Settings-Block oder die 100 Kalendertermine erneut.
+- Der bisherige `settings`-Mega-Datensatz wird beim Cutover eingefroren und bleibt als statischer Sicherheitsfallback bestehen.
+- Vor der Aktivierung wird ein `pre-settings-cutover-v1`-Snapshot erstellt und die Feldmigration vollständig gegen den bisherigen sicheren Zustand geprüft.
+- Nach dem Cutover überspringt die Settings-Split-Prüfung bewusst den nun eingefrorenen Legacy-Datensatz und prüft stattdessen die Vollständigkeit der aktiven Feld-Datensätze.
+- Storage-Pfade für Comic-Saves, Batch-Importe und Archivmigration lesen cutover-aware aus den getrennten Settings.
+- Data Stack v2 zeigt den erfolgreichen Zustand als „Einstellungen getrennt aktiv“.
+- Der `comics`-Mirror bleibt weiterhin aktiv und wird erst in einer späteren Data-Stack-Tranche aus dem Live-Pfad entfernt.
+
 ## 4.6.2 – Legacy Mirror Repair
 
 - Data Stack v2 kann einen veralteten `comics`-Mirror automatisch aus dem validen Archivgraph neu erzeugen, wenn auf beiden Seiten exakt dieselben Ausgabe-IDs vorhanden sind.

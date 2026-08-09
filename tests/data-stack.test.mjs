@@ -13,12 +13,17 @@ import {
   createDataStackSnapshotRecord,
   DATA_STACK_FOUNDATION_KIND,
   describeLegacyMirrorDifferences,
+  findChangedSettingsFields,
   mergeSplitSettings,
+  SETTINGS_CUTOVER_SNAPSHOT_KIND,
+  SETTINGS_CUTOVER_VERSION,
   SETTINGS_GROUP_FIELDS,
   SETTINGS_SPLIT_SNAPSHOT_KIND,
   SETTINGS_SPLIT_VERSION,
   splitAppSettings,
-  validateDataStackFoundation
+  validateDataStackFoundation,
+  validateSettingsFieldValues,
+  validateSettingsSplitGroups
 } from "../data-stack.js";
 import { upgradeDatabaseSchema } from "../storage.js";
 
@@ -212,14 +217,77 @@ test("Settings Split erkennt fehlende und abweichende Gruppen", () => {
   assert.equal(SETTINGS_SPLIT_SNAPSHOT_KIND, "pre-settings-split-v1");
 });
 
-test("Storage spiegelt Settings weiterhin in Legacy und die sechs Schema-6-Stores", async () => {
+test("Settings Cutover erkennt vollständige und beschädigte Feld-Datensätze", () => {
+  const values = Object.fromEntries(
+    Object.values(SETTINGS_GROUP_FIELDS).flat().map((field, index) => [field, index])
+  );
+  const healthy = validateSettingsFieldValues(values);
+  assert.equal(healthy.valid, true);
+  assert.equal(healthy.fieldCount, 35);
+
+  delete values.calendarSelectedMonth;
+  const broken = validateSettingsFieldValues(values);
+  assert.equal(broken.valid, false);
+  assert.deepEqual(broken.missingFields.calendarState, ["calendarSelectedMonth"]);
+  assert.equal(SETTINGS_CUTOVER_VERSION, 1);
+  assert.equal(SETTINGS_CUTOVER_SNAPSHOT_KIND, "pre-settings-cutover-v1");
+});
+
+test("Settings Cutover erkennt Änderungen auf Feldebene statt ganze Gruppen neu zu schreiben", () => {
+  const current = {
+    theme: "dark",
+    calendarSelectedMonth: 7,
+    releaseRadarFilter: "open",
+    milestoneSeenIds: ["first-50"]
+  };
+  const calendarChange = { ...current, calendarSelectedMonth: 8 };
+  assert.deepEqual(findChangedSettingsFields(current, calendarChange), [
+    { groupName: "calendarState", field: "calendarSelectedMonth" }
+  ]);
+
+  const multiChange = { ...current, theme: "light", milestoneSeenIds: ["first-50", "first-100"] };
+  assert.deepEqual(findChangedSettingsFields(current, multiChange), [
+    { groupName: "preferences", field: "theme" },
+    { groupName: "collectorState", field: "milestoneSeenIds" }
+  ]);
+});
+
+test("Storage liest nach dem Cutover Feld-Datensätze und schreibt nur geänderte Felder", async () => {
+  const [storage, app] = await Promise.all([read("storage.js"), read("app.js")]);
+  assert.match(storage, /const SETTINGS_CUTOVER_META_KEY = "settings-cutover"/);
+  assert.match(storage, /SETTINGS_CUTOVER_SNAPSHOT_KIND/);
+  assert.match(storage, /ensureSettingsCutoverReady/);
+  assert.match(storage, /return await readCutoverSettingsValue\(database\)/);
+  assert.match(storage, /findChangedSettingsFields\(currentSettings, normalizedSettings\)/);
+  assert.match(storage, /database\.transaction\(changedStores, "readwrite"\)/);
+  assert.match(storage, /putSettingsFieldRecords\(transaction, normalizedSettings, changes\)/);
+  assert.match(storage, /layout: "field-record"/);
+  assert.match(storage, /statischer Legacy-Fallback/);
+  assert.match(storage, /legacyComparisonSkipped: true/);
+  assert.match(app, /Einstellungen getrennt aktiv/);
+});
+
+test("Legacy-Settings bleiben nach dem Cutover ein Fallback statt Live-Mirror", async () => {
   const storage = await read("storage.js");
-  assert.match(storage, /const SETTINGS_SPLIT_META_KEY = "settings-split"/);
-  assert.match(storage, /putSettingsSplitRecords\(transaction, normalizedSettings\)/);
-  assert.match(storage, /verifySettingsSplitParity/);
-  assert.match(storage, /ensureSettingsSplitReady/);
-  assert.match(storage, /settingsSplit,/);
-  assert.match(storage, /SETTINGS_SPLIT_SNAPSHOT_KIND/);
+  const saveStart = storage.indexOf("export async function saveAppSettings(settings)");
+  const saveEnd = storage.indexOf("export async function getCoverMedia", saveStart);
+  const saveBody = storage.slice(saveStart, saveEnd);
+  const cutoverBranchEnd = saveBody.indexOf("// Sicherheitsfallback vor einem erfolgreichen Cutover");
+  const cutoverBranch = saveBody.slice(0, cutoverBranchEnd);
+  assert.doesNotMatch(cutoverBranch, /objectStore\(SETTINGS_STORE\)\.put/);
+  assert.match(saveBody.slice(cutoverBranchEnd), /objectStore\(SETTINGS_STORE\)\.put/);
+});
+
+
+test("Data-Stack-Rollback setzt aktive Settings-Felder und Cutover-Status sicher zurück", async () => {
+  const storage = await read("storage.js");
+  const restoreStart = storage.indexOf("export async function restoreLatestDataStackSnapshot()");
+  const restoreEnd = storage.indexOf("export async function getArchiveCoreStatus()", restoreStart);
+  assert.ok(restoreStart >= 0 && restoreEnd > restoreStart);
+  const restoreBlock = storage.slice(restoreStart, restoreEnd);
+  assert.match(restoreBlock, /SETTINGS_SPLIT_STORES\.forEach\(\(storeName\) => transaction\.objectStore\(storeName\)\.clear\(\)\)/);
+  assert.match(restoreBlock, /dataStackMetaStore\.delete\(SETTINGS_CUTOVER_META_KEY\)/);
+  assert.match(restoreBlock, /putSettingsSplitRecords\(transaction, restoredSettings\)/);
 });
 
 

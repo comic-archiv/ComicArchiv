@@ -828,11 +828,18 @@ async function refreshDataStackStatus() {
   try {
     const status = await getDataStackStatus();
     state.dataStackStatus = status;
-    if (status.ready && status.hasRollbackSnapshot && status.parity?.valid !== false && status.settingsSplit?.parity?.valid !== false) {
+    if (
+      status.ready
+      && status.hasRollbackSnapshot
+      && status.parity?.valid !== false
+      && status.settingsSplit?.parity?.valid !== false
+      && status.settingsCutover?.ready
+      && status.settingsCutover?.integrity?.valid !== false
+    ) {
       const repairLabel = Number(status.mirrorRepair?.repairedCount || 0) > 0
         ? ` · Mirror repariert (${status.mirrorRepair.repairedCount})`
         : "";
-      elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion}${repairLabel} · Einstellungen gespiegelt`;
+      elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion}${repairLabel} · Einstellungen getrennt aktiv`;
       elements.dataStackSummary.dataset.type = "success";
     } else if (status.ready) {
       elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion}`;

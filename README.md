@@ -1,6 +1,18 @@
-# Entenarchiv 4.6.2
+# Entenarchiv 4.6.3
 
-Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.6.2 stabilisiert **Data Stack v2** vor dem späteren Cutover: Der Archivgraph bleibt die aktive Sammlungsquelle; ein veralteter Legacy-`comics`-Mirror kann bei identischer Ausgabenmenge jetzt sicher aus dem Archivgraph neu erzeugt werden. Vor jeder Reparatur wird der abweichende Mirror vollständig lokal gesichert.
+Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.6.3 schaltet den **Settings-Teil von Data Stack v2 produktiv**: Einstellungen werden nicht mehr aus einem einzigen großen `settings`-Datensatz gelesen und bei jeder kleinen Änderung komplett neu geschrieben, sondern als einzelne Feld-Datensätze in sechs fachlich getrennten Schema-6-Stores geführt.
+
+## Neu in 4.6.3
+
+- Die sechs Settings-Stores werden zur aktiven Lesequelle der App.
+- Alle 35 normalisierten Settings-Felder liegen nach dem Cutover als eigene Datensätze in ihrem fachlichen Store.
+- `saveAppSettings()` vergleicht den aktuellen Zustand feldweise und schreibt nur tatsächlich geänderte Felder. Ein Wechsel des Kalendermonats schreibt beispielsweise nur `calendarSelectedMonth` statt Kalendertermine, Fehlbanddaten, Radarstatus und Backupzähler erneut zu speichern.
+- Der bisherige Mega-`settings`-Datensatz wird beim Cutover eingefroren und bleibt als statischer Sicherheitsfallback erhalten, aber nicht mehr als Live-Mirror.
+- Vor dem Cutover wird ein vollständiger `pre-settings-cutover-v1`-Snapshot angelegt.
+- Vor der Aktivierung müssen Legacy-Settings, die 4.6.1-Spiegelung und der Archivgraph vollständig valide sein; anschließend werden alle aktiven Feld-Datensätze nochmals gegen den sicheren Ausgangsstand geprüft.
+- Interne Archivpfade wie Speichern, Batch-Import und Reihenaufbau lesen nach dem Cutover ebenfalls die aktiven getrennten Einstellungen.
+- Der Data-Stack-Status weist den erfolgreichen Zustand als „Einstellungen getrennt aktiv“ aus.
+- Der Legacy-`comics`-Mirror bleibt in 4.6.3 weiterhin aktiv; dessen endgültige Ablösung folgt separat.
 
 ## Neu in 4.6.2
 
@@ -112,14 +124,14 @@ Die Gestaltung verwendet den Entenarchiv-Farbraum, klare Typografie, Druckraster
 
 ## Technische Eckdaten
 
-- App-Version: `4.6.2`
+- App-Version: `4.6.3`
 - Datenformat: `9`
 - Archivmodell: `1`
-- Data-Stack-Version: `1`
+- Data-Stack-Version: `2`
 - IndexedDB-Schema: `6`
-- Foundation-Migration mit lokalem Snapshot; bestehende Live-Stores bleiben aktiv
+- Schema 6 mit Foundation-, Mirror- und Settings-Cutover-Snapshots; Split-Settings sind aktiv
 - neue Module `data-stack.js`, `collector-goals.js` und `share-cards.js`
-- Service-Worker-Cache: `v4-6-2`
+- Service-Worker-Cache: `v4-6-3`
 - Scanner- und PDF-Bibliothek weiterhin nur bei Bedarf geladen
 - GitHub Pages mit vorgeschalteter GitHub-Actions-Prüfung
 

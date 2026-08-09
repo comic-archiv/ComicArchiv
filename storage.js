@@ -30,12 +30,17 @@ import {
   createDataStackSnapshotRecord,
   DATA_STACK_FOUNDATION_KIND,
   describeLegacyMirrorDifferences,
+  findChangedSettingsFields,
   LEGACY_MIRROR_REPAIR_SNAPSHOT_KIND,
+  SETTINGS_CUTOVER_SNAPSHOT_KIND,
+  SETTINGS_CUTOVER_VERSION,
   SETTINGS_GROUP_FIELDS,
   SETTINGS_SPLIT_SNAPSHOT_KIND,
   SETTINGS_SPLIT_VERSION,
   splitAppSettings,
-  validateDataStackFoundation
+  validateDataStackFoundation,
+  validateSettingsFieldValues,
+  validateSettingsSplitGroups
 } from "./data-stack.js";
 
 const DATABASE_NAME = resolveDatabaseName();
@@ -62,6 +67,7 @@ const ARCHIVE_CORE_META_KEY = "archive-core";
 const DATA_STACK_META_KEY = "data-stack";
 const DATA_STACK_UPGRADE_META_KEY = "schema-upgrade-v6";
 const SETTINGS_SPLIT_META_KEY = "settings-split";
+const SETTINGS_CUTOVER_META_KEY = "settings-cutover";
 const SETTINGS_KEY = "app";
 const SETTINGS_SPLIT_STORE_BY_GROUP = Object.freeze({
   preferences: PREFERENCES_STORE,
@@ -77,6 +83,7 @@ let databasePromise;
 let archiveCorePromise;
 let dataStackPromise;
 let settingsSplitPromise;
+let settingsCutoverPromise;
 
 export function getStorageMode() {
   return STORAGE_MODE;
@@ -185,6 +192,7 @@ function createDatabaseConnection() {
         archiveCorePromise = undefined;
         dataStackPromise = undefined;
         settingsSplitPromise = undefined;
+        settingsCutoverPromise = undefined;
       };
       resolve(database);
     };
@@ -201,6 +209,7 @@ function getDatabase() {
       archiveCorePromise = undefined;
       dataStackPromise = undefined;
       settingsSplitPromise = undefined;
+      settingsCutoverPromise = undefined;
       throw error;
     });
   }
@@ -262,9 +271,68 @@ async function readSettingsSplitMeta(database) {
   return record || null;
 }
 
-function putSettingsSplitRecords(transaction, normalizedSettings, updatedAt = new Date().toISOString()) {
+async function readSettingsCutoverMeta(database) {
+  const transaction = database.transaction(DATA_STACK_META_STORE, "readonly");
+  const record = await requestToPromise(transaction.objectStore(DATA_STACK_META_STORE).get(SETTINGS_CUTOVER_META_KEY));
+  await transactionDone(transaction);
+  return record || null;
+}
+
+function isSettingsCutoverComplete(meta) {
+  return Boolean(meta?.status === "complete" && meta.settingsCutoverVersion === SETTINGS_CUTOVER_VERSION);
+}
+
+async function readSettingsFieldValues(database) {
+  const transaction = database.transaction(SETTINGS_SPLIT_STORES, "readonly");
+  const values = {};
+  await Promise.all(
+    Object.entries(SETTINGS_SPLIT_STORE_BY_GROUP).map(async ([groupName, storeName]) => {
+      const records = await requestToPromise(transaction.objectStore(storeName).getAll());
+      const allowedFields = new Set(SETTINGS_GROUP_FIELDS[groupName] || []);
+      records.forEach((record) => {
+        const field = String(record?.key || "");
+        if (!allowedFields.has(field)) return;
+        values[field] = record?.value;
+      });
+    })
+  );
+  await transactionDone(transaction);
+  return values;
+}
+
+async function readCutoverSettingsValue(database) {
+  const values = await readSettingsFieldValues(database);
+  const integrity = validateSettingsFieldValues(values);
+  if (!integrity.valid) {
+    const missing = Object.entries(integrity.missingFields)
+      .map(([groupName, fields]) => `${groupName}: ${fields.join(", ")}`);
+    throw new Error(`Getrennte Einstellungen sind unvollständig: ${missing.join("; ") || "unbekannte Abweichung"}.`);
+  }
+  return normalizeSettings(values);
+}
+
+async function readEffectiveSettingsValue(database) {
+  const cutoverMeta = await readSettingsCutoverMeta(database).catch(() => null);
+  if (isSettingsCutoverComplete(cutoverMeta)) {
+    try {
+      return await readCutoverSettingsValue(database);
+    } catch (error) {
+      console.warn("Getrennte Einstellungen konnten nicht gelesen werden; Legacy-Fallback wird verwendet:", error);
+    }
+  }
+  return normalizeSettings(await readSettingsValue(database));
+}
+
+function putSettingsSplitRecords(
+  transaction,
+  normalizedSettings,
+  updatedAt = new Date().toISOString(),
+  groupNames = Object.keys(SETTINGS_SPLIT_STORE_BY_GROUP)
+) {
   const groups = splitAppSettings(normalizedSettings);
-  for (const [groupName, storeName] of Object.entries(SETTINGS_SPLIT_STORE_BY_GROUP)) {
+  for (const groupName of groupNames) {
+    const storeName = SETTINGS_SPLIT_STORE_BY_GROUP[groupName];
+    if (!storeName) throw new Error(`Unbekannte Settings-Gruppe: ${groupName}`);
     transaction.objectStore(storeName).put({
       key: SETTINGS_KEY,
       version: SETTINGS_SPLIT_VERSION,
@@ -273,6 +341,27 @@ function putSettingsSplitRecords(transaction, normalizedSettings, updatedAt = ne
     });
   }
   return groups;
+}
+
+function putSettingsFieldRecords(
+  transaction,
+  normalizedSettings,
+  changes = Object.entries(SETTINGS_GROUP_FIELDS).flatMap(([groupName, fields]) => fields.map((field) => ({ groupName, field }))),
+  updatedAt = new Date().toISOString()
+) {
+  for (const { groupName, field } of changes) {
+    const storeName = SETTINGS_SPLIT_STORE_BY_GROUP[groupName];
+    if (!storeName || !(SETTINGS_GROUP_FIELDS[groupName] || []).includes(field)) {
+      throw new Error(`Unbekanntes Settings-Feld: ${groupName}.${field}`);
+    }
+    transaction.objectStore(storeName).put({
+      key: field,
+      version: SETTINGS_CUTOVER_VERSION,
+      layout: "field-record",
+      updatedAt,
+      value: normalizedSettings[field]
+    });
+  }
 }
 
 async function readIssueByIdentity(database, seriesVolumeKey) {
@@ -357,7 +446,7 @@ async function migrateArchiveCore() {
   try {
     const [legacyComics, settings, existingSeries, existingSnapshot, existingCovers] = await Promise.all([
       readAll(database, COMICS_STORE),
-      readSettingsValue(database),
+      readEffectiveSettingsValue(database),
       readAll(database, SERIES_STORE),
       getLatestMigrationSnapshotRecord(database),
       readAll(database, COVER_STORE)
@@ -513,7 +602,7 @@ async function migrateDataStackFoundation() {
     const [graph, legacyComics, settings, archiveMeta, existingSnapshot, upgradeMeta] = await Promise.all([
       readArchiveGraph(database),
       readAll(database, COMICS_STORE),
-      readSettingsValue(database),
+      readEffectiveSettingsValue(database),
       readArchiveMeta(database),
       getLatestDataStackSnapshotRecord(database, DATA_STACK_FOUNDATION_KIND),
       readRecord(database, DATA_STACK_META_STORE, DATA_STACK_UPGRADE_META_KEY)
@@ -631,8 +720,36 @@ async function migrateSettingsSplitMirror() {
   const foundation = await ensureDataStackFoundationReady();
   if (!foundation.ready) throw new Error("Die Settings-Aufteilung benötigt eine vollständig vorbereitete Data-Stack-Foundation.");
 
+  const [existingMeta, cutoverMeta] = await Promise.all([
+    readSettingsSplitMeta(database),
+    readSettingsCutoverMeta(database).catch(() => null)
+  ]);
+
+  if (isSettingsCutoverComplete(cutoverMeta)) {
+    const values = await readSettingsFieldValues(database);
+    const integrity = validateSettingsFieldValues(values);
+    if (!integrity.valid) {
+      throw new Error("Settings-Cutover ist markiert, aber die aktiven Feld-Datensätze sind unvollständig.");
+    }
+    return {
+      ...(existingMeta || {}),
+      ready: true,
+      justPrepared: false,
+      settingsSplitVersion: SETTINGS_SPLIT_VERSION,
+      status: "complete",
+      parity: {
+        valid: true,
+        splitVersion: SETTINGS_SPLIT_VERSION,
+        cutover: true,
+        legacyComparisonSkipped: true,
+        missingGroups: [],
+        mismatchedGroups: []
+      },
+      integrity
+    };
+  }
+
   const legacySettings = normalizeSettings(await readSettingsValue(database));
-  const existingMeta = await readSettingsSplitMeta(database);
   if (existingMeta?.status === "complete" && existingMeta.settingsSplitVersion === SETTINGS_SPLIT_VERSION) {
     const groups = await readSettingsSplitRecords(database);
     const parity = compareSettingsSplit(legacySettings, groups);
@@ -736,10 +853,196 @@ async function migrateSettingsSplitMirror() {
   };
 }
 
+async function ensureSettingsCutoverReady() {
+  if (!settingsCutoverPromise) {
+    settingsCutoverPromise = migrateSettingsCutover().catch((error) => {
+      settingsCutoverPromise = undefined;
+      return {
+        ready: false,
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error)
+      };
+    });
+  }
+  return settingsCutoverPromise;
+}
+
+async function migrateSettingsCutover() {
+  const database = await getDatabase();
+  const foundation = await ensureDataStackFoundationReady();
+  if (!foundation.ready) throw new Error("Der Settings-Cutover benötigt eine vollständig vorbereitete Data-Stack-Foundation.");
+
+  const existingMeta = await readSettingsCutoverMeta(database).catch(() => null);
+  if (isSettingsCutoverComplete(existingMeta)) {
+    const values = await readSettingsFieldValues(database);
+    const integrity = validateSettingsFieldValues(values);
+    if (!integrity.valid) {
+      throw new Error("Der Settings-Cutover ist aktiv, aber mindestens ein aktiver Settings-Feld-Datensatz fehlt.");
+    }
+    return { ready: true, justCutOver: false, ...existingMeta, integrity };
+  }
+
+  const split = await ensureSettingsSplitReady();
+  if (!split.ready) throw new Error("Der Settings-Cutover kann erst nach einer erfolgreichen Settings-Spiegelung aktiviert werden.");
+
+  const [legacySettingsRaw, groups, graph, legacyComics, archiveMeta, existingSnapshot] = await Promise.all([
+    readSettingsValue(database),
+    readSettingsSplitRecords(database),
+    readArchiveGraph(database),
+    readAll(database, COMICS_STORE),
+    readArchiveMeta(database),
+    getLatestDataStackSnapshotRecord(database, SETTINGS_CUTOVER_SNAPSHOT_KIND)
+  ]);
+  const legacySettings = normalizeSettings(legacySettingsRaw);
+  const parity = compareSettingsSplit(legacySettings, groups);
+  const groupIntegrity = validateSettingsSplitGroups(groups);
+  if (!parity.valid || !groupIntegrity.valid) {
+    throw new Error(
+      `Settings-Cutover abgebrochen: ${
+        !parity.valid
+          ? `Legacy-/Split-Parität fehlt (${[...parity.missingGroups, ...parity.mismatchedGroups].join(", ") || "unbekannt"})`
+          : "vorbereitete Settings-Gruppen sind unvollständig"
+      }.`
+    );
+  }
+
+  const foundationValidation = validateDataStackFoundation({ ...graph, legacyComics });
+  if (!foundationValidation.valid) {
+    throw new Error(`Settings-Cutover abgebrochen: ${foundationValidation.problems.slice(0, 4).join(" ")}`);
+  }
+
+  const startedAt = new Date().toISOString();
+  const transaction = database.transaction(
+    [...SETTINGS_SPLIT_STORES, DATA_STACK_SNAPSHOT_STORE, DATA_STACK_META_STORE],
+    "readwrite"
+  );
+  let snapshot = existingSnapshot;
+  if (!snapshot) {
+    snapshot = createDataStackSnapshotRecord({
+      kind: SETTINGS_CUTOVER_SNAPSHOT_KIND,
+      createdAt: startedAt,
+      appVersion: APP_CONFIG.appVersion,
+      databaseVersion: DATABASE_VERSION,
+      dataFormatVersion: APP_CONFIG.dataFormatVersion,
+      archiveModelVersion: ARCHIVE_MODEL_VERSION,
+      dataStackVersion: DATA_STACK_VERSION,
+      settings: legacySettings,
+      archiveMeta,
+      series: graph.series,
+      issues: graph.issues,
+      copies: graph.copies,
+      legacyComics
+    });
+    transaction.objectStore(DATA_STACK_SNAPSHOT_STORE).put(snapshot);
+  }
+  putSettingsFieldRecords(transaction, legacySettings, undefined, startedAt);
+  transaction.objectStore(DATA_STACK_META_STORE).put({
+    key: SETTINGS_CUTOVER_META_KEY,
+    settingsCutoverVersion: SETTINGS_CUTOVER_VERSION,
+    status: "running",
+    startedAt,
+    completedAt: null,
+    source: "field-records",
+    legacySettingsFrozenAt: startedAt,
+    snapshotId: snapshot.id,
+    snapshotCreatedAt: snapshot.createdAt,
+    parity,
+    error: ""
+  });
+  await transactionDone(transaction);
+
+  const fieldValues = await readSettingsFieldValues(database);
+  const integrity = validateSettingsFieldValues(fieldValues);
+  const normalizedFieldSettings = normalizeSettings(fieldValues);
+  const fieldDifferences = findChangedSettingsFields(legacySettings, normalizedFieldSettings);
+  if (!integrity.valid || fieldDifferences.length) {
+    const error = new Error(
+      `Settings-Cutover-Prüfung fehlgeschlagen: ${
+        !integrity.valid
+          ? "aktive Feld-Datensätze sind unvollständig"
+          : `${fieldDifferences.length} Settings-Feld${fieldDifferences.length === 1 ? "" : "er"} weichen vom sicheren Ausgangsstand ab`
+      }.`
+    );
+    const failedTransaction = database.transaction(DATA_STACK_META_STORE, "readwrite");
+    failedTransaction.objectStore(DATA_STACK_META_STORE).put({
+      key: SETTINGS_CUTOVER_META_KEY,
+      settingsCutoverVersion: SETTINGS_CUTOVER_VERSION,
+      status: "failed",
+      startedAt,
+      completedAt: null,
+      source: "field-records",
+      legacySettingsFrozenAt: startedAt,
+      snapshotId: snapshot.id,
+      snapshotCreatedAt: snapshot.createdAt,
+      parity,
+      integrity,
+      fieldDifferences,
+      error: error.message
+    });
+    await transactionDone(failedTransaction);
+    throw error;
+  }
+
+  const completedAt = new Date().toISOString();
+  const meta = {
+    key: SETTINGS_CUTOVER_META_KEY,
+    settingsCutoverVersion: SETTINGS_CUTOVER_VERSION,
+    status: "complete",
+    startedAt,
+    completedAt,
+    source: "field-records",
+    legacySettingsFrozenAt: startedAt,
+    snapshotId: snapshot.id,
+    snapshotCreatedAt: snapshot.createdAt,
+    fieldCount: integrity.fieldCount,
+    parity,
+    integrity,
+    error: ""
+  };
+  const completeTransaction = database.transaction(DATA_STACK_META_STORE, "readwrite");
+  completeTransaction.objectStore(DATA_STACK_META_STORE).put(meta);
+  await transactionDone(completeTransaction);
+  return { ready: true, justCutOver: true, ...meta };
+}
+
+export async function verifySettingsCutoverIntegrity() {
+  const database = await getDatabase();
+  const [meta, values] = await Promise.all([
+    readSettingsCutoverMeta(database).catch(() => null),
+    readSettingsFieldValues(database)
+  ]);
+  const integrity = validateSettingsFieldValues(values);
+  return {
+    valid: isSettingsCutoverComplete(meta) && integrity.valid,
+    active: isSettingsCutoverComplete(meta),
+    settingsCutoverVersion: meta?.settingsCutoverVersion || SETTINGS_CUTOVER_VERSION,
+    source: isSettingsCutoverComplete(meta) ? "field-records" : "legacy-settings",
+    legacySettingsFrozenAt: meta?.legacySettingsFrozenAt || null,
+    integrity
+  };
+}
+
 export async function verifySettingsSplitParity() {
   const database = await getDatabase();
+  const [cutoverMeta, groups] = await Promise.all([
+    readSettingsCutoverMeta(database).catch(() => null),
+    readSettingsSplitRecords(database)
+  ]);
+  if (isSettingsCutoverComplete(cutoverMeta)) {
+    const values = await readSettingsFieldValues(database);
+    const integrity = validateSettingsFieldValues(values);
+    return {
+      valid: integrity.valid,
+      splitVersion: SETTINGS_SPLIT_VERSION,
+      groupCount: Object.keys(SETTINGS_SPLIT_STORE_BY_GROUP).length,
+      missingGroups: [],
+      mismatchedGroups: [],
+      cutover: true,
+      legacyComparisonSkipped: true,
+      integrity
+    };
+  }
   const legacySettings = normalizeSettings(await readSettingsValue(database));
-  const groups = await readSettingsSplitRecords(database);
   return compareSettingsSplit(legacySettings, groups);
 }
 
@@ -764,39 +1067,61 @@ export async function getDataStackStatus() {
   const splitResult = result.ready
     ? await ensureSettingsSplitReady()
     : { ready: false, status: "waiting", error: "Data-Stack-Foundation ist noch nicht bereit." };
-  const [meta, splitMeta, splitSnapshot, foundationSnapshot] = await Promise.all([
+  const cutoverResult = result.ready && splitResult.ready
+    ? await ensureSettingsCutoverReady()
+    : { ready: false, status: "waiting", error: splitResult.error || "Settings-Spiegelung ist noch nicht bereit." };
+
+  const [meta, splitMeta, cutoverMeta, cutoverSnapshot, splitSnapshot, foundationSnapshot] = await Promise.all([
     readDataStackMeta(database).catch(() => null),
     readSettingsSplitMeta(database).catch(() => null),
+    readSettingsCutoverMeta(database).catch(() => null),
+    getLatestDataStackSnapshotRecord(database, SETTINGS_CUTOVER_SNAPSHOT_KIND).catch(() => null),
     getLatestDataStackSnapshotRecord(database, SETTINGS_SPLIT_SNAPSHOT_KIND).catch(() => null),
     getLatestDataStackSnapshotRecord(database, DATA_STACK_FOUNDATION_KIND).catch(() => null)
   ]);
-  const snapshot = splitSnapshot || foundationSnapshot;
+  const snapshot = cutoverSnapshot || splitSnapshot || foundationSnapshot;
   const settingsSplit = {
     ready: Boolean(splitResult.ready),
     justPrepared: Boolean(splitResult.justPrepared),
     version: splitMeta?.settingsSplitVersion || splitResult.settingsSplitVersion || SETTINGS_SPLIT_VERSION,
-    status: splitMeta?.status || splitResult.status || "unknown",
-    completedAt: splitMeta?.completedAt || splitResult.completedAt || null,
-    parity: splitMeta?.parity || splitResult.parity || null,
-    error: splitMeta?.error || splitResult.error || "",
+    status: splitResult.status || splitMeta?.status || "unknown",
+    completedAt: splitResult.completedAt || splitMeta?.completedAt || null,
+    parity: splitResult.parity || splitMeta?.parity || null,
+    integrity: splitResult.integrity || null,
+    error: splitResult.error || splitMeta?.error || "",
     hasSnapshot: Boolean(splitSnapshot),
     snapshotId: splitSnapshot?.id || null,
     snapshotCreatedAt: splitSnapshot?.createdAt || null
   };
+  const settingsCutover = {
+    ready: Boolean(cutoverResult.ready),
+    justCutOver: Boolean(cutoverResult.justCutOver),
+    version: cutoverMeta?.settingsCutoverVersion || cutoverResult.settingsCutoverVersion || SETTINGS_CUTOVER_VERSION,
+    status: cutoverMeta?.status || cutoverResult.status || "unknown",
+    source: cutoverMeta?.source || cutoverResult.source || (cutoverResult.ready ? "field-records" : "legacy-settings"),
+    completedAt: cutoverMeta?.completedAt || cutoverResult.completedAt || null,
+    legacySettingsFrozenAt: cutoverMeta?.legacySettingsFrozenAt || cutoverResult.legacySettingsFrozenAt || null,
+    integrity: cutoverResult.integrity || cutoverMeta?.integrity || null,
+    error: cutoverResult.error || cutoverMeta?.error || "",
+    hasSnapshot: Boolean(cutoverSnapshot),
+    snapshotId: cutoverSnapshot?.id || null,
+    snapshotCreatedAt: cutoverSnapshot?.createdAt || null
+  };
   return {
-    ready: Boolean(result.ready && settingsSplit.ready),
+    ready: Boolean(result.ready && settingsSplit.ready && settingsCutover.ready),
     foundationReady: Boolean(result.ready),
-    justPrepared: Boolean(result.justPrepared || splitResult.justPrepared),
+    justPrepared: Boolean(result.justPrepared || splitResult.justPrepared || cutoverResult.justCutOver),
     dataStackVersion: meta?.dataStackVersion || DATA_STACK_VERSION,
     databaseVersion: DATABASE_VERSION,
-    status: settingsSplit.ready ? (meta?.status || result.status || "complete") : settingsSplit.status,
+    status: settingsCutover.ready ? (meta?.status || result.status || "complete") : settingsCutover.status,
     startedAt: meta?.startedAt || null,
-    completedAt: settingsSplit.completedAt || meta?.completedAt || null,
+    completedAt: settingsCutover.completedAt || settingsSplit.completedAt || meta?.completedAt || null,
     counts: meta?.counts || null,
     parity: meta?.parity || null,
     mirrorRepair: meta?.mirrorRepair || null,
     settingsSplit,
-    error: settingsSplit.error || meta?.error || result.error || "",
+    settingsCutover,
+    error: settingsCutover.error || settingsSplit.error || meta?.error || result.error || "",
     hasRollbackSnapshot: Boolean(snapshot),
     rollbackSnapshotId: snapshot?.id || null,
     rollbackSnapshotCreatedAt: snapshot?.createdAt || null
@@ -829,14 +1154,22 @@ export async function restoreLatestDataStackSnapshot() {
   snapshot.comics.forEach((record) => legacyStore.put(record));
   const restoredSettings = normalizeSettings(snapshot.settings || {});
   transaction.objectStore(SETTINGS_STORE).put({ key: SETTINGS_KEY, value: restoredSettings });
+  // Ein Data-Stack-Rollback stellt den sicheren Legacy-/Mirror-Ausgangszustand wieder her.
+  // Aktive Feld-Records eines bereits erfolgten Settings-Cutovers duerfen dabei nicht
+  // mit einem alten "complete"-Meta weiterleben, sonst wuerde getAppSettings() den
+  // gerade restaurierten Snapshot ignorieren. Die Split-Stores werden deshalb geleert,
+  // als 4.6.1-Gruppenmirror neu aufgebaut und der Cutover-Meta bewusst entfernt.
+  SETTINGS_SPLIT_STORES.forEach((storeName) => transaction.objectStore(storeName).clear());
   putSettingsSplitRecords(transaction, restoredSettings);
   if (snapshot.archiveMeta) transaction.objectStore(ARCHIVE_META_STORE).put({ ...snapshot.archiveMeta, key: ARCHIVE_CORE_META_KEY });
   const restoredAt = new Date().toISOString();
-  transaction.objectStore(DATA_STACK_META_STORE).put({
+  const dataStackMetaStore = transaction.objectStore(DATA_STACK_META_STORE);
+  dataStackMetaStore.delete(SETTINGS_CUTOVER_META_KEY);
+  dataStackMetaStore.put({
     key: DATA_STACK_META_KEY, dataStackVersion: DATA_STACK_VERSION, status: "complete", startedAt: restoredAt, completedAt: restoredAt, counts: validation.counts, parity: validation.parity, snapshotId: snapshot.id, snapshotCreatedAt: snapshot.createdAt, restoredAt, error: ""
   });
   await transactionDone(transaction);
-  archiveCorePromise = undefined; dataStackPromise = undefined; settingsSplitPromise = undefined;
+  archiveCorePromise = undefined; dataStackPromise = undefined; settingsSplitPromise = undefined; settingsCutoverPromise = undefined;
   return { snapshotId: snapshot.id, createdAt: snapshot.createdAt, counts: validation.counts };
 }
 
@@ -904,7 +1237,7 @@ export async function saveComic(comic) {
   }
 
   const [settings, existingSeries] = await Promise.all([
-    readSettingsValue(database),
+    readEffectiveSettingsValue(database),
     readAll(database, SERIES_STORE)
   ]);
   const catalog = buildSeriesCatalog({ legacyComics: [comic], settings, existingSeries });
@@ -1044,7 +1377,7 @@ export async function replaceAllComics(comics) {
   }
 
   const [settings, existingSeries, existingMeta] = await Promise.all([
-    readSettingsValue(database),
+    readEffectiveSettingsValue(database),
     readAll(database, SERIES_STORE),
     readArchiveMeta(database).catch(() => null)
   ]);
@@ -1160,7 +1493,7 @@ export async function saveComicsBatch(comics) {
   }
 
   const [settings, existingSeries, graph] = await Promise.all([
-    readSettingsValue(database),
+    readEffectiveSettingsValue(database),
     readAll(database, SERIES_STORE),
     readArchiveGraph(database)
   ]);
@@ -1367,18 +1700,36 @@ async function readCopiesForIssue(database, issueId) {
 
 export async function getAppSettings() {
   const database = await getDatabase();
-  const transaction = database.transaction(SETTINGS_STORE, "readonly");
-  const storedRecord = await requestToPromise(
-    transaction.objectStore(SETTINGS_STORE).get(SETTINGS_KEY)
-  );
-  await transactionDone(transaction);
-
-  return normalizeSettings(storedRecord?.value);
+  const cutoverStatus = await ensureSettingsCutoverReady();
+  if (cutoverStatus.ready) {
+    try {
+      return await readCutoverSettingsValue(database);
+    } catch (error) {
+      console.warn("Settings-Cutover konnte nicht gelesen werden; statischer Legacy-Fallback wird verwendet:", error);
+    }
+  }
+  return normalizeSettings(await readSettingsValue(database));
 }
 
 export async function saveAppSettings(settings) {
   const normalizedSettings = normalizeSettings(settings);
   const database = await getDatabase();
+  const cutoverStatus = await ensureSettingsCutoverReady();
+
+  if (cutoverStatus.ready) {
+    const currentSettings = await readCutoverSettingsValue(database);
+    const changes = findChangedSettingsFields(currentSettings, normalizedSettings);
+    if (!changes.length) return normalizedSettings;
+
+    const changedStores = [...new Set(changes.map(({ groupName }) => SETTINGS_SPLIT_STORE_BY_GROUP[groupName]))];
+    const transaction = database.transaction(changedStores, "readwrite");
+    putSettingsFieldRecords(transaction, normalizedSettings, changes);
+    await transactionDone(transaction);
+    return normalizedSettings;
+  }
+
+  // Sicherheitsfallback vor einem erfolgreichen Cutover: Legacy bleibt aktiv und
+  // bereits vorbereitete Split-Stores werden weiterhin atomar gespiegelt.
   const splitStatus = await ensureSettingsSplitReady();
   const stores = splitStatus.ready ? [SETTINGS_STORE, ...SETTINGS_SPLIT_STORES] : [SETTINGS_STORE];
   const transaction = database.transaction(stores, "readwrite");

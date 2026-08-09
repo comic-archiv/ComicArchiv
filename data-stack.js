@@ -133,6 +133,8 @@ export function createDataStackSnapshotRecord({
 
 export const SETTINGS_SPLIT_VERSION = 1;
 export const SETTINGS_SPLIT_SNAPSHOT_KIND = "pre-settings-split-v1";
+export const SETTINGS_CUTOVER_VERSION = 1;
+export const SETTINGS_CUTOVER_SNAPSHOT_KIND = "pre-settings-cutover-v1";
 
 export const SETTINGS_GROUP_FIELDS = Object.freeze({
   preferences: Object.freeze([
@@ -225,6 +227,69 @@ export function compareSettingsSplit(settings = {}, groups = {}) {
     missingGroups,
     mismatchedGroups
   };
+}
+
+export function validateSettingsSplitGroups(groups = {}) {
+  const missingGroups = [];
+  const missingFields = {};
+  const unexpectedFields = {};
+
+  for (const [groupName, fields] of Object.entries(SETTINGS_GROUP_FIELDS)) {
+    const actual = groups?.[groupName];
+    if (!actual || typeof actual !== "object" || Array.isArray(actual)) {
+      missingGroups.push(groupName);
+      continue;
+    }
+
+    const missing = fields.filter((field) => !Object.prototype.hasOwnProperty.call(actual, field));
+    if (missing.length) missingFields[groupName] = missing;
+
+    const expected = new Set(fields);
+    const unexpected = Object.keys(actual).filter((field) => !expected.has(field)).sort();
+    if (unexpected.length) unexpectedFields[groupName] = unexpected;
+  }
+
+  return {
+    valid: missingGroups.length === 0 && Object.keys(missingFields).length === 0,
+    splitVersion: SETTINGS_SPLIT_VERSION,
+    groupCount: Object.keys(SETTINGS_GROUP_FIELDS).length,
+    missingGroups,
+    missingFields,
+    unexpectedFields
+  };
+}
+
+export function findChangedSettingsGroups(currentGroups = {}, nextGroups = {}) {
+  return Object.keys(SETTINGS_GROUP_FIELDS).filter(
+    (groupName) => stableStringify(currentGroups?.[groupName]) !== stableStringify(nextGroups?.[groupName])
+  );
+}
+
+export function validateSettingsFieldValues(settings = {}) {
+  const source = settings && typeof settings === "object" && !Array.isArray(settings) ? settings : {};
+  const missingFields = {};
+  for (const [groupName, fields] of Object.entries(SETTINGS_GROUP_FIELDS)) {
+    const missing = fields.filter((field) => !Object.prototype.hasOwnProperty.call(source, field));
+    if (missing.length) missingFields[groupName] = missing;
+  }
+  return {
+    valid: Object.keys(missingFields).length === 0,
+    splitVersion: SETTINGS_SPLIT_VERSION,
+    fieldCount: Object.values(SETTINGS_GROUP_FIELDS).flat().length,
+    missingFields
+  };
+}
+
+export function findChangedSettingsFields(currentSettings = {}, nextSettings = {}) {
+  const changes = [];
+  for (const [groupName, fields] of Object.entries(SETTINGS_GROUP_FIELDS)) {
+    for (const field of fields) {
+      if (stableStringify(currentSettings?.[field]) !== stableStringify(nextSettings?.[field])) {
+        changes.push({ groupName, field });
+      }
+    }
+  }
+  return changes;
 }
 
 function createComicMap(comics) {
