@@ -85,6 +85,7 @@ import {
   getDiagnosticLog,
   recordDiagnosticError
 } from "./diagnostics.js";
+import { createLazyDomManager } from "./lazy-dom.js";
 import {
   CALENDAR_CATALOG_URL,
   buildCalendarIcs,
@@ -635,6 +636,51 @@ const elements = {
   toast: document.querySelector("#toast")
 };
 
+const lazyDom = createLazyDomManager(elements, {
+  afterMount: {
+    conditionAssistant: renderConditionAssistantOptions,
+    diagnostics: configureTestMode
+  }
+});
+
+function handleLazyModalClick(event) {
+  const target = event.target;
+  if (!target || typeof target.closest !== "function") return;
+
+  if (target.closest("#close-share-card, [data-close-share-card]")) return closeShareCardModal();
+  if (target.closest("#share-card-share")) return handleShareCardShare();
+
+  if (target.closest("#close-diagnostics, [data-close-diagnostics]")) return closeDiagnosticsModal();
+  if (target.closest("#run-diagnostics")) return runDiagnostics();
+  if (target.closest("#export-diagnostics")) return handleDiagnosticExport();
+  if (target.closest("#clear-diagnostics")) return handleClearDiagnostics();
+  if (target.closest("#open-test-mode")) return toggleTestMode();
+  if (target.closest("#open-recovery")) {
+    closeDiagnosticsModal();
+    window.EntenarchivRecovery?.open({
+      title: "Diagnose & sicherer Modus",
+      summary: "Erstelle hier unabhängige Notfall-Backups oder repariere beschädigte Kalenderdaten."
+    });
+    return;
+  }
+
+  if (target.closest("#close-import, [data-close-import]")) return closeImportModal();
+  if (target.closest("#import-submit")) return handleImportSubmit();
+
+  if (target.closest("#close-condition-assistant, [data-close-condition-assistant]")) return closeConditionAssistant();
+  if (target.closest("#condition-assistant-back")) return changeConditionAssistantStep(-1);
+  if (target.closest("#condition-assistant-next")) return changeConditionAssistantStep(1);
+  if (target.closest("#condition-assistant-apply")) return applyConditionAssistantRecommendation();
+}
+
+function handleLazyModalChange(event) {
+  const target = event.target;
+  if (!target) return;
+  if (target.id === "share-card-template") return renderShareCardPreview();
+  if (target.id === "import-file") return handleImportFileSelection();
+  if (elements.conditionAssistantModal?.contains(target)) return handleConditionAssistantChange(event);
+}
+
 let toastTimer;
 let importInProgress = false;
 let barcodeScanner;
@@ -694,7 +740,6 @@ async function initializeApp() {
   }
 
   renderConditionGuide();
-  renderConditionAssistantOptions();
   populateConfiguration();
   updateDuplicateConditionVisibility();
   updateScannerModeUI();
@@ -1065,12 +1110,8 @@ function bindEvents() {
   elements.dashboardStats.addEventListener("click", handleDashboardStatClick);
   elements.collectorMission.addEventListener("click", handleCollectorMissionClick);
   elements.openShareCard.addEventListener("click", openShareCardModal);
-  elements.closeShareCard.addEventListener("click", closeShareCardModal);
-  elements.shareCardTemplate.addEventListener("change", renderShareCardPreview);
-  elements.shareCardShare.addEventListener("click", handleShareCardShare);
-  elements.shareCardModal.addEventListener("click", (event) => {
-    if (event.target.closest("[data-close-share-card]")) closeShareCardModal();
-  });
+  document.addEventListener("click", handleLazyModalClick);
+  document.addEventListener("change", handleLazyModalChange);
   elements.milestoneCelebrationClose.addEventListener("click", hideMilestoneCelebration);
   elements.coverFile.addEventListener("change", handleCoverFileSelection);
   elements.removeCover.addEventListener("click", handleRemoveCoverFromForm);
@@ -1201,21 +1242,6 @@ function bindEvents() {
   elements.requestPersistence.addEventListener("click", handlePersistenceRequest);
   elements.openDiagnostics.addEventListener("click", openDiagnosticsModal);
   elements.openArchiveMigration?.addEventListener("click", () => openArchiveMigrationModal());
-  elements.closeDiagnostics.addEventListener("click", closeDiagnosticsModal);
-  elements.runDiagnostics.addEventListener("click", runDiagnostics);
-  elements.exportDiagnostics.addEventListener("click", handleDiagnosticExport);
-  elements.clearDiagnostics.addEventListener("click", handleClearDiagnostics);
-  elements.openRecovery.addEventListener("click", () => {
-    closeDiagnosticsModal();
-    window.EntenarchivRecovery?.open({
-      title: "Diagnose & sicherer Modus",
-      summary: "Erstelle hier unabhängige Notfall-Backups oder repariere beschädigte Kalenderdaten."
-    });
-  });
-  elements.diagnosticsModal.addEventListener("click", (event) => {
-    if (event.target.closest("[data-close-diagnostics]")) closeDiagnosticsModal();
-  });
-  elements.openTestMode?.addEventListener("click", toggleTestMode);
   elements.leaveTestMode?.addEventListener("click", toggleTestMode);
   elements.openMedia.addEventListener("click", openMediaPage);
   elements.closeMedia.addEventListener("click", closeMediaPage);
@@ -1227,9 +1253,6 @@ function bindEvents() {
   elements.openMediaImport.addEventListener("click", openImportModal);
   elements.deleteAllCovers.addEventListener("click", handleDeleteAllCovers);
   elements.openImport.addEventListener("click", openImportModal);
-  elements.closeImport.addEventListener("click", closeImportModal);
-  elements.importFile.addEventListener("change", handleImportFileSelection);
-  elements.importSubmit.addEventListener("click", handleImportSubmit);
   elements.openSeriesManager.addEventListener("click", openSeriesModal);
   elements.closeSeries.addEventListener("click", closeSeriesModal);
   elements.seriesForm.addEventListener("submit", handleSaveCustomSeries);
@@ -1265,32 +1288,19 @@ function bindEvents() {
     button.addEventListener("click", openConditionGuide);
   });
   document.addEventListener("click", handleConditionAssistantTrigger);
-  elements.closeConditionAssistant.addEventListener("click", closeConditionAssistant);
-  elements.conditionAssistantBack.addEventListener("click", () => changeConditionAssistantStep(-1));
-  elements.conditionAssistantNext.addEventListener("click", () => changeConditionAssistantStep(1));
-  elements.conditionAssistantApply.addEventListener("click", applyConditionAssistantRecommendation);
-  elements.conditionAssistantModal.addEventListener("change", handleConditionAssistantChange);
-  elements.conditionAssistantModal.addEventListener("click", (event) => {
-    if (event.target.closest("[data-close-condition-assistant]")) closeConditionAssistant();
-  });
   elements.closeConditionGuide.addEventListener("click", closeConditionGuide);
   elements.conditionGuideModal.addEventListener("click", (event) => {
     if (event.target.closest("[data-close-condition-guide]")) closeConditionGuide();
-  });
-  elements.importModal.addEventListener("click", (event) => {
-    if (event.target.closest("[data-close-import]")) {
-      closeImportModal();
-    }
   });
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     if (elements.archiveMigrationModal && !elements.archiveMigrationModal.classList.contains("hidden")) return acknowledgeArchiveMigration();
-    if (!elements.conditionAssistantModal.classList.contains("hidden")) return closeConditionAssistant();
+    if (elements.conditionAssistantModal && !elements.conditionAssistantModal.classList.contains("hidden")) return closeConditionAssistant();
     if (!elements.conditionGuideModal.classList.contains("hidden")) return closeConditionGuide();
-    if (!elements.diagnosticsModal.classList.contains("hidden")) return closeDiagnosticsModal();
-    if (!elements.shareCardModal.classList.contains("hidden")) return closeShareCardModal();
-    if (!elements.importModal.classList.contains("hidden")) return closeImportModal();
+    if (elements.diagnosticsModal && !elements.diagnosticsModal.classList.contains("hidden")) return closeDiagnosticsModal();
+    if (elements.shareCardModal && !elements.shareCardModal.classList.contains("hidden")) return closeShareCardModal();
+    if (elements.importModal && !elements.importModal.classList.contains("hidden")) return closeImportModal();
     if (!elements.releaseLinkModal.classList.contains("hidden")) return closeReleaseLinkModal();
     if (!elements.seriesModal.classList.contains("hidden")) return closeSeriesModal();
     if (!elements.missingDetailModal.classList.contains("hidden")) return closeMissingDetailModal();
@@ -1492,6 +1502,7 @@ function handleConditionAssistantTrigger(event) {
 }
 
 function openConditionAssistant({ currentCode, label, apply, notesAvailable = false, returnTarget = null }) {
+  lazyDom.ensure("conditionAssistant");
   const assessment = createConditionAssessment(currentCode);
   if (assessment.comicComplete !== false) assessment.comicComplete = true;
   assessment.coverComplete = true;
@@ -1510,7 +1521,7 @@ function openConditionAssistant({ currentCode, label, apply, notesAvailable = fa
 }
 
 function closeConditionAssistant() {
-  if (elements.conditionAssistantModal.classList.contains("hidden")) return;
+  if (!elements.conditionAssistantModal || elements.conditionAssistantModal.classList.contains("hidden")) return;
   elements.conditionAssistantModal.classList.add("hidden");
   restoreBodyModalState();
   const target = state.conditionAssistantTarget?.returnTarget;
@@ -3980,6 +3991,7 @@ function createShareCardContext() {
 }
 
 async function openShareCardModal() {
+  lazyDom.ensure("shareCard");
   elements.shareCardMessage.textContent = "";
   elements.shareCardModal.classList.remove("hidden");
   document.body.classList.add("modal-open");
@@ -3988,6 +4000,7 @@ async function openShareCardModal() {
 }
 
 function closeShareCardModal() {
+  if (!elements.shareCardModal) return;
   elements.shareCardModal.classList.add("hidden");
   elements.shareCardMessage.textContent = "";
   restoreBodyModalState();
@@ -6885,6 +6898,7 @@ function normalizeHttpUrl(value) {
 }
 
 async function openDiagnosticsModal() {
+  lazyDom.ensure("diagnostics");
   elements.diagnosticsModal.classList.remove("hidden");
   document.body.classList.add("modal-open");
   elements.diagnosticsMessage.textContent = "";
@@ -6893,6 +6907,7 @@ async function openDiagnosticsModal() {
 }
 
 function closeDiagnosticsModal() {
+  if (!elements.diagnosticsModal) return;
   elements.diagnosticsModal.classList.add("hidden");
   restoreBodyModalState();
 }
@@ -7207,6 +7222,7 @@ function showExportMessage(message, type = "info") {
 }
 
 function openImportModal(event) {
+  lazyDom.ensure("import");
   state.importReturnTarget = event?.currentTarget || elements.openImport;
   state.importBackup = null;
   elements.importFile.value = "";
@@ -7224,7 +7240,7 @@ function openImportModal(event) {
 }
 
 function closeImportModal() {
-  if (importInProgress || elements.importModal.classList.contains("hidden")) {
+  if (!elements.importModal || importInProgress || elements.importModal.classList.contains("hidden")) {
     return;
   }
 

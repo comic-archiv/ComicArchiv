@@ -841,6 +841,7 @@
 <p class="condition-guide-footnote">Tipp: Bewerte den Gesamteindruck und notiere besondere Mängel wie Lochung, Restaurierung, Tesa, fehlende Sammelmarken oder Wasserschäden zusätzlich im Notizfeld.</p>
 </section>
 </div>
+<template id="lazy-condition-assistant-template">
 <div aria-labelledby="condition-assistant-title" aria-modal="true" class="modal condition-assistant-modal hidden" id="condition-assistant-modal" role="dialog">
 <div class="modal-backdrop" data-close-condition-assistant=""></div>
 <section class="modal-card condition-assistant-card">
@@ -865,6 +866,8 @@
 <footer class="condition-assistant-actions"><button class="secondary-button hidden" id="condition-assistant-back" type="button">Zurück</button><button class="primary-button" id="condition-assistant-next" type="button">Weiter</button><button class="primary-button hidden" id="condition-assistant-apply" type="button">Empfehlung übernehmen</button></footer>
 </section>
 </div>
+</template>
+<template id="lazy-import-template">
 <div aria-labelledby="import-title" aria-modal="true" class="modal hidden" id="import-modal" role="dialog">
 <div class="modal-backdrop" data-close-import=""></div>
 <section class="modal-card">
@@ -877,6 +880,7 @@
 <p aria-live="polite" class="form-message" id="import-message" role="status"></p>
 </section>
 </div>
+</template>
 <div aria-labelledby="archive-migration-title" aria-modal="true" class="modal hidden" id="archive-migration-modal" role="dialog">
 <div class="modal-backdrop" data-close-archive-migration=""></div>
 <section class="modal-card archive-migration-card">
@@ -891,6 +895,7 @@
 <p aria-live="polite" class="form-message" id="archive-migration-message" role="status"></p>
 </section>
 </div>
+<template id="lazy-diagnostics-template">
 <div aria-labelledby="diagnostics-title" aria-modal="true" class="modal hidden" id="diagnostics-modal" role="dialog">
 <div class="modal-backdrop" data-close-diagnostics=""></div>
 <section class="modal-card diagnostics-card">
@@ -910,6 +915,7 @@
 <p aria-live="polite" class="form-message" id="diagnostics-message" role="status"></p>
 </section>
 </div>
+</template>
 <div aria-hidden="true" class="recovery-panel" hidden id="recovery-panel" role="dialog" aria-modal="true" aria-labelledby="recovery-title">
 <section class="recovery-card">
 <div class="recovery-heading">
@@ -930,6 +936,7 @@
 <p aria-live="polite" class="form-message recovery-status" id="recovery-status" role="status"></p>
 </section>
 </div>
+<template id="lazy-share-card-template">
 <div aria-labelledby="share-card-title" aria-modal="true" class="modal hidden" id="share-card-modal" role="dialog">
 <div class="modal-backdrop" data-close-share-card=""></div>
 <section class="modal-card share-card-modal-card">
@@ -941,6 +948,7 @@
 <p aria-live="polite" class="form-message" id="share-card-message" role="status"></p>
 </section>
 </div>
+</template>
 <div aria-live="polite" class="milestone-celebration hidden" id="milestone-celebration"><span aria-hidden="true" class="milestone-celebration-mark">★</span><span><small>Meilenstein erreicht</small><strong id="milestone-celebration-title"></strong><span id="milestone-celebration-copy"></span></span><button aria-label="Meilenstein schließen" id="milestone-celebration-close" type="button">×</button></div>
 <div aria-atomic="true" aria-live="polite" class="toast" id="toast" role="status"></div>
 <script src="./recovery.js"></script>

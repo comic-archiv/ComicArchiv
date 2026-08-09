@@ -9,6 +9,7 @@ const CORE_SHELL = Object.freeze([
   "./release-radar.js",
   "./asset-loader.js",
   "./diagnostics.js",
+  "./lazy-dom.js",
   "./config.js",
   "./archive-model.js",
   "./storage.js",

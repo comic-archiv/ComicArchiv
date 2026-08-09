@@ -16,6 +16,7 @@ const runtimeEntries = [
   "collector-goals.js",
   "config.js",
   "diagnostics.js",
+  "lazy-dom.js",
   "duckipedia.js",
   "export.js",
   "manifest.webmanifest",
