@@ -1,0 +1,55 @@
+name: Entenarchiv 4.5.3 DOM Lazy Cleanup
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: entenarchiv-2b2-write
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: DOM Lazy-Mount anwenden und vollstaendig pruefen
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Projekt laden
+        uses: actions/checkout@v7
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Geprueften 2B2-Stand anwenden
+        run: node ComicArchiv-4.5.3-dom-lazy-apply.mjs
+
+      - name: Vollstaendige Projekt-CI
+        run: npm run ci
+
+      - name: Einmalige Cleanup-Artefakte entfernen
+        run: |
+          rm -f ComicArchiv-4.5.3-dom-lazy-apply.mjs
+          rm -f CHECKSUMS-SHA256.txt
+          rm -f .github/workflows/run-4.5.3-cleanup.yml
+          rm -f .github/workflows/run-4.5.3-source-cleanup.yml
+          rm -f .github/workflows/run-4.5.3-cascade-cleanup.yml
+          rm -f .github/workflows/run-4.5.3-dom-lazy-cleanup.yml
+          git rm -r --cached --ignore-unmatch dist || true
+
+      - name: 2B2 committen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Keine Aenderungen zu committen."
+          else
+            git commit -m "chore: lazy-mount rare modal DOM"
+            git push
+          fi
