@@ -7,10 +7,12 @@ import {
   migrateLegacyComicsToArchive
 } from "../archive-model.js";
 import {
+  canSafelyRepairLegacyMirror,
   compareLegacyMirror,
   compareSettingsSplit,
   createDataStackSnapshotRecord,
   DATA_STACK_FOUNDATION_KIND,
+  describeLegacyMirrorDifferences,
   mergeSplitSettings,
   SETTINGS_GROUP_FIELDS,
   SETTINGS_SPLIT_SNAPSHOT_KIND,
@@ -220,3 +222,35 @@ test("Storage spiegelt Settings weiterhin in Legacy und die sechs Schema-6-Store
   assert.match(storage, /SETTINGS_SPLIT_SNAPSHOT_KIND/);
 });
 
+
+test("Legacy-Mirror-Reparatur ist nur bei identischen IDs und validem Archivgraph erlaubt", () => {
+  const { archive, mirror } = createFoundationFixture();
+  const changedMirror = mirror.map((comic) => ({ ...comic, series: "Alter Reihenname" }));
+  const mismatch = validateDataStackFoundation({ ...archive, legacyComics: changedMirror });
+  assert.equal(mismatch.graphValid, true);
+  assert.equal(mismatch.parity.mismatchedIds.length, 1);
+  assert.equal(canSafelyRepairLegacyMirror(mismatch), true);
+
+  const missing = validateDataStackFoundation({ ...archive, legacyComics: [] });
+  assert.equal(missing.parity.missingInMirror.length, 1);
+  assert.equal(canSafelyRepairLegacyMirror(missing), false);
+});
+
+test("Legacy-Mirror-Diagnose benennt die abweichenden Felder ohne Daten zu veraendern", () => {
+  const { mirror } = createFoundationFixture();
+  const changedMirror = mirror.map((comic) => ({ ...comic, series: "Alter Reihenname", title: "Alter Titel" }));
+  const report = describeLegacyMirrorDifferences(mirror, changedMirror);
+  assert.equal(report.mismatchCount, 1);
+  assert.deepEqual(report.entries, [{ id: mirror[0].id, fields: ["series", "title"] }]);
+  assert.deepEqual(report.fieldCounts, { series: 1, title: 1 });
+});
+
+test("Storage repariert nur den abgeleiteten Mirror und synchronisiert Reihen-Aenderungen kuenftig mit", async () => {
+  const storage = await read("storage.js");
+  assert.match(storage, /canSafelyRepairLegacyMirror\(validation\)/);
+  assert.match(storage, /LEGACY_MIRROR_REPAIR_SNAPSHOT_KIND/);
+  assert.match(storage, /legacyStore\.clear\(\);/);
+  assert.match(storage, /projectedComics\.forEach\(\(record\) => legacyStore\.put\(record\)\)/);
+  assert.match(storage, /const projected = materializeLegacyComics\(affectedIssues, affectedCopies, nextSeries\);/);
+  assert.match(storage, /database\.transaction\(\[SERIES_STORE, COMICS_STORE\], "readwrite"\)/);
+});

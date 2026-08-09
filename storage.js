@@ -25,9 +25,12 @@ import {
   validateArchiveGraph
 } from "./archive-model.js";
 import {
+  canSafelyRepairLegacyMirror,
   compareSettingsSplit,
   createDataStackSnapshotRecord,
   DATA_STACK_FOUNDATION_KIND,
+  describeLegacyMirrorDifferences,
+  LEGACY_MIRROR_REPAIR_SNAPSHOT_KIND,
   SETTINGS_GROUP_FIELDS,
   SETTINGS_SPLIT_SNAPSHOT_KIND,
   SETTINGS_SPLIT_VERSION,
@@ -515,7 +518,57 @@ async function migrateDataStackFoundation() {
       getLatestDataStackSnapshotRecord(database, DATA_STACK_FOUNDATION_KIND),
       readRecord(database, DATA_STACK_META_STORE, DATA_STACK_UPGRADE_META_KEY)
     ]);
-    const validation = validateDataStackFoundation({ ...graph, legacyComics });
+    let effectiveLegacyComics = legacyComics;
+    let validation = validateDataStackFoundation({ ...graph, legacyComics: effectiveLegacyComics });
+    let mirrorRepair = null;
+
+    if (!validation.valid && canSafelyRepairLegacyMirror(validation)) {
+      const repairedAt = new Date().toISOString();
+      const projectedComics = materializeLegacyComics(graph.issues, graph.copies, graph.series);
+      const differences = describeLegacyMirrorDifferences(projectedComics, legacyComics);
+      const repairSnapshot = {
+        ...createDataStackSnapshotRecord({
+          kind: LEGACY_MIRROR_REPAIR_SNAPSHOT_KIND,
+          createdAt: repairedAt,
+          appVersion: APP_CONFIG.appVersion,
+          databaseVersion: DATABASE_VERSION,
+          dataFormatVersion: APP_CONFIG.dataFormatVersion,
+          archiveModelVersion: ARCHIVE_MODEL_VERSION,
+          dataStackVersion: DATA_STACK_VERSION,
+          settings,
+          archiveMeta,
+          series: graph.series,
+          issues: graph.issues,
+          copies: graph.copies,
+          legacyComics
+        }),
+        repair: {
+          reason: "same-ids-mismatched-records",
+          mismatchedCount: validation.parity.mismatchedIds.length,
+          fieldCounts: differences.fieldCounts,
+          sampledDifferences: differences.entries
+        }
+      };
+      const repairTransaction = database.transaction([COMICS_STORE, DATA_STACK_SNAPSHOT_STORE], "readwrite");
+      const legacyStore = repairTransaction.objectStore(COMICS_STORE);
+      legacyStore.clear();
+      projectedComics.forEach((record) => legacyStore.put(record));
+      repairTransaction.objectStore(DATA_STACK_SNAPSHOT_STORE).put(repairSnapshot);
+      await transactionDone(repairTransaction);
+
+      effectiveLegacyComics = projectedComics;
+      validation = validateDataStackFoundation({ ...graph, legacyComics: effectiveLegacyComics });
+      if (!validation.valid) {
+        throw new Error(`Legacy-Mirror-Reparatur konnte die Parität nicht wiederherstellen: ${validation.problems.slice(0, 4).join(" ")}`);
+      }
+      mirrorRepair = {
+        repairedAt,
+        repairedCount: differences.mismatchCount,
+        snapshotId: repairSnapshot.id,
+        fieldCounts: differences.fieldCounts
+      };
+    }
+
     if (!validation.valid) throw new Error(`Data-Stack-Prüfung fehlgeschlagen: ${validation.problems.slice(0, 4).join(" ")}`);
 
     const completedAt = new Date().toISOString();
@@ -535,7 +588,7 @@ async function migrateDataStackFoundation() {
         series: graph.series,
         issues: graph.issues,
         copies: graph.copies,
-        legacyComics
+        legacyComics: effectiveLegacyComics
       });
       transaction.objectStore(DATA_STACK_SNAPSHOT_STORE).put(snapshot);
     }
@@ -547,6 +600,7 @@ async function migrateDataStackFoundation() {
       completedAt,
       counts: validation.counts,
       parity: validation.parity,
+      mirrorRepair,
       snapshotId: snapshot.id,
       snapshotCreatedAt: snapshot.createdAt,
       upgradedFromDatabaseVersion: Number(upgradeMeta?.fromDatabaseVersion ?? DATABASE_VERSION),
@@ -740,6 +794,7 @@ export async function getDataStackStatus() {
     completedAt: settingsSplit.completedAt || meta?.completedAt || null,
     counts: meta?.counts || null,
     parity: meta?.parity || null,
+    mirrorRepair: meta?.mirrorRepair || null,
     settingsSplit,
     error: settingsSplit.error || meta?.error || result.error || "",
     hasRollbackSnapshot: Boolean(snapshot),
@@ -1041,8 +1096,19 @@ export async function saveSeriesDefinition(definition) {
   const core = await ensureArchiveCoreReady();
   if (!core.ready) return null;
   const normalized = createSeriesDefinition(definition);
-  const transaction = database.transaction(SERIES_STORE, "readwrite");
+  const graph = await readArchiveGraph(database);
+  const nextSeries = [
+    ...graph.series.filter((entry) => String(entry?.id || "") !== normalized.id),
+    normalized
+  ];
+  const affectedIssues = graph.issues.filter((issue) => String(issue?.seriesId || "") === normalized.id);
+  const affectedIssueIds = new Set(affectedIssues.map((issue) => String(issue.id)));
+  const affectedCopies = graph.copies.filter((copy) => affectedIssueIds.has(String(copy?.issueId || "")));
+  const projected = materializeLegacyComics(affectedIssues, affectedCopies, nextSeries);
+  const transaction = database.transaction([SERIES_STORE, COMICS_STORE], "readwrite");
   transaction.objectStore(SERIES_STORE).put(normalized);
+  const legacyStore = transaction.objectStore(COMICS_STORE);
+  projected.forEach((record) => legacyStore.put(record));
   await transactionDone(transaction);
   return normalized;
 }

@@ -1,6 +1,16 @@
-# Entenarchiv 4.6.1
+# Entenarchiv 4.6.2
 
-Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.6.1 führt **Data Stack v2** kontrolliert weiter: Die bisherige `settings`-Struktur bleibt als aktiver Rückfallpfad erhalten, während alle normalisierten Einstellungen zusätzlich verlustfrei in sechs fachlich getrennte Schema-6-Stores gespiegelt werden. Vor der Aufteilung wird ein eigener lokaler Snapshot angelegt und die Parität automatisch geprüft.
+Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.6.2 stabilisiert **Data Stack v2** vor dem späteren Cutover: Der Archivgraph bleibt die aktive Sammlungsquelle; ein veralteter Legacy-`comics`-Mirror kann bei identischer Ausgabenmenge jetzt sicher aus dem Archivgraph neu erzeugt werden. Vor jeder Reparatur wird der abweichende Mirror vollständig lokal gesichert.
+
+## Neu in 4.6.2
+
+- Data Stack v2 erkennt den sicheren Reparaturfall: Archivgraph gültig, identische Ausgabe-IDs, aber abweichende Mirror-Inhalte.
+- Vor der Reparatur wird ein `pre-legacy-mirror-repair-v1`-Snapshot aus Archivgraph, bisherigem Mirror und Einstellungen gespeichert.
+- Nur der abgeleitete Legacy-Mirror wird neu materialisiert; `seriesCatalog`, `issues`, `copies`, Einstellungen und Cover bleiben unverändert.
+- Fehlende oder zusätzliche Ausgabe-IDs werden weiterhin **nicht** automatisch repariert und stoppen die Foundation.
+- Der Reparatur-Snapshot protokolliert, welche Felder in den abweichenden Mirror-Einträgen betroffen waren.
+- Änderungen an Reihen-Definitionen aktualisieren künftig gleichzeitig die betroffenen Legacy-Mirror-Einträge und verhindern damit erneute Seriennamen-Desynchronisation.
+- Settings Split bleibt in der sicheren Spiegelphase: Legacy-`settings` ist weiterhin aktiv, die sechs Schema-6-Stores werden parallel gepflegt.
 
 ## Neu in 4.6.1
 
@@ -9,14 +19,14 @@ Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung 
 - Legacy-`settings` bleibt in dieser Zwischenstufe weiterhin aktiv und wird bei Änderungen synchron mit den sechs neuen Stores geschrieben.
 - Data-Stack-Status prüft zusätzlich die Settings-Parität; bei Abweichungen bleibt die bisherige Struktur funktionsfähig und der neue Stack wird als nicht bereit markiert.
 
+## Neu in 4.6.0
 
-- IndexedDB-Schema 6 mit vorbereiteten Stores für Preferences, Kalender, Fehlbände, Flohmarkt, Release Radar und Sammelziele
-- automatischer lokaler Data-Stack-Snapshot aus Archivgraph, `comics`-Mirror und bisherigem Settings-Datensatz
-- harte Paritätsprüfung zwischen `seriesCatalog`/`issues`/`copies` und dem weiterhin gepflegten `comics`-Mirror
-- interne Restore-Funktion für den letzten Data-Stack-Snapshot
-- technischer Data-Stack-Status unter Backup & Sicherheit
-- Datenformat bleibt 9 und Archivmodell bleibt 1
-- **noch keine Ablösung** von `comics` oder dem bisherigen Settings-Datensatz; diese erfolgt erst in den nächsten 4.6-Schritten
+- IndexedDB-Schema 6 mit vorbereiteten Stores für Preferences, Kalender, Fehlbände, Flohmarkt, Release Radar und Sammelziele.
+- Automatischer lokaler Data-Stack-Snapshot aus Archivgraph, `comics`-Mirror und bisherigem Settings-Datensatz.
+- Harte Paritätsprüfung zwischen `seriesCatalog`/`issues`/`copies` und dem weiterhin gepflegten `comics`-Mirror.
+- Interne Restore-Funktion für den letzten Data-Stack-Snapshot.
+- Datenformat bleibt 9 und Archivmodell bleibt 1.
+- `comics` und der bisherige Settings-Datensatz bleiben weiterhin aktiv; die Ablösung erfolgt erst nach erfolgreicher Paritätsphase.
 
 ## Neu in 4.5.3
 
@@ -102,14 +112,14 @@ Die Gestaltung verwendet den Entenarchiv-Farbraum, klare Typografie, Druckraster
 
 ## Technische Eckdaten
 
-- App-Version: `4.6.1`
+- App-Version: `4.6.2`
 - Datenformat: `9`
 - Archivmodell: `1`
 - Data-Stack-Version: `1`
 - IndexedDB-Schema: `6`
 - Foundation-Migration mit lokalem Snapshot; bestehende Live-Stores bleiben aktiv
 - neue Module `data-stack.js`, `collector-goals.js` und `share-cards.js`
-- Service-Worker-Cache: `v4-6-1`
+- Service-Worker-Cache: `v4-6-2`
 - Scanner- und PDF-Bibliothek weiterhin nur bei Bedarf geladen
 - GitHub Pages mit vorgeschalteter GitHub-Actions-Prüfung
 

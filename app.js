@@ -829,7 +829,10 @@ async function refreshDataStackStatus() {
     const status = await getDataStackStatus();
     state.dataStackStatus = status;
     if (status.ready && status.hasRollbackSnapshot && status.parity?.valid !== false && status.settingsSplit?.parity?.valid !== false) {
-      elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion} · Einstellungen gespiegelt`;
+      const repairLabel = Number(status.mirrorRepair?.repairedCount || 0) > 0
+        ? ` · Mirror repariert (${status.mirrorRepair.repairedCount})`
+        : "";
+      elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion}${repairLabel} · Einstellungen gespiegelt`;
       elements.dataStackSummary.dataset.type = "success";
     } else if (status.ready) {
       elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion}`;

@@ -1,5 +1,13 @@
 # Änderungen
 
+## 4.6.2 – Legacy Mirror Repair
+
+- Data Stack v2 kann einen veralteten `comics`-Mirror automatisch aus dem validen Archivgraph neu erzeugen, wenn auf beiden Seiten exakt dieselben Ausgabe-IDs vorhanden sind.
+- Vor der Reparatur wird ein eigener `pre-legacy-mirror-repair-v1`-Snapshot mit dem bisherigen Mirror und einer Feld-Diagnose gespeichert.
+- Fehlende oder zusätzliche Ausgabe-IDs bleiben weiterhin ein harter Fehler und werden nicht automatisch überschrieben.
+- Änderungen an Reihen-Definitionen synchronisieren künftig die betroffenen Legacy-Mirror-Einträge, damit Seriennamen nicht erneut auseinanderlaufen.
+- Der Settings Split bleibt weiterhin in der Spiegelphase; ein Read/Write-Cutover findet in diesem Hotfix noch nicht statt.
+
 ## 4.6.1 – Settings Split Mirror
 
 - Data Stack v2 spiegelt den bisherigen Settings-Datensatz verlustfrei in sechs fachlich getrennte Schema-6-Stores.

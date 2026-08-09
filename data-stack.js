@@ -1,6 +1,7 @@
 import { materializeLegacyComics, validateArchiveGraph } from "./archive-model.js";
 
 export const DATA_STACK_FOUNDATION_KIND = "pre-data-stack-v1";
+export const LEGACY_MIRROR_REPAIR_SNAPSHOT_KIND = "pre-legacy-mirror-repair-v1";
 
 export function validateDataStackFoundation({ series = [], issues = [], copies = [], legacyComics = [] } = {}) {
   const graphValidation = validateArchiveGraph({ series, issues, copies });
@@ -16,6 +17,7 @@ export function validateDataStackFoundation({ series = [], issues = [], copies =
 
   return {
     valid: graphValidation.valid && parity.valid,
+    graphValid: graphValidation.valid,
     problems,
     counts: {
       ...graphValidation.counts,
@@ -42,6 +44,46 @@ export function compareLegacyMirror(projectedComics = [], legacyComics = []) {
     missingInMirror,
     extraInMirror,
     mismatchedIds
+  };
+}
+
+export function canSafelyRepairLegacyMirror(validation = {}) {
+  const parity = validation?.parity || {};
+  return Boolean(
+    validation?.graphValid === true
+    && Array.isArray(parity.missingInMirror)
+    && parity.missingInMirror.length === 0
+    && Array.isArray(parity.extraInMirror)
+    && parity.extraInMirror.length === 0
+    && Array.isArray(parity.mismatchedIds)
+    && parity.mismatchedIds.length > 0
+  );
+}
+
+export function describeLegacyMirrorDifferences(projectedComics = [], legacyComics = [], { limit = 250 } = {}) {
+  const projectedMap = createComicMap(projectedComics);
+  const legacyMap = createComicMap(legacyComics);
+  const ids = [...projectedMap.keys()]
+    .filter((id) => legacyMap.has(id) && stableStringify(projectedMap.get(id)) !== stableStringify(legacyMap.get(id)))
+    .sort();
+  const fieldCounts = new Map();
+  const entries = [];
+
+  for (const id of ids.slice(0, Math.max(0, Number(limit) || 0))) {
+    const projected = projectedMap.get(id);
+    const legacy = legacyMap.get(id);
+    const fields = [...new Set([...Object.keys(projected || {}), ...Object.keys(legacy || {})])]
+      .filter((field) => stableStringify(projected?.[field]) !== stableStringify(legacy?.[field]))
+      .sort();
+    fields.forEach((field) => fieldCounts.set(field, (fieldCounts.get(field) || 0) + 1));
+    entries.push({ id, fields });
+  }
+
+  return {
+    mismatchCount: ids.length,
+    sampledCount: entries.length,
+    entries,
+    fieldCounts: Object.fromEntries([...fieldCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])))
   };
 }
 
