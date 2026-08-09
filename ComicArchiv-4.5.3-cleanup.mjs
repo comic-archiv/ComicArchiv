@@ -103,11 +103,9 @@ async function updateServiceWorker() {
   // damit kleine Formatunterschiede im bestehenden 4.5.2-Worker nicht zum Abbruch führen.
   source = source
     .replace(/^\s*"\.\/",\s*\n/m, "")
-    .replace(/^\s*"\.\/scanner\.js",\s*\n/m, "")
-    .replace(/^\s*"\.\/share-cards\.js",\s*\n/m, "")
     .replace(/^\s*"\.\/icons\/icon-1024\.png",\s*\n/m, "");
 
-  const optionalBlock = `const OPTIONAL_SHELL = Object.freeze([\n  "./data/kalender-index.json",\n  "./data/ltb-2026.ics",\n  "./scanner.js",\n  "./share-cards.js"\n]);`;
+  const optionalBlock = `const OPTIONAL_SHELL = Object.freeze([\n  "./data/kalender-index.json",\n  "./data/ltb-2026.ics"\n]);`;
   source = source.replace(
     /const OPTIONAL_SHELL = Object\.freeze\(\[\s*"\.\/data\/kalender-index\.json",\s*"\.\/data\/ltb-2026\.ics"(?:,\s*"\.\/scanner\.js",\s*"\.\/share-cards\.js")?\s*\]\);/m,
     optionalBlock
@@ -137,7 +135,7 @@ async function updateServiceWorker() {
   const requiredChecks = [
     ['const APP_VERSION = "4.5.3";', "App-Version 4.5.3"],
     ['const CACHE_NAME = `${CACHE_PREFIX}v4-5-3`;', "Cache-Version v4-5-3"],
-    [optionalBlock, "On-Demand-Assets"],
+    [optionalBlock, "optionale Kalender-Assets"],
     ["const NETWORK_FIRST_PATHS", "Network-first-Pfade"],
     ["async function cacheFirst(request)", "Cache-first-Strategie"],
     ["shouldUseNetworkFirst(request, requestUrl) ?", "Strategieauswahl"]
@@ -151,8 +149,11 @@ async function updateServiceWorker() {
   const coreMatch = source.match(/const CORE_SHELL = Object\.freeze\(\[([\s\S]*?)\]\);/);
   if (!coreMatch) throw new Error(`${file}: CORE_SHELL konnte nicht gelesen werden.`);
   const core = coreMatch[1];
-  if (/"\.\/",/.test(core) || /icon-1024\.png/.test(core) || /scanner\.js/.test(core) || /share-cards\.js/.test(core)) {
+  if (/"\.\/",/.test(core) || /icon-1024\.png/.test(core)) {
     throw new Error(`${file}: Core-Precache enthält nach dem Cleanup noch Altlasten.`);
+  }
+  if (!/scanner\.js/.test(core) || !/share-cards\.js/.test(core)) {
+    throw new Error(`${file}: Scanner und Share Cards müssen in 4.5.3 weiter vollständig offline verfügbar bleiben.`);
   }
 
   if (source !== original) await writeText(file, source);
@@ -282,51 +283,6 @@ async function main() {
     `  await upsertComics(entries);`
   );
 
-  await replaceOnce(
-    "app.js",
-    `import { MagazineBarcodeScanner, parseSupplementToBandNumber } from "./scanner.js";\nimport {\n  SCANNER_MODES,`,
-    `// Scanner-Implementierung wird erst beim Öffnen dynamisch geladen.\nimport {\n  SCANNER_MODES,`
-  );
-  await replaceOnce(
-    "app.js",
-    `import {\n  buildShareCardPayload,\n  canvasToPngBlob,\n  renderShareCard\n} from "./share-cards.js";\nimport {\n  RELEASE_RADAR_FILTERS,`,
-    `// Share-Card-Renderer wird erst beim Öffnen dynamisch geladen.\nimport {\n  RELEASE_RADAR_FILTERS,`
-  );
-  await replaceOnce(
-    "app.js",
-    `} from "./release-radar.js";\nconst THEME_STORAGE_KEY = "comicarchiv-theme";`,
-    `} from "./release-radar.js";\n\nlet scannerModulePromise = null;\nlet shareCardsModulePromise = null;\nfunction loadScannerModule() {\n  if (!scannerModulePromise) scannerModulePromise = import("./scanner.js");\n  return scannerModulePromise;\n}\nfunction loadShareCardsModule() {\n  if (!shareCardsModulePromise) shareCardsModulePromise = import("./share-cards.js");\n  return shareCardsModulePromise;\n}\n\nconst THEME_STORAGE_KEY = "comicarchiv-theme";`
-  );
-  await replaceOnce(
-    "app.js",
-    `function getBarcodeScanner() {\n  if (!barcodeScanner) {\n    barcodeScanner = new MagazineBarcodeScanner(elements.scannerCameraTarget);\n  }\n  return barcodeScanner;\n}`,
-    `async function getBarcodeScanner() {\n  if (!barcodeScanner) {\n    const { MagazineBarcodeScanner } = await loadScannerModule();\n    barcodeScanner = new MagazineBarcodeScanner(elements.scannerCameraTarget);\n  }\n  return barcodeScanner;\n}`
-  );
-  await replaceOnce(
-    "app.js",
-    `  const scanner = getBarcodeScanner();\n  if (!scanner.isSupported()) {`,
-    `  const scanner = await getBarcodeScanner();\n  if (!scanner.isSupported()) {`
-  );
-  await replaceOnce(
-    "app.js",
-    `    await ensureScannerLibrary();\n    const payload = await getBarcodeScanner().decodeImageFile(file);`,
-    `    await ensureScannerLibrary();\n    const scanner = await getBarcodeScanner();\n    const payload = await scanner.decodeImageFile(file);`
-  );
-  await replaceOnce(
-    "app.js",
-    `async function handleScannerManualCode() {\n  const extension = elements.scannerManualCode.value.trim();\n  const bandNumber = parseSupplementToBandNumber(extension);`,
-    `async function handleScannerManualCode() {\n  const extension = elements.scannerManualCode.value.trim();\n  const { parseSupplementToBandNumber } = await loadScannerModule();\n  const bandNumber = parseSupplementToBandNumber(extension);`
-  );
-  await replaceOnce(
-    "app.js",
-    `  try {\n    const payload = buildShareCardPayload(elements.shareCardTemplate.value, createShareCardContext());\n    await renderShareCard(elements.shareCardCanvas, payload);\n    elements.shareCardMessage.textContent = "";`,
-    `  try {\n    const { buildShareCardPayload, renderShareCard } = await loadShareCardsModule();\n    const payload = buildShareCardPayload(elements.shareCardTemplate.value, createShareCardContext());\n    await renderShareCard(elements.shareCardCanvas, payload);\n    elements.shareCardMessage.textContent = "";`
-  );
-  await replaceOnce(
-    "app.js",
-    `  try {\n    const payload = buildShareCardPayload(elements.shareCardTemplate.value, createShareCardContext());\n    await renderShareCard(elements.shareCardCanvas, payload);\n    const blob = await canvasToPngBlob(elements.shareCardCanvas);`,
-    `  try {\n    const { buildShareCardPayload, canvasToPngBlob, renderShareCard } = await loadShareCardsModule();\n    const payload = buildShareCardPayload(elements.shareCardTemplate.value, createShareCardContext());\n    await renderShareCard(elements.shareCardCanvas, payload);\n    const blob = await canvasToPngBlob(elements.shareCardCanvas);`
-  );
 
   await replaceOnce(
     "scripts/validate-project.mjs",
@@ -344,54 +300,72 @@ async function main() {
     `for (const asset of shellAssets) {\n  if (!asset.startsWith("./") || asset === "./") continue;\n  const localPath = asset.slice(2).split(/[?#]/)[0];\n  if (!existsSync(join(root, localPath))) errors.push(\`Service Worker referenziert fehlende Datei: ${'${asset}'}\`);\n}\nconst coreShellAssets = extractArrayStrings(serviceWorkerSource, "CORE_SHELL");\nif (coreShellAssets.includes("./")) errors.push("Service Worker darf ./ und ./index.html nicht doppelt precachen.");\nif (coreShellAssets.includes("./icons/icon-1024.png")) errors.push("Das 1024er Icon darf nicht Teil des Core-Precaches sein.");\nif (!serviceWorkerSource.includes("async function cacheFirst(request)")) errors.push("Cache-first-Strategie für statische Assets fehlt im Service Worker.");`
   );
 
-  // Bestehende UI-Tests an die neue On-Demand-Modulstruktur anpassen.
-  // Funktionalität bleibt gleich: Scanner und Share Cards sind weiterhin App-, Build-
-  // und Offline-Bestandteil, werden im App-Code aber dynamisch statt statisch importiert.
+
+  // 4.5.3 bleibt absichtlich kompatibel mit den bestehenden 4.5.x-UI-Verträgen:
+  // Scanner und Share Cards bleiben statische App- und Offline-Bestandteile.
   {
-    const file = "tests/ui-45.test.mjs";
-    const source = await readText(file);
-    const lines = source.split(/\r?\n/);
-    let changedTest = false;
-
-    const replaceStaticImportAssertion = (moduleName) => {
-      const candidates = lines
-        .map((line, index) => ({ line, index }))
-        .filter(({ line }) =>
-          line.includes("assert.match(app") &&
-          line.includes(moduleName) &&
-          line.includes("from")
-        );
-
-      if (candidates.length > 1) {
-        throw new Error(`${file}: mehrere alte Static-Import-Tests für ${moduleName} gefunden.`);
-      }
-      if (candidates.length === 1) {
-        const { index } = candidates[0];
-        lines[index] = `  assert.match(app, /import\\("\\.\\/${moduleName.replace(/\./g, "\\.")}"\\)/);`;
-        changedTest = true;
-        console.log(`  ✓ ${file}: ${moduleName} auf Dynamic-Import-Test umgestellt`);
-        return;
-      }
-
-      const dynamicAlreadyPresent = lines.some((line) =>
-        line.includes("assert.match(app") &&
-        line.includes(moduleName) &&
-        line.includes("import")
-      );
-      if (!dynamicAlreadyPresent) {
-        throw new Error(`${file}: weder alter noch neuer Import-Test für ${moduleName} gefunden.`);
-      }
-    };
-
-    replaceStaticImportAssertion("share-cards.js");
-    replaceStaticImportAssertion("scanner.js");
-
-    if (changedTest) {
-      await writeText(file, `${lines.join("\n").replace(/\n+$/, "")}\n`);
+    const appSource = await readText("app.js");
+    const workerSource = await readText("service-worker.js");
+    if (!appSource.includes('from "./scanner.js"')) {
+      throw new Error("app.js: Scanner-Import wurde unerwartet verändert.");
+    }
+    if (!appSource.includes('from "./share-cards.js"')) {
+      throw new Error("app.js: Share-Card-Import wurde unerwartet verändert.");
+    }
+    const coreMatch = workerSource.match(/const CORE_SHELL = Object\.freeze\(\[([\s\S]*?)\]\);/);
+    const coreShell = coreMatch?.[1] || "";
+    if (!coreShell.includes("./scanner.js") || !coreShell.includes("./share-cards.js")) {
+      throw new Error("service-worker.js: Scanner oder Share Cards fehlen im Core-Precache.");
     }
   }
 
-  const cleanupTest = `import test from "node:test";\nimport assert from "node:assert/strict";\nimport { readFile } from "node:fs/promises";\nimport { dirname, resolve } from "node:path";\nimport { fileURLToPath } from "node:url";\n\nconst root = resolve(dirname(fileURLToPath(import.meta.url)), "..");\nconst source = (file) => readFile(resolve(root, file), "utf8");\n\ntest("4.5.3 nutzt einen schlanken, strategiegetrennten Service Worker", async () => {\n  const worker = await source("service-worker.js");\n  const core = worker.match(/const CORE_SHELL = Object\\.freeze\\(\\[([\\s\\S]*?)\\]\\);/)?.[1] || "";\n  assert.doesNotMatch(core, /\"\\.\\/\",/);\n  assert.doesNotMatch(core, /icon-1024\\.png/);\n  assert.match(worker, /async function cacheFirst\\(request\\)/);\n  assert.match(worker, /shouldUseNetworkFirst\\(request, requestUrl\\)/);\n  assert.doesNotMatch(core, /scanner\\.js|share-cards\\.js/);\n  const optional = worker.match(/const OPTIONAL_SHELL = Object\\.freeze\\(\\[([\\s\\S]*?)\\]\\);/)?.[1] || "";\n  assert.match(optional, /scanner\\.js/);\n  assert.match(optional, /share-cards\\.js/);\n});\n\ntest("versteckte Vollansichten werden nicht bei jedem Collection-Refresh gerendert", async () => {\n  const app = await source("app.js");\n  assert.match(app, /if \\(!elements\\.collectionPage\\.classList\\.contains\\(\"hidden\"\\)\\) renderCollection\\(\\);/);\n  assert.match(app, /if \\(!elements\\.missingPage\\.classList\\.contains\\(\"hidden\"\\)\\) renderMissingBands\\(\\);/);\n  assert.match(app, /if \\(!elements\\.progressPage\\.classList\\.contains\\(\"hidden\"\\)\\) renderSeriesProgress\\(\\);/);\n  assert.match(app, /if \\(elements\\.statisticsPage\\.classList\\.contains\\("hidden"\\)\\) return;/);\n  assert.match(app, /function openStatisticsPage\\(\\) \\{\\s+elements\\.statisticsPage\\.classList\\.remove\\("hidden"\\);\\s+renderStats\\(\\);/);\n  assert.doesNotMatch(app, /from "\\.\\/scanner\\.js"/);\n  assert.doesNotMatch(app, /from "\\.\\/share-cards\\.js"/);\n  assert.match(app, /import\\("\\.\\/scanner\\.js"\\)/);\n  assert.match(app, /import\\("\\.\\/share-cards\\.js"\\)/);\n});\n\ntest("Bulk-Speicherung und Metadaten-GC sind im Storage-Layer vorhanden", async () => {\n  const storage = await source("storage.js");\n  const app = await source("app.js");\n  assert.match(storage, /export async function saveComicsBatch\\(comics\\)/);\n  assert.match(storage, /database\\.transaction\\(stores, \"readwrite\"\\)/);\n  assert.match(storage, /export async function pruneMetadataCache/);\n  assert.match(app, /await upsertComics\\(entries\\);/);\n});\n\ntest("private Exporte und generiertes dist sind von Git ausgeschlossen", async () => {\n  const gitignore = await source(".gitignore");\n  assert.match(gitignore, /^dist\\/$/m);\n  assert.match(gitignore, /^Entenarchiv-Medien-Backup-\\*\\.json$/m);\n  assert.match(gitignore, /^Entenarchiv-Diagnose-\\*\\.json$/m);\n});\n`;
+  const cleanupTest = String.raw`import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const source = (file) => readFile(resolve(root, file), "utf8");
+
+test("4.5.3 nutzt einen schlanken, strategiegetrennten Service Worker", async () => {
+  const worker = await source("service-worker.js");
+  const core = worker.match(/const CORE_SHELL = Object\.freeze\(\[([\s\S]*?)\]\);/)?.[1] || "";
+  assert.doesNotMatch(core, /"\.\/",/);
+  assert.doesNotMatch(core, /icon-1024\.png/);
+  assert.match(core, /scanner\.js/);
+  assert.match(core, /share-cards\.js/);
+  assert.match(worker, /async function cacheFirst\(request\)/);
+  assert.match(worker, /shouldUseNetworkFirst\(request, requestUrl\)/);
+});
+
+test("versteckte Vollansichten werden nicht bei jedem Collection-Refresh gerendert", async () => {
+  const app = await source("app.js");
+  assert.match(app, /if \(!elements\.collectionPage\.classList\.contains\("hidden"\)\) renderCollection\(\);/);
+  assert.match(app, /if \(!elements\.missingPage\.classList\.contains\("hidden"\)\) renderMissingBands\(\);/);
+  assert.match(app, /if \(!elements\.progressPage\.classList\.contains\("hidden"\)\) renderSeriesProgress\(\);/);
+  assert.match(app, /if \(elements\.statisticsPage\.classList\.contains\("hidden"\)\) return;/);
+  assert.match(app, /function openStatisticsPage\(\) \{\s+elements\.statisticsPage\.classList\.remove\("hidden"\);\s+renderStats\(\);/);
+  assert.match(app, /from "\.\/scanner\.js"/);
+  assert.match(app, /from "\.\/share-cards\.js"/);
+});
+
+test("Bulk-Speicherung und Metadaten-GC sind im Storage-Layer vorhanden", async () => {
+  const storage = await source("storage.js");
+  const app = await source("app.js");
+  assert.match(storage, /export async function saveComicsBatch\(comics\)/);
+  assert.match(storage, /database\.transaction\(stores, "readwrite"\)/);
+  assert.match(storage, /export async function pruneMetadataCache/);
+  assert.match(app, /await upsertComics\(entries\);/);
+});
+
+test("private Exporte und generiertes dist sind von Git ausgeschlossen", async () => {
+  const gitignore = await source(".gitignore");
+  assert.match(gitignore, /^dist\/$/m);
+  assert.match(gitignore, /^Entenarchiv-Medien-Backup-\*\.json$/m);
+  assert.match(gitignore, /^Entenarchiv-Diagnose-\*\.json$/m);
+});
+`;
   const cleanupTestPath = "tests/core-cleanup.test.mjs";
   if (!existsSync(pathFor(cleanupTestPath)) || (await readText(cleanupTestPath)) !== cleanupTest) {
     await writeText(cleanupTestPath, cleanupTest);
@@ -412,7 +386,7 @@ async function main() {
   await replaceOnce(
     "README.md",
     "## Neu in 4.5.2",
-    `## Neu in 4.5.3\n\n- statische App-Dateien werden nach der Installation cache-first geladen; Navigation, Versions- und Kalenderdaten bleiben frisch\n- das 1024er App-Icon und der doppelte Root-Einstieg wurden aus dem Core-Precache entfernt\n- Collection-Refreshes rendern schwere Unterseiten und die Statistik nur noch, wenn sie tatsächlich sichtbar sind\n- Scanner- und Share-Card-Module werden erst bei tatsächlicher Nutzung dynamisch geladen\n- Bulk-Änderungen laufen über einen gemeinsamen Storage-Batch statt über viele einzelne Save-Zyklen\n- veraltete Duckipedia-Cache-Einträge werden beim Start automatisch nach der konfigurierten TTL entfernt\n- private Backups/Exporte und generiertes dist sind vor versehentlichen Commits geschützt\n- fest verdrahtete 2026er Kalender-URL als Default entfernt; Jahrespläne kommen über den Kalenderindex\n- keine Datenmigration; Datenformat 9, Archivmodell 1 und IndexedDB-Schema 5 bleiben unverändert\n\n## Neu in 4.5.2`
+    `## Neu in 4.5.3\n\n- statische App-Dateien werden nach der Installation cache-first geladen; Navigation, Versions- und Kalenderdaten bleiben frisch\n- das 1024er App-Icon und der doppelte Root-Einstieg wurden aus dem Core-Precache entfernt\n- Collection-Refreshes rendern schwere Unterseiten und die Statistik nur noch, wenn sie tatsächlich sichtbar sind\n- Bulk-Änderungen laufen über einen gemeinsamen Storage-Batch statt über viele einzelne Save-Zyklen\n- veraltete Duckipedia-Cache-Einträge werden beim Start automatisch nach der konfigurierten TTL entfernt\n- private Backups/Exporte und generiertes dist sind vor versehentlichen Commits geschützt\n- fest verdrahtete 2026er Kalender-URL als Default entfernt; Jahrespläne kommen über den Kalenderindex\n- keine Datenmigration; Datenformat 9, Archivmodell 1 und IndexedDB-Schema 5 bleiben unverändert\n\n## Neu in 4.5.2`
   );
   await replaceOnce(
     "README.md",
@@ -426,7 +400,7 @@ async function main() {
   await replaceOnce(
     "CHANGELOG.md",
     `# Änderungen\n\n## 4.5.2 – Dashboard-, Share-Card- und Kalender-Polish`,
-    `# Änderungen\n\n## 4.5.3 – Core Cleanup\n### Performance\n- statische App-Assets laufen nach Installation cache-first; Navigation, Versionsdatei und Kalenderdaten bleiben network-first\n- 1024er Icon und doppelter Root-Einstieg aus dem Core-Precache entfernt\n- schwere Collection-Unterseiten und die Statistik rendern nur noch, wenn sie sichtbar sind\n- Scanner und Share Cards werden als echte On-Demand-Module dynamisch geladen\n- Bulk-Speicherpfad bündelt Änderungen in einer IndexedDB-Transaktion\n\n### Datenhygiene\n- Duckipedia-Metadaten-Cache wird anhand der bestehenden 90-Tage-TTL automatisch bereinigt\n- feste 2026er Kalender-URL aus den Defaults entfernt; der Kalenderindex ist die Quelle für Jahrespläne\n- private Backups/Exporte und generiertes dist werden über .gitignore geschützt\n- Duckipedia-Nutzung in den Drittanbieterhinweisen dokumentiert\n\n### Technik\n- App-Version und Service-Worker-Cache auf 4.5.3 angehoben\n- Datenformat bleibt Version 9\n- Archivmodell bleibt Version 1\n- IndexedDB-Schema bleibt Version 5\n- keine Datenmigration erforderlich\n- zusätzliche Regressionstests für Cache-, Render-, Batch- und Repo-Hygiene\n\n## 4.5.2 – Dashboard-, Share-Card- und Kalender-Polish`
+    `# Änderungen\n\n## 4.5.3 – Core Cleanup\n### Performance\n- statische App-Assets laufen nach Installation cache-first; Navigation, Versionsdatei und Kalenderdaten bleiben network-first\n- 1024er Icon und doppelter Root-Einstieg aus dem Core-Precache entfernt\n- schwere Collection-Unterseiten und die Statistik rendern nur noch, wenn sie sichtbar sind\n- Scanner und Share Cards bleiben unverändert als App- und Offline-Bestandteile erhalten\n- Bulk-Speicherpfad bündelt Änderungen in einer IndexedDB-Transaktion\n\n### Datenhygiene\n- Duckipedia-Metadaten-Cache wird anhand der bestehenden 90-Tage-TTL automatisch bereinigt\n- feste 2026er Kalender-URL aus den Defaults entfernt; der Kalenderindex ist die Quelle für Jahrespläne\n- private Backups/Exporte und generiertes dist werden über .gitignore geschützt\n- Duckipedia-Nutzung in den Drittanbieterhinweisen dokumentiert\n\n### Technik\n- App-Version und Service-Worker-Cache auf 4.5.3 angehoben\n- Datenformat bleibt Version 9\n- Archivmodell bleibt Version 1\n- IndexedDB-Schema bleibt Version 5\n- keine Datenmigration erforderlich\n- zusätzliche Regressionstests für Cache-, Render-, Batch- und Repo-Hygiene\n\n## 4.5.2 – Dashboard-, Share-Card- und Kalender-Polish`
   );
 
   if (existsSync(resolve(root, ".git"))) {
