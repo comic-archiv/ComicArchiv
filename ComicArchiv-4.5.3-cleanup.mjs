@@ -118,7 +118,7 @@ async function syncCurrentReleaseVersionTests() {
     const assertionPattern = /assert\.(?:equal|strictEqual|deepEqual|match|ok)\([\s\S]*?\);/g;
     next = next.replace(assertionPattern, (assertion) => {
       const isCurrentReleaseAssertion =
-        /APP_CONFIG\.appVersion|APP_VERSION|appVersion|package(?:Json)?\.version|versionJson|version\.json|recovery\.js|service-worker\.js|app-version|CACHE_NAME|v4-5-2/.test(assertion) ||
+        /APP_CONFIG\.appVersion|APP_VERSION|appVersion|packageSource|packageJson|versionSource|versionJson|configSource|recoverySource|workerSource|serviceWorkerSource|version\.json|recovery\.js|service-worker\.js|app-version|CACHE_NAME|v4-5-2/.test(assertion) ||
         /4\.5\.2/.test(assertion) && /Datenformat|Datenbank|durchgängig|Version/.test(assertion);
 
       if (!isCurrentReleaseAssertion) return assertion;
@@ -153,7 +153,7 @@ async function syncCurrentReleaseVersionTests() {
       const looksLikeCurrentVersionAssertion =
         /assert\./.test(line) &&
         /4(?:\\\.)?\.?5(?:\\\.)?\.?2|v4-5-2/.test(line) &&
-        /APP_CONFIG|APP_VERSION|appVersion|package|version|recovery|service-worker|Datenformat|Datenbank/.test(line);
+        /APP_CONFIG|APP_VERSION|appVersion|packageSource|packageJson|versionSource|versionJson|configSource|recoverySource|workerSource|serviceWorkerSource|version\.json|recovery|service-worker|Datenformat|Datenbank/.test(line);
       if (looksLikeCurrentVersionAssertion) {
         stale.push(`${file}:${index + 1}: ${line.trim().slice(0, 180)}`);
       }
