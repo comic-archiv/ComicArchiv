@@ -36,6 +36,8 @@ import {
   describeLegacyMirrorDifferences,
   findChangedSettingsFields,
   LEGACY_MIRROR_REPAIR_SNAPSHOT_KIND,
+  LEGACY_STORAGE_RETIREMENT_SNAPSHOT_KIND,
+  LEGACY_STORAGE_RETIREMENT_VERSION,
   SETTINGS_CUTOVER_SNAPSHOT_KIND,
   SETTINGS_CUTOVER_VERSION,
   SETTINGS_GROUP_FIELDS,
@@ -72,6 +74,7 @@ const DATA_STACK_META_KEY = "data-stack";
 const DATA_STACK_UPGRADE_META_KEY = "schema-upgrade-v6";
 const SETTINGS_SPLIT_META_KEY = "settings-split";
 const SETTINGS_CUTOVER_META_KEY = "settings-cutover";
+const LEGACY_STORAGE_RETIREMENT_META_KEY = "legacy-storage-retirement";
 const SETTINGS_KEY = "app";
 const SETTINGS_SPLIT_STORE_BY_GROUP = Object.freeze({
   preferences: PREFERENCES_STORE,
@@ -88,6 +91,7 @@ let archiveCorePromise;
 let dataStackPromise;
 let settingsSplitPromise;
 let settingsCutoverPromise;
+let legacyRetirementPromise;
 
 export function getStorageMode() {
   return STORAGE_MODE;
@@ -197,6 +201,7 @@ function createDatabaseConnection() {
         dataStackPromise = undefined;
         settingsSplitPromise = undefined;
         settingsCutoverPromise = undefined;
+        legacyRetirementPromise = undefined;
       };
       resolve(database);
     };
@@ -214,6 +219,7 @@ function getDatabase() {
       dataStackPromise = undefined;
       settingsSplitPromise = undefined;
       settingsCutoverPromise = undefined;
+      legacyRetirementPromise = undefined;
       throw error;
     });
   }
@@ -282,6 +288,17 @@ async function readSettingsCutoverMeta(database) {
   return record || null;
 }
 
+async function readLegacyStorageRetirementMeta(database) {
+  const transaction = database.transaction(DATA_STACK_META_STORE, "readonly");
+  const record = await requestToPromise(transaction.objectStore(DATA_STACK_META_STORE).get(LEGACY_STORAGE_RETIREMENT_META_KEY));
+  await transactionDone(transaction);
+  return record || null;
+}
+
+function isLegacyStorageRetired(meta) {
+  return Boolean(meta?.status === "complete" && meta.legacyStorageRetirementVersion === LEGACY_STORAGE_RETIREMENT_VERSION);
+}
+
 function isSettingsCutoverComplete(meta) {
   return Boolean(meta?.status === "complete" && meta.settingsCutoverVersion === SETTINGS_CUTOVER_VERSION);
 }
@@ -318,11 +335,7 @@ async function readCutoverSettingsValue(database) {
 async function readEffectiveSettingsValue(database) {
   const cutoverMeta = await readSettingsCutoverMeta(database).catch(() => null);
   if (isSettingsCutoverComplete(cutoverMeta)) {
-    try {
-      return await readCutoverSettingsValue(database);
-    } catch (error) {
-      console.warn("Getrennte Einstellungen konnten nicht gelesen werden; Legacy-Fallback wird verwendet:", error);
-    }
+    return readCutoverSettingsValue(database);
   }
   return normalizeSettings(await readSettingsValue(database));
 }
@@ -1009,6 +1022,145 @@ async function migrateSettingsCutover() {
   return { ready: true, justCutOver: true, ...meta };
 }
 
+async function ensureLegacyStorageRetired() {
+  if (!legacyRetirementPromise) {
+    legacyRetirementPromise = retireLegacyStorage().catch((error) => {
+      legacyRetirementPromise = undefined;
+      return {
+        ready: false,
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error)
+      };
+    });
+  }
+  return legacyRetirementPromise;
+}
+
+async function retireLegacyStorage() {
+  const database = await getDatabase();
+  const [foundation, cutover] = await Promise.all([
+    ensureDataStackFoundationReady(),
+    ensureSettingsCutoverReady()
+  ]);
+  if (!foundation.ready) throw new Error("Legacy-Speicher können erst nach einer vollständigen Data-Stack-Foundation stillgelegt werden.");
+  if (!cutover.ready) throw new Error("Legacy-Speicher können erst nach einem erfolgreichen Settings-Cutover stillgelegt werden.");
+
+  const existingMeta = await readLegacyStorageRetirementMeta(database).catch(() => null);
+  if (isLegacyStorageRetired(existingMeta)) {
+    const [legacyComicCount, legacySettingsCount] = await Promise.all([
+      countStoreRecords(database, COMICS_STORE),
+      countStoreRecords(database, SETTINGS_STORE)
+    ]);
+    if (legacyComicCount === 0 && legacySettingsCount === 0) {
+      return { ready: true, justRetired: false, ...existingMeta };
+    }
+  }
+
+  const [graph, activeSettings, fieldValues, legacyComics, legacySettingsRaw, archiveMeta, existingSnapshot] = await Promise.all([
+    readArchiveGraph(database),
+    readCutoverSettingsValue(database),
+    readSettingsFieldValues(database),
+    readAll(database, COMICS_STORE),
+    readSettingsValue(database),
+    readArchiveMeta(database),
+    getLatestDataStackSnapshotRecord(database, LEGACY_STORAGE_RETIREMENT_SNAPSHOT_KIND)
+  ]);
+  const graphValidation = validateArchiveGraph(graph);
+  if (!graphValidation.valid) {
+    throw new Error(`Legacy-Speicher-Stilllegung abgebrochen: ${graphValidation.problems.slice(0, 4).join(" ")}`);
+  }
+  const settingsIntegrity = validateSettingsFieldValues(fieldValues);
+  if (!settingsIntegrity.valid) {
+    throw new Error("Legacy-Speicher-Stilllegung abgebrochen: aktive Settings-Feld-Datensätze sind unvollständig.");
+  }
+
+  const retiredAt = new Date().toISOString();
+  const transaction = database.transaction(
+    [COMICS_STORE, SETTINGS_STORE, DATA_STACK_SNAPSHOT_STORE, DATA_STACK_META_STORE],
+    "readwrite"
+  );
+  let snapshot = existingSnapshot;
+  if (!snapshot) {
+    snapshot = {
+      ...createDataStackSnapshotRecord({
+        kind: LEGACY_STORAGE_RETIREMENT_SNAPSHOT_KIND,
+        createdAt: retiredAt,
+        appVersion: APP_CONFIG.appVersion,
+        databaseVersion: DATABASE_VERSION,
+        dataFormatVersion: APP_CONFIG.dataFormatVersion,
+        archiveModelVersion: ARCHIVE_MODEL_VERSION,
+        dataStackVersion: DATA_STACK_VERSION,
+        settings: activeSettings,
+        archiveMeta,
+        series: graph.series,
+        issues: graph.issues,
+        copies: graph.copies,
+        legacyComics
+      }),
+      retiredLegacySettings: legacySettingsRaw
+    };
+    transaction.objectStore(DATA_STACK_SNAPSHOT_STORE).put(snapshot);
+  }
+  transaction.objectStore(COMICS_STORE).clear();
+  transaction.objectStore(SETTINGS_STORE).clear();
+  const meta = {
+    key: LEGACY_STORAGE_RETIREMENT_META_KEY,
+    legacyStorageRetirementVersion: LEGACY_STORAGE_RETIREMENT_VERSION,
+    status: "complete",
+    startedAt: existingMeta?.startedAt || retiredAt,
+    completedAt: retiredAt,
+    source: "archive-graph+field-settings",
+    retiredLegacyComicCount: legacyComics.length,
+    retiredLegacySettingsCount: Object.keys(legacySettingsRaw || {}).length ? 1 : 0,
+    snapshotId: snapshot.id,
+    snapshotCreatedAt: snapshot.createdAt,
+    counts: graphValidation.counts,
+    settingsFieldCount: settingsIntegrity.fieldCount,
+    error: ""
+  };
+  transaction.objectStore(DATA_STACK_META_STORE).put(meta);
+  await transactionDone(transaction);
+
+  const [legacyComicCount, legacySettingsCount] = await Promise.all([
+    countStoreRecords(database, COMICS_STORE),
+    countStoreRecords(database, SETTINGS_STORE)
+  ]);
+  if (legacyComicCount !== 0 || legacySettingsCount !== 0) {
+    throw new Error("Legacy-Speicher-Stilllegung konnte die alten Live-Datensätze nicht vollständig entfernen.");
+  }
+  return { ready: true, justRetired: true, ...meta };
+}
+
+async function countStoreRecords(database, storeName) {
+  const transaction = database.transaction(storeName, "readonly");
+  const count = await requestToPromise(transaction.objectStore(storeName).count());
+  await transactionDone(transaction);
+  return Number(count || 0);
+}
+
+export async function getLegacyStorageRetirementStatus() {
+  const database = await getDatabase();
+  const result = await ensureLegacyStorageRetired();
+  const meta = await readLegacyStorageRetirementMeta(database).catch(() => null);
+  const [legacyComicCount, legacySettingsCount] = await Promise.all([
+    countStoreRecords(database, COMICS_STORE).catch(() => -1),
+    countStoreRecords(database, SETTINGS_STORE).catch(() => -1)
+  ]);
+  return {
+    ready: Boolean(result.ready && isLegacyStorageRetired(meta) && legacyComicCount === 0 && legacySettingsCount === 0),
+    status: meta?.status || result.status || "unknown",
+    version: meta?.legacyStorageRetirementVersion || LEGACY_STORAGE_RETIREMENT_VERSION,
+    completedAt: meta?.completedAt || null,
+    retiredLegacyComicCount: Number(meta?.retiredLegacyComicCount || 0),
+    retiredLegacySettingsCount: Number(meta?.retiredLegacySettingsCount || 0),
+    liveLegacyComicCount: legacyComicCount,
+    liveLegacySettingsCount: legacySettingsCount,
+    snapshotId: meta?.snapshotId || null,
+    snapshotCreatedAt: meta?.snapshotCreatedAt || null,
+    error: result.error || meta?.error || ""
+  };
+}
+
 export async function verifySettingsCutoverIntegrity() {
   const database = await getDatabase();
   const [meta, values] = await Promise.all([
@@ -1071,7 +1223,21 @@ export async function verifyDataStackParity() {
   const database = await getDatabase();
   const core = await ensureArchiveCoreReady();
   if (!core.ready) return { valid: false, problems: ["Archivkern ist nicht bereit."], counts: null, parity: null };
-  const [graph, legacyComics] = await Promise.all([readArchiveGraph(database), readAll(database, COMICS_STORE)]);
+  const [graph, retirementMeta] = await Promise.all([
+    readArchiveGraph(database),
+    readLegacyStorageRetirementMeta(database).catch(() => null)
+  ]);
+  const graphValidation = validateArchiveGraph(graph);
+  if (isLegacyStorageRetired(retirementMeta)) {
+    return {
+      valid: graphValidation.valid,
+      graphValid: graphValidation.valid,
+      problems: graphValidation.problems,
+      counts: { ...graphValidation.counts, legacyComics: 0, projectedComics: graphValidation.counts.issues },
+      parity: { valid: true, retired: true, mirrorCount: 0, projectedCount: graphValidation.counts.issues, missingInMirror: [], extraInMirror: [], mismatchedIds: [] }
+    };
+  }
+  const legacyComics = await readAll(database, COMICS_STORE);
   return validateDataStackFoundation({ ...graph, legacyComics });
 }
 
@@ -1084,16 +1250,21 @@ export async function getDataStackStatus() {
   const cutoverResult = result.ready && splitResult.ready
     ? await ensureSettingsCutoverReady()
     : { ready: false, status: "waiting", error: splitResult.error || "Settings-Spiegelung ist noch nicht bereit." };
+  const retirementResult = result.ready && splitResult.ready && cutoverResult.ready
+    ? await ensureLegacyStorageRetired()
+    : { ready: false, status: "waiting", error: cutoverResult.error || "Settings-Cutover ist noch nicht bereit." };
 
-  const [meta, splitMeta, cutoverMeta, cutoverSnapshot, splitSnapshot, foundationSnapshot] = await Promise.all([
+  const [meta, splitMeta, cutoverMeta, retirementMeta, retirementSnapshot, cutoverSnapshot, splitSnapshot, foundationSnapshot] = await Promise.all([
     readDataStackMeta(database).catch(() => null),
     readSettingsSplitMeta(database).catch(() => null),
     readSettingsCutoverMeta(database).catch(() => null),
+    readLegacyStorageRetirementMeta(database).catch(() => null),
+    getLatestDataStackSnapshotRecord(database, LEGACY_STORAGE_RETIREMENT_SNAPSHOT_KIND).catch(() => null),
     getLatestDataStackSnapshotRecord(database, SETTINGS_CUTOVER_SNAPSHOT_KIND).catch(() => null),
     getLatestDataStackSnapshotRecord(database, SETTINGS_SPLIT_SNAPSHOT_KIND).catch(() => null),
     getLatestDataStackSnapshotRecord(database, DATA_STACK_FOUNDATION_KIND).catch(() => null)
   ]);
-  const snapshot = cutoverSnapshot || splitSnapshot || foundationSnapshot;
+  const snapshot = retirementSnapshot || cutoverSnapshot || splitSnapshot || foundationSnapshot;
   const settingsSplit = {
     ready: Boolean(splitResult.ready),
     justPrepared: Boolean(splitResult.justPrepared),
@@ -1121,21 +1292,34 @@ export async function getDataStackStatus() {
     snapshotId: cutoverSnapshot?.id || null,
     snapshotCreatedAt: cutoverSnapshot?.createdAt || null
   };
+  const legacyStorage = {
+    ready: Boolean(retirementResult.ready && isLegacyStorageRetired(retirementMeta)),
+    justRetired: Boolean(retirementResult.justRetired),
+    version: retirementMeta?.legacyStorageRetirementVersion || retirementResult.legacyStorageRetirementVersion || LEGACY_STORAGE_RETIREMENT_VERSION,
+    status: retirementMeta?.status || retirementResult.status || "unknown",
+    completedAt: retirementMeta?.completedAt || retirementResult.completedAt || null,
+    retiredLegacyComicCount: Number(retirementMeta?.retiredLegacyComicCount || retirementResult.retiredLegacyComicCount || 0),
+    retiredLegacySettingsCount: Number(retirementMeta?.retiredLegacySettingsCount || retirementResult.retiredLegacySettingsCount || 0),
+    snapshotId: retirementMeta?.snapshotId || retirementResult.snapshotId || null,
+    snapshotCreatedAt: retirementMeta?.snapshotCreatedAt || retirementResult.snapshotCreatedAt || null,
+    error: retirementResult.error || retirementMeta?.error || ""
+  };
   return {
-    ready: Boolean(result.ready && settingsSplit.ready && settingsCutover.ready),
+    ready: Boolean(result.ready && settingsSplit.ready && settingsCutover.ready && legacyStorage.ready),
     foundationReady: Boolean(result.ready),
-    justPrepared: Boolean(result.justPrepared || splitResult.justPrepared || cutoverResult.justCutOver),
+    justPrepared: Boolean(result.justPrepared || splitResult.justPrepared || cutoverResult.justCutOver || retirementResult.justRetired),
     dataStackVersion: meta?.dataStackVersion || DATA_STACK_VERSION,
     databaseVersion: DATABASE_VERSION,
     status: settingsCutover.ready ? (meta?.status || result.status || "complete") : settingsCutover.status,
     startedAt: meta?.startedAt || null,
-    completedAt: settingsCutover.completedAt || settingsSplit.completedAt || meta?.completedAt || null,
+    completedAt: legacyStorage.completedAt || settingsCutover.completedAt || settingsSplit.completedAt || meta?.completedAt || null,
     counts: meta?.counts || null,
     parity: meta?.parity || null,
     mirrorRepair: meta?.mirrorRepair || null,
     settingsSplit,
     settingsCutover,
-    error: settingsCutover.error || settingsSplit.error || meta?.error || result.error || "",
+    legacyStorage,
+    error: legacyStorage.error || settingsCutover.error || settingsSplit.error || meta?.error || result.error || "",
     hasRollbackSnapshot: Boolean(snapshot),
     rollbackSnapshotId: snapshot?.id || null,
     rollbackSnapshotCreatedAt: snapshot?.createdAt || null
@@ -1150,41 +1334,92 @@ export async function getLatestDataStackSnapshot() {
 export async function restoreLatestDataStackSnapshot() {
   const database = await getDatabase();
   const snapshot = await getLatestDataStackSnapshotRecord(database);
-  if (!snapshot || !Array.isArray(snapshot.series) || !Array.isArray(snapshot.issues) || !Array.isArray(snapshot.copies) || !Array.isArray(snapshot.comics)) {
+  if (!snapshot || !Array.isArray(snapshot.series) || !Array.isArray(snapshot.issues) || !Array.isArray(snapshot.copies)) {
     throw new Error("Es ist kein vollständiger Data-Stack-Snapshot für eine Wiederherstellung vorhanden.");
   }
-  const validation = validateDataStackFoundation({ series: snapshot.series, issues: snapshot.issues, copies: snapshot.copies, legacyComics: snapshot.comics });
-  if (!validation.valid) throw new Error(`Der Data-Stack-Snapshot ist nicht konsistent: ${validation.problems.slice(0, 4).join(" ")}`);
+  const graphValidation = validateArchiveGraph({ series: snapshot.series, issues: snapshot.issues, copies: snapshot.copies });
+  if (!graphValidation.valid) throw new Error(`Der Data-Stack-Snapshot ist nicht konsistent: ${graphValidation.problems.slice(0, 4).join(" ")}`);
 
-  const transaction = database.transaction([SERIES_STORE, ISSUES_STORE, COPIES_STORE, COMICS_STORE, SETTINGS_STORE, ...SETTINGS_SPLIT_STORES, ARCHIVE_META_STORE, DATA_STACK_META_STORE], "readwrite");
+  const restoredSettings = normalizeSettings(snapshot.settings || {});
+  const settingsIntegrity = validateSettingsFieldValues(restoredSettings);
+  if (!settingsIntegrity.valid) throw new Error("Der Data-Stack-Snapshot enthält keine vollständigen Einstellungen.");
+
+  const transaction = database.transaction(
+    [SERIES_STORE, ISSUES_STORE, COPIES_STORE, COMICS_STORE, SETTINGS_STORE, ...SETTINGS_SPLIT_STORES, ARCHIVE_META_STORE, DATA_STACK_META_STORE],
+    "readwrite"
+  );
   const seriesStore = transaction.objectStore(SERIES_STORE);
   const issueStore = transaction.objectStore(ISSUES_STORE);
   const copyStore = transaction.objectStore(COPIES_STORE);
-  const legacyStore = transaction.objectStore(COMICS_STORE);
-  seriesStore.clear(); issueStore.clear(); copyStore.clear(); legacyStore.clear();
+  seriesStore.clear(); issueStore.clear(); copyStore.clear();
   snapshot.series.forEach((record) => seriesStore.put(record));
   snapshot.issues.forEach((record) => issueStore.put(record));
   snapshot.copies.forEach((record) => copyStore.put(record));
-  snapshot.comics.forEach((record) => legacyStore.put(record));
-  const restoredSettings = normalizeSettings(snapshot.settings || {});
-  transaction.objectStore(SETTINGS_STORE).put({ key: SETTINGS_KEY, value: restoredSettings });
-  // Ein Data-Stack-Rollback stellt den sicheren Legacy-/Mirror-Ausgangszustand wieder her.
-  // Aktive Feld-Records eines bereits erfolgten Settings-Cutovers duerfen dabei nicht
-  // mit einem alten "complete"-Meta weiterleben, sonst wuerde getAppSettings() den
-  // gerade restaurierten Snapshot ignorieren. Die Split-Stores werden deshalb geleert,
-  // als 4.6.1-Gruppenmirror neu aufgebaut und der Cutover-Meta bewusst entfernt.
+
+  // 4.6.5 stellt ausschließlich den aktiven Archivgraph und die Feld-Settings wieder her.
+  // Die alten Live-Stores bleiben auch nach einem Rollback leer; ihre letzten Inhalte
+  // sind in Data-Stack-Snapshots gesichert und werden nicht erneut zu einer zweiten Wahrheit.
+  transaction.objectStore(COMICS_STORE).clear();
+  transaction.objectStore(SETTINGS_STORE).clear();
   SETTINGS_SPLIT_STORES.forEach((storeName) => transaction.objectStore(storeName).clear());
-  putSettingsSplitRecords(transaction, restoredSettings);
-  if (snapshot.archiveMeta) transaction.objectStore(ARCHIVE_META_STORE).put({ ...snapshot.archiveMeta, key: ARCHIVE_CORE_META_KEY });
   const restoredAt = new Date().toISOString();
+  putSettingsFieldRecords(transaction, restoredSettings, undefined, restoredAt);
+
+  if (snapshot.archiveMeta) {
+    transaction.objectStore(ARCHIVE_META_STORE).put({ ...snapshot.archiveMeta, key: ARCHIVE_CORE_META_KEY });
+  }
   const dataStackMetaStore = transaction.objectStore(DATA_STACK_META_STORE);
-  dataStackMetaStore.delete(SETTINGS_CUTOVER_META_KEY);
   dataStackMetaStore.put({
-    key: DATA_STACK_META_KEY, dataStackVersion: DATA_STACK_VERSION, status: "complete", startedAt: restoredAt, completedAt: restoredAt, counts: validation.counts, parity: validation.parity, snapshotId: snapshot.id, snapshotCreatedAt: snapshot.createdAt, restoredAt, error: ""
+    key: SETTINGS_CUTOVER_META_KEY,
+    settingsCutoverVersion: SETTINGS_CUTOVER_VERSION,
+    status: "complete",
+    startedAt: restoredAt,
+    completedAt: restoredAt,
+    source: "field-records",
+    legacySettingsFrozenAt: restoredAt,
+    snapshotId: snapshot.id,
+    snapshotCreatedAt: snapshot.createdAt,
+    fieldCount: settingsIntegrity.fieldCount,
+    integrity: settingsIntegrity,
+    restoredAt,
+    error: ""
+  });
+  dataStackMetaStore.put({
+    key: LEGACY_STORAGE_RETIREMENT_META_KEY,
+    legacyStorageRetirementVersion: LEGACY_STORAGE_RETIREMENT_VERSION,
+    status: "complete",
+    startedAt: restoredAt,
+    completedAt: restoredAt,
+    source: "archive-graph+field-settings",
+    retiredLegacyComicCount: Number(snapshot.counts?.comics || snapshot.comics?.length || 0),
+    retiredLegacySettingsCount: 1,
+    snapshotId: snapshot.id,
+    snapshotCreatedAt: snapshot.createdAt,
+    counts: graphValidation.counts,
+    settingsFieldCount: settingsIntegrity.fieldCount,
+    restoredAt,
+    error: ""
+  });
+  dataStackMetaStore.put({
+    key: DATA_STACK_META_KEY,
+    dataStackVersion: DATA_STACK_VERSION,
+    status: "complete",
+    startedAt: restoredAt,
+    completedAt: restoredAt,
+    counts: { ...graphValidation.counts, legacyComics: 0, projectedComics: graphValidation.counts.issues },
+    parity: { valid: true, retired: true, mirrorCount: 0, projectedCount: graphValidation.counts.issues, missingInMirror: [], extraInMirror: [], mismatchedIds: [] },
+    snapshotId: snapshot.id,
+    snapshotCreatedAt: snapshot.createdAt,
+    restoredAt,
+    error: ""
   });
   await transactionDone(transaction);
-  archiveCorePromise = undefined; dataStackPromise = undefined; settingsSplitPromise = undefined; settingsCutoverPromise = undefined;
-  return { snapshotId: snapshot.id, createdAt: snapshot.createdAt, counts: validation.counts };
+  archiveCorePromise = undefined;
+  dataStackPromise = undefined;
+  settingsSplitPromise = undefined;
+  settingsCutoverPromise = undefined;
+  legacyRetirementPromise = undefined;
+  return { snapshotId: snapshot.id, createdAt: snapshot.createdAt, counts: graphValidation.counts };
 }
 
 export async function getArchiveCoreStatus() {
@@ -1231,24 +1466,18 @@ export async function restoreLatestMigrationSnapshot() {
 export async function getAllComics() {
   const database = await getDatabase();
   const core = await ensureArchiveCoreReady();
+  // Nur Installationen, deren Archivkern noch nie erfolgreich aufgebaut wurde,
+  // duerfen fuer die einmalige Migration aus dem alten Store lesen.
   if (!core.ready) return readAll(database, COMICS_STORE);
-  try {
-    const graph = await readArchiveGraph(database);
-    return materializeLegacyComics(graph.issues, graph.copies, graph.series);
-  } catch (error) {
-    console.warn("Archivkern konnte nicht gelesen werden; Legacy-Speicher wird verwendet:", error);
-    return readAll(database, COMICS_STORE);
-  }
+  const graph = await readArchiveGraph(database);
+  return materializeLegacyComics(graph.issues, graph.copies, graph.series);
 }
 
 export async function saveComic(comic) {
   const database = await getDatabase();
   const core = await ensureArchiveCoreReady();
   if (!core.ready) {
-    const transaction = database.transaction(COMICS_STORE, "readwrite");
-    transaction.objectStore(COMICS_STORE).put(comic);
-    await transactionDone(transaction);
-    return comic;
+    throw new Error("Der Archivkern ist nicht bereit. Änderungen werden nicht mehr in den stillgelegten Legacy-Speicher geschrieben.");
   }
 
   const [settings, existingSeries] = await Promise.all([
@@ -1337,19 +1566,16 @@ export async function saveComic(comic) {
     ...previousCopies.map((copy) => copy.id),
     ...sourceCopies.map((copy) => copy.id)
   ])];
-  const stores = [SERIES_STORE, ISSUES_STORE, COPIES_STORE, COMICS_STORE];
+  const stores = [SERIES_STORE, ISSUES_STORE, COPIES_STORE];
   if (sourceIssueId !== targetIssueId) stores.push(COVER_STORE);
   const transaction = database.transaction(stores, "readwrite");
   const copiesStore = transaction.objectStore(COPIES_STORE);
   const issuesStore = transaction.objectStore(ISSUES_STORE);
-  const legacyStore = transaction.objectStore(COMICS_STORE);
   transaction.objectStore(SERIES_STORE).put(records.series);
   if (sourceIssueId !== targetIssueId) issuesStore.delete(sourceIssueId);
   issuesStore.put(records.issue);
   oldCopyIds.forEach((copyId) => copiesStore.delete(copyId));
   records.copies.forEach((copy) => copiesStore.put(copy));
-  legacyStore.put(runtimeEntry);
-  if (sourceIssueId !== runtimeEntry.id) legacyStore.delete(sourceIssueId);
 
   if (sourceIssueId !== targetIssueId) {
     const coverStore = transaction.objectStore(COVER_STORE);
@@ -1367,19 +1593,13 @@ export async function saveComic(comic) {
 export async function deleteComic(id) {
   const database = await getDatabase();
   const core = await ensureArchiveCoreReady();
-  const copyIds = core.ready
-    ? (await readCopiesForIssue(database, id)).map((copy) => copy.id)
-    : [];
-  const stores = [COMICS_STORE, COVER_STORE];
-  if (core.ready) stores.push(ISSUES_STORE, COPIES_STORE);
-  const transaction = database.transaction(stores, "readwrite");
-  transaction.objectStore(COMICS_STORE).delete(id);
+  if (!core.ready) throw new Error("Der Archivkern ist nicht bereit. Löschen wurde vorsorglich abgebrochen.");
+  const copyIds = (await readCopiesForIssue(database, id)).map((copy) => copy.id);
+  const transaction = database.transaction([ISSUES_STORE, COPIES_STORE, COVER_STORE], "readwrite");
+  transaction.objectStore(ISSUES_STORE).delete(id);
+  const copyStore = transaction.objectStore(COPIES_STORE);
+  copyIds.forEach((copyId) => copyStore.delete(copyId));
   transaction.objectStore(COVER_STORE).delete(id);
-  if (core.ready) {
-    transaction.objectStore(ISSUES_STORE).delete(id);
-    const copyStore = transaction.objectStore(COPIES_STORE);
-    copyIds.forEach((copyId) => copyStore.delete(copyId));
-  }
   await transactionDone(transaction);
 }
 
@@ -1387,12 +1607,7 @@ export async function replaceAllComics(comics) {
   const database = await getDatabase();
   const core = await ensureArchiveCoreReady();
   if (!core.ready) {
-    const transaction = database.transaction(COMICS_STORE, "readwrite");
-    const store = transaction.objectStore(COMICS_STORE);
-    store.clear();
-    comics.forEach((comic) => store.put(comic));
-    await transactionDone(transaction);
-    return;
+    throw new Error("Der Archivkern ist nicht bereit. Ein Legacy-Import kann erst nach erfolgreicher Archivkern-Migration übernommen werden.");
   }
 
   const [settings, existingSeries, existingMeta] = await Promise.all([
@@ -1409,24 +1624,20 @@ export async function replaceAllComics(comics) {
   }
   const graphValidation = validateArchiveGraph(migration);
   if (!graphValidation.valid) throw new Error(graphValidation.problems.slice(0, 5).join(" "));
-  const projected = materializeLegacyComics(migration.issues, migration.copies, migration.series);
 
   const transaction = database.transaction(
-    [SERIES_STORE, ISSUES_STORE, COPIES_STORE, COMICS_STORE, ARCHIVE_META_STORE],
+    [SERIES_STORE, ISSUES_STORE, COPIES_STORE, ARCHIVE_META_STORE],
     "readwrite"
   );
   const seriesStore = transaction.objectStore(SERIES_STORE);
   const issueStore = transaction.objectStore(ISSUES_STORE);
   const copyStore = transaction.objectStore(COPIES_STORE);
-  const legacyStore = transaction.objectStore(COMICS_STORE);
   seriesStore.clear();
   issueStore.clear();
   copyStore.clear();
-  legacyStore.clear();
   migration.series.forEach((record) => seriesStore.put(record));
   migration.issues.forEach((record) => issueStore.put(record));
   migration.copies.forEach((record) => copyStore.put(record));
-  projected.forEach((record) => legacyStore.put(record));
   const rebuiltAt = new Date().toISOString();
   transaction.objectStore(ARCHIVE_META_STORE).put({
     key: ARCHIVE_CORE_META_KEY,
@@ -1448,19 +1659,8 @@ export async function saveSeriesDefinition(definition) {
   const core = await ensureArchiveCoreReady();
   if (!core.ready) return null;
   const normalized = createSeriesDefinition(definition);
-  const graph = await readArchiveGraph(database);
-  const nextSeries = [
-    ...graph.series.filter((entry) => String(entry?.id || "") !== normalized.id),
-    normalized
-  ];
-  const affectedIssues = graph.issues.filter((issue) => String(issue?.seriesId || "") === normalized.id);
-  const affectedIssueIds = new Set(affectedIssues.map((issue) => String(issue.id)));
-  const affectedCopies = graph.copies.filter((copy) => affectedIssueIds.has(String(copy?.issueId || "")));
-  const projected = materializeLegacyComics(affectedIssues, affectedCopies, nextSeries);
-  const transaction = database.transaction([SERIES_STORE, COMICS_STORE], "readwrite");
+  const transaction = database.transaction(SERIES_STORE, "readwrite");
   transaction.objectStore(SERIES_STORE).put(normalized);
-  const legacyStore = transaction.objectStore(COMICS_STORE);
-  projected.forEach((record) => legacyStore.put(record));
   await transactionDone(transaction);
   return normalized;
 }
@@ -1504,11 +1704,7 @@ export async function saveComicsBatch(comics) {
   const database = await getDatabase();
   const core = await ensureArchiveCoreReady();
   if (!core.ready) {
-    const transaction = database.transaction(COMICS_STORE, "readwrite");
-    const store = transaction.objectStore(COMICS_STORE);
-    entries.forEach((comic) => store.put(comic));
-    await transactionDone(transaction);
-    return entries;
+    throw new Error("Der Archivkern ist nicht bereit. Batch-Änderungen werden nicht mehr in den stillgelegten Legacy-Speicher geschrieben.");
   }
 
   const [settings, existingSeries, graph] = await Promise.all([
@@ -1533,8 +1729,6 @@ export async function saveComicsBatch(comics) {
   const issueDeletes = new Set();
   const copyWrites = new Map();
   const copyDeletes = new Set();
-  const legacyWrites = new Map();
-  const legacyDeletes = new Set();
   const coverWrites = new Map();
   const coverDeletes = new Set();
   const coverCache = new Map();
@@ -1656,11 +1850,6 @@ export async function saveComicsBatch(comics) {
       copyWrites.delete(String(copyId));
     });
     records.copies.forEach((copy) => copyWrites.set(String(copy.id), copy));
-    legacyWrites.set(String(runtimeEntry.id), runtimeEntry);
-    if (sourceIssueId !== runtimeEntry.id) {
-      legacyDeletes.add(String(sourceIssueId));
-      legacyWrites.delete(String(sourceIssueId));
-    }
 
     if (sourceIssueId !== targetIssueId) {
       if (sourceCover) {
@@ -1680,21 +1869,18 @@ export async function saveComicsBatch(comics) {
     projectedRecords.push(runtimeEntry);
   }
 
-  const stores = [SERIES_STORE, ISSUES_STORE, COPIES_STORE, COMICS_STORE];
+  const stores = [SERIES_STORE, ISSUES_STORE, COPIES_STORE];
   if (coverWrites.size || coverDeletes.size) stores.push(COVER_STORE);
   const transaction = database.transaction(stores, "readwrite");
   const seriesStore = transaction.objectStore(SERIES_STORE);
   const issuesStore = transaction.objectStore(ISSUES_STORE);
   const copiesStore = transaction.objectStore(COPIES_STORE);
-  const legacyStore = transaction.objectStore(COMICS_STORE);
 
   seriesWrites.forEach((record) => seriesStore.put(record));
   issueDeletes.forEach((issueId) => issuesStore.delete(issueId));
   issueWrites.forEach((record) => issuesStore.put(record));
   copyDeletes.forEach((copyId) => copiesStore.delete(copyId));
   copyWrites.forEach((record) => copiesStore.put(record));
-  legacyDeletes.forEach((issueId) => legacyStore.delete(issueId));
-  legacyWrites.forEach((record) => legacyStore.put(record));
 
   if (stores.includes(COVER_STORE)) {
     const coverStore = transaction.objectStore(COVER_STORE);
@@ -1724,13 +1910,7 @@ async function readCopiesForIssue(database, issueId) {
 export async function getAppSettings() {
   const database = await getDatabase();
   const cutoverStatus = await ensureSettingsCutoverReady();
-  if (cutoverStatus.ready) {
-    try {
-      return await readCutoverSettingsValue(database);
-    } catch (error) {
-      console.warn("Settings-Cutover konnte nicht gelesen werden; statischer Legacy-Fallback wird verwendet:", error);
-    }
-  }
+  if (cutoverStatus.ready) return readCutoverSettingsValue(database);
   return normalizeSettings(await readSettingsValue(database));
 }
 

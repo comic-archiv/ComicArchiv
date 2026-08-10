@@ -837,12 +837,10 @@ async function refreshDataStackStatus() {
       && status.settingsSplit?.parity?.valid !== false
       && status.settingsCutover?.ready
       && status.settingsCutover?.integrity?.valid !== false
+      && status.legacyStorage?.ready
     ) {
-      const repairLabel = Number(status.mirrorRepair?.repairedCount || 0) > 0
-        ? ` · Mirror repariert (${status.mirrorRepair.repairedCount})`
-        : "";
       const runtimeLabel = state.archiveRuntimeSource === "archive-graph" ? " · Archivgraph aktiv" : "";
-      elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion}${repairLabel}${runtimeLabel} · Einstellungen getrennt aktiv`;
+      elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion}${runtimeLabel} · Einstellungen getrennt aktiv · Legacy-Speicher leer`;
       elements.dataStackSummary.dataset.type = "success";
     } else if (status.ready) {
       elements.dataStackSummary.textContent = `Bereit · Schema ${status.databaseVersion}`;

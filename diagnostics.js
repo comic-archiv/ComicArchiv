@@ -2,17 +2,28 @@ const IS_TEST_MODE = resolveTestMode();
 const DIAGNOSTIC_STORAGE_KEY = IS_TEST_MODE ? "entenarchiv-diagnostics-v1-test" : "entenarchiv-diagnostics-v1";
 const MAX_DIAGNOSTIC_ENTRIES = 30;
 const DATABASE_NAME = IS_TEST_MODE ? "comicarchiv-db-test" : "comicarchiv-db";
-const EXPECTED_STORES = Object.freeze([
-  "comics",
-  "settings",
+const ACTIVE_SETTINGS_STORES = Object.freeze([
+  "preferences",
+  "calendarState",
+  "missingState",
+  "fleaMarketState",
+  "releaseRadarState",
+  "collectorState"
+]);
+const ACTIVE_STORES = Object.freeze([
   "coverMedia",
   "metadataCache",
   "seriesCatalog",
   "issues",
   "copies",
   "archiveMeta",
-  "migrationSnapshots"
+  "migrationSnapshots",
+  ...ACTIVE_SETTINGS_STORES,
+  "dataStackMeta",
+  "dataStackSnapshots"
 ]);
+const LEGACY_STORES = Object.freeze(["comics", "settings"]);
+const EXPECTED_STORES = Object.freeze([...ACTIVE_STORES, ...LEGACY_STORES]);
 
 export function recordDiagnosticError(error, context = "Unbekannter Bereich", level = "error") {
   const entry = createDiagnosticEntry(error, context, level);
@@ -175,14 +186,20 @@ async function collectDatabaseSummary() {
       };
     }
 
-    const settingsRecord = database.objectStoreNames.contains("settings")
+    const activeSettings = ACTIVE_SETTINGS_STORES.every((storeName) => database.objectStoreNames.contains(storeName))
+      ? await readActiveSettings(database)
+      : null;
+    const settingsRecord = !activeSettings && database.objectStoreNames.contains("settings")
       ? await readSettingsRecord(database)
       : null;
     const archiveCore = database.objectStoreNames.contains("archiveMeta")
       ? await readArchiveCoreRecord(database)
       : null;
+    const legacyRetirement = database.objectStoreNames.contains("dataStackMeta")
+      ? await readDataStackMetaRecord(database, "legacy-storage-retirement")
+      : null;
     const archiveGraph = await inspectArchiveGraph(database, stores);
-    const allStoresAvailable = EXPECTED_STORES.every((storeName) => stores[storeName]?.available);
+    const allStoresAvailable = ACTIVE_STORES.every((storeName) => stores[storeName]?.available);
     const archiveReady = archiveCore?.status === "complete" && archiveGraph.ok;
 
     return {
@@ -201,7 +218,13 @@ async function collectDatabaseSummary() {
         error: archiveCore.error || ""
       } : null,
       archiveGraph,
-      settingsHealth: inspectSettingsHealth(settingsRecord?.value)
+      legacyStorage: {
+        retired: legacyRetirement?.status === "complete",
+        completedAt: legacyRetirement?.completedAt || null,
+        comicsCount: Number(stores.comics?.count || 0),
+        settingsCount: Number(stores.settings?.count || 0)
+      },
+      settingsHealth: inspectSettingsHealth(activeSettings || settingsRecord?.value)
     };
   } catch (error) {
     return {
@@ -258,6 +281,45 @@ function readSettingsRecord(database) {
     const request = transaction.objectStore("settings").get("app");
     request.onsuccess = () => resolve(request.result || null);
     request.onerror = () => reject(request.error || new Error("Einstellungen konnten nicht geprüft werden."));
+  });
+}
+
+async function readActiveSettings(database) {
+  const transaction = database.transaction(ACTIVE_SETTINGS_STORES, "readonly");
+  const settings = {};
+  await Promise.all(ACTIVE_SETTINGS_STORES.map(async (storeName) => {
+    const records = await requestToPromise(transaction.objectStore(storeName).getAll());
+    records.forEach((record) => {
+      const key = String(record?.key || "");
+      if (!key || key === "app") return;
+      settings[key] = record?.value;
+    });
+  }));
+  await transactionDone(transaction);
+  return settings;
+}
+
+function readDataStackMetaRecord(database, key) {
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction("dataStackMeta", "readonly");
+    const request = transaction.objectStore("dataStackMeta").get(key);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error || new Error("Data-Stack-Status konnte nicht geprüft werden."));
+  });
+}
+
+function requestToPromise(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Datenbankabfrage fehlgeschlagen."));
+  });
+}
+
+function transactionDone(transaction) {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error || new Error("Datenbanktransaktion fehlgeschlagen."));
+    transaction.onabort = () => reject(transaction.error || new Error("Datenbanktransaktion abgebrochen."));
   });
 }
 
@@ -322,9 +384,6 @@ async function inspectArchiveGraph(database, stores) {
       (total, issue) => total + (copiesByIssue.has(String(issue?.id || "")) ? 0 : 1),
       0
     );
-    const legacyMirrorCount = Number(stores.comics?.count);
-    const mirrorDifference = Number.isFinite(legacyMirrorCount) ? Math.abs(legacyMirrorCount - issues.length) : 0;
-
     [
       ["duplicate-series-ids", duplicateSeriesIds],
       ["duplicate-issue-ids", duplicateIssueIds],
@@ -332,8 +391,7 @@ async function inspectArchiveGraph(database, stores) {
       ["duplicate-copy-ids", duplicateCopyIds],
       ["issues-with-unknown-series", issuesWithUnknownSeries],
       ["copies-with-unknown-issue", copiesWithUnknownIssue],
-      ["issues-without-copies", issuesWithoutCopies],
-      ["legacy-mirror-mismatch", mirrorDifference]
+      ["issues-without-copies", issuesWithoutCopies]
     ].forEach(([code, count]) => {
       if (count > 0) problems.push({ code, count });
     });

@@ -1,5 +1,17 @@
 # Änderungen
 
+## 4.6.5 – Legacy Storage Retirement
+
+- Archivgraph und Feld-Settings sind die einzigen aktiven Datenquellen der App.
+- Vor der Stilllegung wird ein vollständiger `pre-legacy-storage-retirement-v1`-Snapshot angelegt.
+- Die früher live gepflegten `comics`- und Mega-`settings`-Datensätze werden anschließend geleert.
+- Einzel-, Batch-, Lösch-, Reihen- und Backup-Import-Pfade schreiben nicht mehr in den `comics`-Mirror.
+- Aktive Settings lesen nach dem Cutover ausschließlich aus den 35 Feld-Datensätzen; ein stiller Rückfall auf eingefrorene Legacy-Settings entfällt.
+- Data-Stack-Rollbacks restaurieren Archivgraph und Feld-Settings, ohne die stillgelegten Legacy-Stores wieder zu aktivieren.
+- Diagnose bewertet den Archivgraph unabhängig von einem Legacy-Mirror und liest die aktiven Settings-Stores.
+- Die leeren `comics`-/`settings`-Stores bleiben vorerst als Schema-Hüllen bestehen, damit direkte Upgrades älterer Installationen sicher migrieren können.
+- Datenformat 9, Archivmodell 1 und IndexedDB-Schema 6 bleiben unverändert.
+
 ## 4.6.4 – Archive Graph Read Cutover
 
 - Die laufende Sammlung wird direkt aus `seriesCatalog`, `issues` und `copies` geladen; der persistierte `comics`-Store ist keine Runtime-Lesequelle mehr.

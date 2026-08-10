@@ -12,6 +12,8 @@ import {
   compareSettingsSplit,
   createDataStackSnapshotRecord,
   DATA_STACK_FOUNDATION_KIND,
+  LEGACY_STORAGE_RETIREMENT_SNAPSHOT_KIND,
+  LEGACY_STORAGE_RETIREMENT_VERSION,
   describeLegacyMirrorDifferences,
   findChangedSettingsFields,
   mergeSplitSettings,
@@ -257,37 +259,65 @@ test("Storage liest nach dem Cutover Feld-Datensätze und schreibt nur geändert
   assert.match(storage, /const SETTINGS_CUTOVER_META_KEY = "settings-cutover"/);
   assert.match(storage, /SETTINGS_CUTOVER_SNAPSHOT_KIND/);
   assert.match(storage, /ensureSettingsCutoverReady/);
-  assert.match(storage, /return await readCutoverSettingsValue\(database\)/);
+  assert.match(storage, /if \(cutoverStatus\.ready\) return readCutoverSettingsValue\(database\)/);
   assert.match(storage, /findChangedSettingsFields\(currentSettings, normalizedSettings\)/);
   assert.match(storage, /database\.transaction\(changedStores, "readwrite"\)/);
   assert.match(storage, /putSettingsFieldRecords\(transaction, normalizedSettings, changes\)/);
   assert.match(storage, /layout: "field-record"/);
-  assert.match(storage, /statischer Legacy-Fallback/);
   assert.match(storage, /legacyComparisonSkipped: true/);
   assert.match(app, /Einstellungen getrennt aktiv/);
 });
 
-test("Legacy-Settings bleiben nach dem Cutover ein Fallback statt Live-Mirror", async () => {
+test("Legacy-Settings sind nach dem Cutover keine Runtime-Lesequelle mehr", async () => {
   const storage = await read("storage.js");
+  const getStart = storage.indexOf("export async function getAppSettings()");
+  const getEnd = storage.indexOf("export async function saveAppSettings", getStart);
+  const getBody = storage.slice(getStart, getEnd);
+  assert.match(getBody, /if \(cutoverStatus\.ready\) return readCutoverSettingsValue\(database\)/);
+  assert.doesNotMatch(getBody, /try\s*\{|statischer Legacy-Fallback/);
+
   const saveStart = storage.indexOf("export async function saveAppSettings(settings)");
   const saveEnd = storage.indexOf("export async function getCoverMedia", saveStart);
   const saveBody = storage.slice(saveStart, saveEnd);
-  const cutoverBranchEnd = saveBody.indexOf("// Sicherheitsfallback vor einem erfolgreichen Cutover");
-  const cutoverBranch = saveBody.slice(0, cutoverBranchEnd);
-  assert.doesNotMatch(cutoverBranch, /objectStore\(SETTINGS_STORE\)\.put/);
-  assert.match(saveBody.slice(cutoverBranchEnd), /objectStore\(SETTINGS_STORE\)\.put/);
+  const fallbackStart = saveBody.indexOf("// Sicherheitsfallback vor einem erfolgreichen Cutover");
+  assert.ok(fallbackStart > 0);
+  assert.doesNotMatch(saveBody.slice(0, fallbackStart), /objectStore\(SETTINGS_STORE\)\.put/);
+  assert.match(saveBody.slice(fallbackStart), /objectStore\(SETTINGS_STORE\)\.put/);
 });
 
-
-test("Data-Stack-Rollback setzt aktive Settings-Felder und Cutover-Status sicher zurück", async () => {
+test("Data-Stack-Rollback hält Legacy-Stores leer und restauriert aktive Feld-Settings", async () => {
   const storage = await read("storage.js");
   const restoreStart = storage.indexOf("export async function restoreLatestDataStackSnapshot()");
   const restoreEnd = storage.indexOf("export async function getArchiveCoreStatus()", restoreStart);
   assert.ok(restoreStart >= 0 && restoreEnd > restoreStart);
   const restoreBlock = storage.slice(restoreStart, restoreEnd);
-  assert.match(restoreBlock, /SETTINGS_SPLIT_STORES\.forEach\(\(storeName\) => transaction\.objectStore\(storeName\)\.clear\(\)\)/);
-  assert.match(restoreBlock, /dataStackMetaStore\.delete\(SETTINGS_CUTOVER_META_KEY\)/);
-  assert.match(restoreBlock, /putSettingsSplitRecords\(transaction, restoredSettings\)/);
+  assert.match(restoreBlock, /transaction\.objectStore\(COMICS_STORE\)\.clear\(\)/);
+  assert.match(restoreBlock, /transaction\.objectStore\(SETTINGS_STORE\)\.clear\(\)/);
+  assert.match(restoreBlock, /putSettingsFieldRecords\(transaction, restoredSettings/);
+  assert.match(restoreBlock, /key: SETTINGS_CUTOVER_META_KEY/);
+  assert.match(restoreBlock, /key: LEGACY_STORAGE_RETIREMENT_META_KEY/);
+  assert.doesNotMatch(restoreBlock, /snapshot\.comics\.forEach/);
+});
+
+test("Legacy-Speicher werden erst nach Snapshot, validem Graph und Settings-Cutover stillgelegt", async () => {
+  const [storage, dataStack, app, diagnostics] = await Promise.all([
+    read("storage.js"),
+    read("data-stack.js"),
+    read("app.js"),
+    read("diagnostics.js")
+  ]);
+  assert.equal(LEGACY_STORAGE_RETIREMENT_VERSION, 1);
+  assert.equal(LEGACY_STORAGE_RETIREMENT_SNAPSHOT_KIND, "pre-legacy-storage-retirement-v1");
+  assert.match(dataStack, /LEGACY_STORAGE_RETIREMENT_VERSION = 1/);
+  assert.match(storage, /ensureLegacyStorageRetired/);
+  assert.match(storage, /LEGACY_STORAGE_RETIREMENT_SNAPSHOT_KIND/);
+  assert.match(storage, /transaction\.objectStore\(DATA_STACK_SNAPSHOT_STORE\)\.put\(snapshot\)/);
+  assert.match(storage, /transaction\.objectStore\(COMICS_STORE\)\.clear\(\)/);
+  assert.match(storage, /transaction\.objectStore\(SETTINGS_STORE\)\.clear\(\)/);
+  assert.match(storage, /validateArchiveGraph\(graph\)/);
+  assert.match(storage, /validateSettingsFieldValues\(fieldValues\)/);
+  assert.match(app, /Legacy-Speicher leer/);
+  assert.doesNotMatch(diagnostics, /legacy-mirror-mismatch/);
 });
 
 
@@ -313,12 +343,14 @@ test("Legacy-Mirror-Diagnose benennt die abweichenden Felder ohne Daten zu verae
   assert.deepEqual(report.fieldCounts, { series: 1, title: 1 });
 });
 
-test("Storage repariert nur den abgeleiteten Mirror und synchronisiert Reihen-Aenderungen kuenftig mit", async () => {
+test("Legacy-Mirror-Reparatur bleibt nur im einmaligen Foundation-Pfad und Live-Writes sind mirrorfrei", async () => {
   const storage = await read("storage.js");
   assert.match(storage, /canSafelyRepairLegacyMirror\(validation\)/);
   assert.match(storage, /LEGACY_MIRROR_REPAIR_SNAPSHOT_KIND/);
-  assert.match(storage, /legacyStore\.clear\(\);/);
-  assert.match(storage, /projectedComics\.forEach\(\(record\) => legacyStore\.put\(record\)\)/);
-  assert.match(storage, /const projected = materializeLegacyComics\(affectedIssues, affectedCopies, nextSeries\);/);
-  assert.match(storage, /database\.transaction\(\[SERIES_STORE, COMICS_STORE\], "readwrite"\)/);
+  const saveSeriesStart = storage.indexOf("export async function saveSeriesDefinition");
+  const saveSeriesEnd = storage.indexOf("export async function removeSeriesDefinition", saveSeriesStart);
+  assert.doesNotMatch(storage.slice(saveSeriesStart, saveSeriesEnd), /COMICS_STORE|materializeLegacyComics/);
+  const saveStart = storage.indexOf("export async function saveComic");
+  const saveEnd = storage.indexOf("export async function deleteComic", saveStart);
+  assert.doesNotMatch(storage.slice(saveStart, saveEnd), /COMICS_STORE|legacyStore/);
 });

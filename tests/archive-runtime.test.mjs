@@ -128,7 +128,7 @@ test("Archive Runtime verweigert einen unvollständigen Graph statt auf Legacy-D
   );
 });
 
-test("4.6.4 liest die laufende Sammlung ausschließlich aus dem Archivgraph", async () => {
+test("4.6.5 liest die laufende Sammlung ausschließlich aus dem Archivgraph", async () => {
   const [app, storage, runtimeSource, worker, build] = await Promise.all([
     read("app.js"),
     read("storage.js"),
@@ -154,10 +154,17 @@ test("4.6.4 liest die laufende Sammlung ausschließlich aus dem Archivgraph", as
   assert.match(build, /"archive-runtime\.js"/);
 });
 
-test("Legacy-comics bleibt in 4.6.4 nur als expliziter Kompatibilitätsadapter bestehen", async () => {
+test("4.6.5 hält Legacy-comics nur noch als Import-/Migrationsadapter vor", async () => {
   const storage = await read("storage.js");
   assert.match(storage, /Kompatibilitätsadapter für alte Backup-\/Migrationspfade/);
   assert.match(storage, /export async function getAllComics\(\)/);
-  assert.match(storage, /legacyStore\.put\(runtimeEntry\)/);
-  assert.match(storage, /legacyWrites\.set\(String\(runtimeEntry\.id\), runtimeEntry\)/);
+  const adapterStart = storage.indexOf("export async function getAllComics()");
+  const adapterEnd = storage.indexOf("export async function saveComic", adapterStart);
+  const adapterBlock = storage.slice(adapterStart, adapterEnd);
+  assert.match(adapterBlock, /if \(!core\.ready\) return readAll\(database, COMICS_STORE\)/);
+  assert.doesNotMatch(adapterBlock, /catch \(|Legacy-Speicher wird verwendet/);
+  const saveComicBlock = storage.slice(storage.indexOf("export async function saveComic"), storage.indexOf("export async function deleteComic"));
+  const batchBlock = storage.slice(storage.indexOf("export async function saveComicsBatch"), storage.indexOf("export async function upsertComics"));
+  assert.doesNotMatch(saveComicBlock, /COMICS_STORE|legacyStore/);
+  assert.doesNotMatch(batchBlock, /COMICS_STORE|legacyWrites|legacyDeletes|legacyStore/);
 });

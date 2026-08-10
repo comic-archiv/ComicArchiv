@@ -1,6 +1,19 @@
-# Entenarchiv 4.6.4
+# Entenarchiv 4.6.5
 
-Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.6.4 schaltet die **Runtime-Lesequelle auf den Archivgraphen um**: Die laufende Oberfläche lädt ihre Sammlung direkt aus `seriesCatalog`, `issues` und `copies` und liest nicht mehr aus dem persistierten Legacy-`comics`-Mirror.
+Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.6.5 schließt den **Data-Stack-v2-Cutover** ab: Archivgraph und getrennte Feld-Settings sind die einzigen aktiven Datenquellen. Die früher live gepflegten `comics`- und Mega-`settings`-Datensätze werden nach einem Sicherheits-Snapshot geleert und anschließend nicht mehr im normalen Schreibpfad verwendet.
+
+## Neu in 4.6.5
+
+- `seriesCatalog`, `issues` und `copies` bleiben die einzige aktive Sammlungsquelle.
+- Die sechs Settings-Stores mit 35 Feld-Datensätzen bleiben die einzige aktive Einstellungsquelle.
+- Vor der Stilllegung wird ein `pre-legacy-storage-retirement-v1`-Snapshot mit Archivgraph, aktiven Settings und den letzten Legacy-Inhalten angelegt.
+- Danach werden die Live-Datensätze in `comics` und `settings` vollständig geleert.
+- Einzel-, Batch-, Lösch-, Reihen- und Backup-Import-Pfade schreiben nicht mehr in den `comics`-Mirror.
+- Nach aktivem Settings-Cutover gibt es keinen stillen Legacy-Settings-Lesefallback mehr; beschädigte Feld-Settings führen sichtbar zu einem Fehler statt zu veralteten Daten.
+- Data-Stack-Rollbacks restaurieren nur Archivgraph und Feld-Settings und halten die Legacy-Stores leer.
+- Diagnose prüft den Archivgraph unabhängig vom stillgelegten Mirror und liest den aktiven Settings-Stack.
+- Die alten automatisch erzeugten Zwischenberichte aus 4.5.3–4.6.4 werden in einem aktuellen Qualitätsbericht zusammengeführt.
+- Datenformat, Archivmodell und IndexedDB-Schema bleiben unverändert; die alten Stores bleiben als leere Schema-Hüllen für sichere Direkt-Upgrades älterer Installationen vorhanden.
 
 ## Neu in 4.6.4
 
@@ -135,14 +148,14 @@ Die Gestaltung verwendet den Entenarchiv-Farbraum, klare Typografie, Druckraster
 
 ## Technische Eckdaten
 
-- App-Version: `4.6.4`
+- App-Version: `4.6.5`
 - Datenformat: `9`
 - Archivmodell: `1`
 - Data-Stack-Version: `2`
 - IndexedDB-Schema: `6`
-- Schema 6 mit Foundation-, Mirror- und Settings-Cutover-Snapshots; Split-Settings und Archivgraph-Runtime sind aktiv
+- Schema 6 mit Archivgraph-Runtime, Feld-Settings und Legacy-Retirement-Snapshot; `comics`/`settings` bleiben nur als leere Upgrade-Hüllen im Schema
 - neue Module `archive-runtime.js`, `data-stack.js`, `collector-goals.js` und `share-cards.js`
-- Service-Worker-Cache: `v4-6-4`
+- Service-Worker-Cache: `v4-6-5`
 - Scanner- und PDF-Bibliothek weiterhin nur bei Bedarf geladen
 - GitHub Pages mit vorgeschalteter GitHub-Actions-Prüfung
 

@@ -1,60 +1,37 @@
-# GitHub Pages und automatische Jahrespläne in Entenarchiv 4.3
+# GitHub Pages und Actions für Entenarchiv
 
-Entenarchiv wird weiterhin über den benutzerdefinierten GitHub-Actions-Workflow geprüft und veröffentlicht.
+Entenarchiv wird über `.github/workflows/deploy-pages.yml` geprüft und über GitHub Pages veröffentlicht.
 
 ## Pages-Einstellung
 
-Unter **Settings → Pages → Source** bleibt ausgewählt:
+Unter **Settings → Pages → Source** muss ausgewählt sein:
 
 ```text
 GitHub Actions
 ```
 
-Die vorgeschlagenen Vorlagen **GitHub Pages Jekyll** und **Static HTML** werden nicht zusätzlich konfiguriert.
+Es wird keine zusätzliche Jekyll- oder Static-HTML-Vorlage benötigt.
 
-## Workflow-Datei einmalig aktualisieren
+## Normaler Ablauf
 
-Version 4.3 erweitert den bestehenden Workflow um die automatische Suche nach offiziellen LTB-Jahresplänen. Die Datei liegt unter:
+Der Deploy-Workflow läuft unter anderem bei Änderungen auf `main` und kann zusätzlich manuell unter **Actions** gestartet werden. Er prüft das Projekt, validiert die Kalenderdaten, erzeugt `dist/` frisch und veröffentlicht dieses Build-Artefakt auf GitHub Pages.
 
-```text
-.github/workflows/deploy-pages.yml
-```
+`dist/` gehört deshalb nicht ins Repository und steht in `.gitignore`.
 
-Da der versteckte Ordner `.github` im Browser-Upload häufig nicht sauber ersetzt wird:
+## Erfolgreiche Veröffentlichung
 
-1. Im Repository `.github/workflows/deploy-pages.yml` öffnen.
-2. Das Stift-Symbol anklicken.
-3. Den gesamten Inhalt durch `deploy-pages-4.3.yml` ersetzen.
-4. Direkt nach `main` committen.
+Im normalen Deploy-Workflow müssen Qualitätsprüfung und GitHub-Pages-Veröffentlichung erfolgreich sein. Nach einem Release sollte die in der App angezeigte Version mit `package.json` und `version.json` übereinstimmen.
 
-## Ausführung
+## Einmalige Upgrade-Workflows
 
-Der Workflow startet:
+Größere Datenmigrationen können als einmalige manuell gestartete Workflows ausgeliefert werden. Solche Workflows sollen:
 
-- bei jedem Commit auf `main`,
-- bei Pull Requests zur Qualitätsprüfung,
-- manuell über **Run workflow**,
-- automatisch montags um 04:17 Uhr UTC.
+1. den erwarteten Ausgangsstand prüfen,
+2. die Migration anwenden,
+3. `npm run ci` vollständig ausführen,
+4. ohne Force-Push mit dem aktuellen `main` synchronisieren,
+5. erneut prüfen,
+6. den getesteten Build selbst auf GitHub Pages veröffentlichen,
+7. einmalige Installer-/Workflow-Dateien anschließend wieder entfernen.
 
-Er führt aus:
-
-1. Projekt laden,
-2. Node.js bereitstellen,
-3. offizielle LTB-iCal-Dateien suchen und validieren,
-4. `npm run check`,
-5. `npm run build`,
-6. `dist/` als Pages-Artefakt hochladen,
-7. GitHub Pages veröffentlichen.
-
-Kann der externe Downloadbereich vorübergehend nicht erreicht werden, verwendet die Synchronisierung den vorhandenen Stand und der Workflow setzt die Qualitätsprüfung fort.
-
-## Woran eine erfolgreiche Veröffentlichung erkennbar ist
-
-Im Workflow müssen beide Jobs grün sein:
-
-```text
-Qualitätsprüfung
-GitHub Pages veröffentlichen
-```
-
-Die GitHub-Pages-Adresse, das Home-Screen-Symbol und die lokale IndexedDB bleiben unverändert.
+Damit hängt die Veröffentlichung nicht von einem zweiten Workflow ab, der nach einem `GITHUB_TOKEN`-Commit möglicherweise nicht automatisch ausgelöst wird.

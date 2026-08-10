@@ -1,42 +1,59 @@
-# Qualitätsbericht Entenarchiv 4.3.1
+# Qualitätsbericht Entenarchiv 4.6.5
 
-## Schwerpunkt
+## Stand
 
-Version 4.3.1 ergänzt eine persistente Zuordnung nicht erkannter Kalendertermine zu bestehenden oder neu angelegten Reihen.
+Version 4.6.5 schließt den Data-Stack-v2-Cutover auf Persistenzebene ab. Archivgraph und Feld-Settings sind die einzigen aktiven Datenquellen. Die früher live gepflegten `comics`- und Mega-`settings`-Datensätze werden nach einem lokalen Sicherheits-Snapshot geleert und anschließend von normalen Schreibpfaden nicht mehr verwendet.
 
-## Automatisierte Prüfungen
+## Automatisierte Prüfung
 
-- 98 automatisierte Tests erfolgreich
+- 164 automatisierte Tests erfolgreich
 - Projektvalidierung erfolgreich
-- 497 eindeutige HTML-IDs geprüft
-- 431 statische App-Selektoren geprüft
-- 40 JavaScript-Dateien syntaktisch geprüft
-- 31 Offline-Dateien geprüft
+- 533 eindeutige HTML-IDs geprüft
+- 458 statische App-Selektoren geprüft
+- 57 JavaScript-Dateien syntaktisch geprüft
+- 35 Offline-Dateien geprüft
 - Kalenderjahr 2026 mit 100 gültigen Terminen validiert
 - Produktions-Build erfolgreich erstellt
+- App-Version 4.6.5, Datenformat 9, Archivmodell 1 und IndexedDB-Schema 6 konsistent
 
-## Spezifische Regressionstests
+## Data Stack v2
 
-Geprüft wurden unter anderem:
+Geprüft werden insbesondere:
 
-- manuelle Einzelzuordnung eines unbekannten Verlagstermins
-- Kalender-Alias für künftige Bände derselben Reihe
-- Vorschlag von Reihennamen und Bandnummer aus einem unbekannten Kalendertitel
-- bestehende LTB-Aliase und Priorisierung längerer Aliase
-- Zustand `Nicht zugeordnet` bleibt ohne Zuordnung erhalten
-- Datenformat 9, Archivmodell 1 und IndexedDB-Schema 5 bleiben unverändert
-- GitHub-Actions-Workflow bleibt Node-24-kompatibel
-- Service Worker und Produktions-Build bleiben vollständig
+- `seriesCatalog`, `issues` und `copies` als einzige aktive Sammlungsquelle
+- direkte Archive-Runtime ohne persistierten `comics`-Read-Fallback
+- 35 aktive Settings-Feld-Datensätze in sechs Fach-Stores
+- feldgenaue Settings-Writes statt Mega-Settings-Write-Amplification
+- Sicherheits-Snapshot vor der Stilllegung der Legacy-Live-Daten
+- vollständige Leerung der Live-Datensätze in `comics` und `settings`
+- keine Legacy-Mirror-Writes in Einzel-, Batch-, Lösch-, Reihen- oder Backup-Import-Pfaden
+- Rollback auf Archivgraph + Feld-Settings, ohne Legacy-Live-Speicher erneut zu aktivieren
+- Diagnose unabhängig vom stillgelegten Legacy-Mirror
+
+Die IndexedDB-Object-Stores `comics` und `settings` bleiben vorerst als **leere Schema-Hüllen** vorhanden. Sie werden nur noch für sichere Direkt-Upgrades älterer Installationen und historische Migrationsadapter benötigt. Ein normaler 4.6.5-Lauf hält beide Stores leer.
+
+## Source-Hygiene
+
+Die historischen Einzelberichte aus den Cleanup- und Data-Stack-Zwischenstufen 4.5.3 bis 4.6.4 wurden entfernt und in diesem Bericht konsolidiert. Ebenfalls entfernt wurden die nicht mehr relevanten Update-/CI-Hotfix-Anleitungen für 4.3.0 und 4.5.1.
+
+Frühere Cleanup-Ergebnisse bleiben im Code erhalten:
+
+- Service-Worker-Strategien getrennt und Core-Precache reduziert
+- versteckte Vollansichten werden nicht unnötig neu gerendert
+- Batch-Writes im Storage-Layer
+- Duckipedia-Metadaten-GC
+- CSS-Dubletten und nachweislich redundante Deklarationen entfernt
+- seltene DOM-Bereiche werden lazy gemountet
+
+## Bewusst verbleibende technische Schulden
+
+Zwei Punkte bleiben absichtlich für die nächste Source-Cleanup-Tranche bestehen:
+
+1. `app.js` ist weiterhin ungefähr 392 KB groß und sollte featureweise modularisiert werden.
+2. Die bestehende UI arbeitet intern noch mit einer comic-förmigen **In-Memory-Kompatibilitätsansicht**, obwohl diese bereits ausschließlich aus dem Archivgraph erzeugt wird. Diese Projektion ist nicht mehr persistent und verursacht keine doppelte Datenhaltung, kann aber später aus den UI-Verträgen entfernt werden.
+
+`style.css` liegt weiterhin bei ungefähr 194 KB. Die sicheren automatischen CSS-Cleanups sind abgeschlossen; weitere Aufteilung sollte featureweise und mit visuellen Regressionstests erfolgen.
 
 ## Datensicherheit
 
-Neue Daten werden ausschließlich in den bestehenden App-Einstellungen gespeichert:
-
-- Kalender-Aliase nach stabiler Reihen-ID
-- manuelle Terminverknüpfungen nach Termin-Signatur
-
-Beim Löschen einer eigenen Reihe werden ihre Kalender-Aliase und manuellen Terminverknüpfungen ebenfalls entfernt. Beim Backup-Import werden diese Daten validiert; beim Zusammenführen werden Aliase und Terminverknüpfungen zusammengeführt statt verworfen.
-
-## Keine Migration
-
-Es wurde keine IndexedDB-Struktur verändert. Eine erneute Migration der Sammlung ist nicht erforderlich.
+Vor der Legacy-Stilllegung wird lokal ein `pre-legacy-storage-retirement-v1`-Snapshot gespeichert. Externe JSON- und Medien-Backups bleiben unabhängig davon empfohlen, da lokale IndexedDB-Snapshots keinen Geräteverlust oder gelöschte Website-Daten absichern.

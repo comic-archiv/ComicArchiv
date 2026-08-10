@@ -2,6 +2,8 @@ import { materializeLegacyComics, validateArchiveGraph } from "./archive-model.j
 
 export const DATA_STACK_FOUNDATION_KIND = "pre-data-stack-v1";
 export const LEGACY_MIRROR_REPAIR_SNAPSHOT_KIND = "pre-legacy-mirror-repair-v1";
+export const LEGACY_STORAGE_RETIREMENT_VERSION = 1;
+export const LEGACY_STORAGE_RETIREMENT_SNAPSHOT_KIND = "pre-legacy-storage-retirement-v1";
 
 export function validateDataStackFoundation({ series = [], issues = [], copies = [], legacyComics = [] } = {}) {
   const graphValidation = validateArchiveGraph({ series, issues, copies });
