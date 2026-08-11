@@ -1,5 +1,11 @@
 # Änderungen
 
+## 4.6.9 – Diagnostics Feature Module
+
+- Diagnose-Dialog, Prüfbericht-Rendering und Diagnoseexport sind aus `app.js` in `diagnostics-ui.js` ausgelagert.
+- `app.js` behält nur die übergreifende Fehlerprotokollierung.
+- Diagnose bleibt lazy gemountet und unverändert lokal.
+
 ## 4.6.8 – App Utility Extraction
 
 - Allgemeine Sortier-, Formatierungs-, URL- und Normalisierungshelfer sind aus `app.js` in `app-utils.js` ausgelagert.

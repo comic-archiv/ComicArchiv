@@ -18,10 +18,10 @@ test("seltene Modals liegen initial in Lazy-DOM-Templates", async () => {
 });
 
 test("Lazy-DOM-Bereiche werden erst in ihren Öffnen-Pfaden gemountet", async () => {
-  const app = await read("app.js");
+  const [app, diagnosticsUi] = await Promise.all([read("app.js"), read("diagnostics-ui.js")]);
   assert.match(app, /createLazyDomManager/);
   assert.match(app, /async function openShareCardModal\(\) \{\s+lazyDom\.ensure\("shareCard"\)/);
-  assert.match(app, /async function openDiagnosticsModal\(\) \{\s+lazyDom\.ensure\("diagnostics"\)/);
+  assert.match(diagnosticsUi, /async function open\(\) \{\s+lazyDom\.ensure\("diagnostics"\)/);
   assert.match(app, /function openImportModal\(event\) \{\s+lazyDom\.ensure\("import"\)/);
   assert.match(app, /function openConditionAssistant\([\s\S]*?\{\s+lazyDom\.ensure\("conditionAssistant"\)/);
   assert.doesNotMatch(app, /renderConditionGuide\(\);\s+renderConditionAssistantOptions\(\);/);

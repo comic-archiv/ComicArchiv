@@ -78,15 +78,9 @@ import {
 } from "./export.js";
 import { dataUrlToBlob, prepareCoverImage } from "./media.js";
 import { ensurePdfLibrary, ensureScannerLibrary, getOptionalAssetStatus } from "./asset-loader.js";
-import {
-  clearDiagnosticLog,
-  collectDiagnosticReport,
-  downloadDiagnosticReport,
-  formatDiagnosticBytes,
-  getDiagnosticLog,
-  recordDiagnosticError
-} from "./diagnostics.js";
+import { recordDiagnosticError } from "./diagnostics.js";
 import { createLazyDomManager } from "./lazy-dom.js";
+import { createDiagnosticsUI } from "./diagnostics-ui.js";
 import {
   CALENDAR_CATALOG_URL,
   buildCalendarIcs,
@@ -163,7 +157,6 @@ import {
   createStableId,
   formatBytes,
   formatDateTime,
-  formatDiagnosticDate,
   formatEntryCount,
   normalizeHttpUrl,
   normalizeSearchText,
@@ -670,13 +663,13 @@ function handleLazyModalClick(event) {
   if (target.closest("#close-share-card, [data-close-share-card]")) return closeShareCardModal();
   if (target.closest("#share-card-share")) return handleShareCardShare();
 
-  if (target.closest("#close-diagnostics, [data-close-diagnostics]")) return closeDiagnosticsModal();
-  if (target.closest("#run-diagnostics")) return runDiagnostics();
-  if (target.closest("#export-diagnostics")) return handleDiagnosticExport();
-  if (target.closest("#clear-diagnostics")) return handleClearDiagnostics();
+  if (target.closest("#close-diagnostics, [data-close-diagnostics]")) return diagnosticsUI.close();
+  if (target.closest("#run-diagnostics")) return diagnosticsUI.run();
+  if (target.closest("#export-diagnostics")) return diagnosticsUI.exportReport();
+  if (target.closest("#clear-diagnostics")) return diagnosticsUI.clear();
   if (target.closest("#open-test-mode")) return toggleTestMode();
   if (target.closest("#open-recovery")) {
-    closeDiagnosticsModal();
+    diagnosticsUI.close();
     window.EntenarchivRecovery?.open({
       title: "Diagnose & sicherer Modus",
       summary: "Erstelle hier unabhängige Notfall-Backups oder repariere beschädigte Kalenderdaten."
@@ -700,6 +693,16 @@ function handleLazyModalChange(event) {
   if (target.id === "import-file") return handleImportFileSelection();
   if (elements.conditionAssistantModal?.contains(target)) return handleConditionAssistantChange(event);
 }
+
+const diagnosticsUI = createDiagnosticsUI({
+  state,
+  elements,
+  lazyDom,
+  appConfig: APP_CONFIG,
+  getOptionalAssetStatus,
+  createAppFilename,
+  restoreBodyModalState
+});
 
 let toastTimer;
 let importInProgress = false;
@@ -1296,7 +1299,7 @@ function bindEvents() {
   elements.exportMissingCsv.addEventListener("click", handleMissingCsvExport);
   elements.exportMissingPdf.addEventListener("click", handleMissingPdfExport);
   elements.requestPersistence.addEventListener("click", handlePersistenceRequest);
-  elements.openDiagnostics.addEventListener("click", openDiagnosticsModal);
+  elements.openDiagnostics.addEventListener("click", diagnosticsUI.open);
   elements.openArchiveMigration?.addEventListener("click", () => openArchiveMigrationModal());
   elements.leaveTestMode?.addEventListener("click", toggleTestMode);
   elements.openMedia.addEventListener("click", openMediaPage);
@@ -1354,7 +1357,7 @@ function bindEvents() {
     if (elements.archiveMigrationModal && !elements.archiveMigrationModal.classList.contains("hidden")) return acknowledgeArchiveMigration();
     if (elements.conditionAssistantModal && !elements.conditionAssistantModal.classList.contains("hidden")) return closeConditionAssistant();
     if (!elements.conditionGuideModal.classList.contains("hidden")) return closeConditionGuide();
-    if (elements.diagnosticsModal && !elements.diagnosticsModal.classList.contains("hidden")) return closeDiagnosticsModal();
+    if (elements.diagnosticsModal && !elements.diagnosticsModal.classList.contains("hidden")) return diagnosticsUI.close();
     if (elements.shareCardModal && !elements.shareCardModal.classList.contains("hidden")) return closeShareCardModal();
     if (elements.importModal && !elements.importModal.classList.contains("hidden")) return closeImportModal();
     if (!elements.releaseLinkModal.classList.contains("hidden")) return closeReleaseLinkModal();
@@ -6832,163 +6835,6 @@ async function handleDeleteMissingDetail() {
 
 function hasMissingDetailContent(detail) {
   return Boolean(detail && (detail.title || detail.publicationYear || detail.desiredCondition || normalizeWishlistPriority(detail.priority) || detail.notes || detail.duckipediaUrl));
-}
-
-
-async function openDiagnosticsModal() {
-  lazyDom.ensure("diagnostics");
-  elements.diagnosticsModal.classList.remove("hidden");
-  document.body.classList.add("modal-open");
-  elements.diagnosticsMessage.textContent = "";
-  window.setTimeout(() => elements.closeDiagnostics.focus(), 0);
-  await runDiagnostics();
-}
-
-function closeDiagnosticsModal() {
-  if (!elements.diagnosticsModal) return;
-  elements.diagnosticsModal.classList.add("hidden");
-  restoreBodyModalState();
-}
-
-async function runDiagnostics() {
-  if (state.diagnosticsRunning) return state.latestDiagnosticReport;
-  state.diagnosticsRunning = true;
-  setDiagnosticsBusy(true);
-  elements.diagnosticsMessage.textContent = "Technische Prüfung läuft …";
-  elements.diagnosticsMessage.dataset.type = "info";
-
-  try {
-    const report = await collectDiagnosticReport({
-      appVersion: APP_CONFIG.appVersion,
-      dataFormatVersion: APP_CONFIG.dataFormatVersion,
-      archiveModelVersion: APP_CONFIG.archiveModelVersion,
-      optionalAssets: getOptionalAssetStatus()
-    });
-    state.latestDiagnosticReport = report;
-    renderDiagnosticReport(report);
-    const warningCount = report.checks.filter((check) => check.status !== "ok").length;
-    elements.diagnosticsMessage.textContent = warningCount === 0
-      ? "Alle Kernprüfungen wurden ohne Warnung abgeschlossen."
-      : `${warningCount} Hinweis${warningCount === 1 ? "" : "e"} gefunden. Deine Sammlung wurde dabei nicht verändert.`;
-    elements.diagnosticsMessage.dataset.type = warningCount === 0 ? "success" : "warning";
-    return report;
-  } catch (error) {
-    console.error("Diagnose konnte nicht ausgeführt werden:", error);
-    recordDiagnosticError(error, "Diagnose ausführen", "error");
-    elements.diagnosticsMessage.textContent = `Diagnose fehlgeschlagen: ${error.message}`;
-    elements.diagnosticsMessage.dataset.type = "error";
-    renderDiagnosticErrorLog();
-    return null;
-  } finally {
-    state.diagnosticsRunning = false;
-    setDiagnosticsBusy(false);
-  }
-}
-
-function renderDiagnosticReport(report) {
-  elements.diagnosticsOverview.replaceChildren();
-
-  const comicCount = report.database?.archiveGraph?.counts?.issues ?? report.database?.stores?.comics?.count;
-  const physicalCopyCount = report.database?.archiveGraph?.counts?.copies;
-  const coverCount = report.database?.stores?.coverMedia?.count;
-  const metadataCount = report.database?.stores?.metadataCache?.count;
-  const storageLabel = report.storage?.usage === null
-    ? "Nicht gemeldet"
-    : `${formatDiagnosticBytes(report.storage.usage)} belegt`;
-  const offlineLabel = report.serviceWorker?.controlled
-    ? `Aktiv${report.serviceWorker.workerStatus?.cacheName ? ` · ${report.serviceWorker.workerStatus.cacheName}` : ""}`
-    : "Noch nicht aktiv";
-
-  [
-    ["App", `v${report.appVersion}`, `${report.environment?.testMode ? "Testmodus · " : ""}Datenformat ${report.dataFormatVersion} · Archivmodell ${report.archiveModelVersion ?? "?"}`],
-    ["Lokale Sammlung", Number.isFinite(comicCount) ? `${comicCount} Ausgaben` : "Nicht lesbar", Number.isFinite(physicalCopyCount) ? `${physicalCopyCount} physische Exemplare` : (Number.isFinite(coverCount) ? `${coverCount} eigene Cover` : "")],
-    ["Lokaler Speicher", storageLabel, report.storage?.quota === null ? "Kontingent unbekannt" : `${formatDiagnosticBytes(report.storage.quota)} gemeldet`],
-    ["Offline-Modus", offlineLabel, Number.isFinite(metadataCount) ? `${metadataCount} Metadatensätze` : ""]
-  ].forEach(([label, value, detail]) => {
-    const card = document.createElement("div");
-    card.className = "diagnostics-summary-card";
-    const labelNode = document.createElement("span");
-    labelNode.textContent = label;
-    const valueNode = document.createElement("strong");
-    valueNode.textContent = value;
-    const detailNode = document.createElement("small");
-    detailNode.textContent = detail;
-    card.append(labelNode, valueNode, detailNode);
-    elements.diagnosticsOverview.append(card);
-  });
-
-  elements.diagnosticsCheckList.replaceChildren();
-  report.checks.forEach((check) => {
-    const row = document.createElement("div");
-    row.className = "diagnostics-check";
-    row.dataset.status = check.status;
-    const icon = document.createElement("span");
-    icon.className = "diagnostics-check-icon";
-    icon.setAttribute("aria-hidden", "true");
-    icon.textContent = check.status === "ok" ? "✓" : "!";
-    const copy = document.createElement("div");
-    const title = document.createElement("strong");
-    title.textContent = check.label;
-    const detail = document.createElement("small");
-    detail.textContent = check.detail;
-    copy.append(title, detail);
-    row.append(icon, copy);
-    elements.diagnosticsCheckList.append(row);
-  });
-
-  renderDiagnosticErrorLog(report.recentErrors);
-}
-
-function renderDiagnosticErrorLog(entries = getDiagnosticLog()) {
-  elements.diagnosticsErrorList.replaceChildren();
-  if (!entries.length) {
-    const empty = document.createElement("p");
-    empty.className = "diagnostics-empty";
-    empty.textContent = "Keine technischen Fehlermeldungen gespeichert.";
-    elements.diagnosticsErrorList.append(empty);
-    return;
-  }
-
-  entries.slice(0, 12).forEach((entry) => {
-    const item = document.createElement("article");
-    item.className = "diagnostics-error-item";
-    const context = document.createElement("strong");
-    context.textContent = entry.context || "Technische Meldung";
-    const message = document.createElement("span");
-    message.textContent = entry.message || "Unbekannter Fehler";
-    const time = document.createElement("time");
-    time.dateTime = entry.timestamp || "";
-    time.textContent = formatDiagnosticDate(entry.timestamp);
-    item.append(context, message, time);
-    elements.diagnosticsErrorList.append(item);
-  });
-}
-
-async function handleDiagnosticExport() {
-  const report = state.latestDiagnosticReport || await runDiagnostics();
-  if (!report) return;
-  try {
-    downloadDiagnosticReport(report, createAppFilename("Entenarchiv-Diagnose", "json"));
-    elements.diagnosticsMessage.textContent = "Diagnosebericht wurde als JSON-Datei erstellt.";
-    elements.diagnosticsMessage.dataset.type = "success";
-  } catch (error) {
-    recordDiagnosticError(error, "Diagnose exportieren", "error");
-    elements.diagnosticsMessage.textContent = `Export fehlgeschlagen: ${error.message}`;
-    elements.diagnosticsMessage.dataset.type = "error";
-  }
-}
-
-function handleClearDiagnostics() {
-  clearDiagnosticLog();
-  if (state.latestDiagnosticReport) state.latestDiagnosticReport.recentErrors = [];
-  renderDiagnosticErrorLog([]);
-  elements.diagnosticsMessage.textContent = "Gespeicherte technische Meldungen wurden gelöscht.";
-  elements.diagnosticsMessage.dataset.type = "success";
-}
-
-function setDiagnosticsBusy(isBusy) {
-  [elements.runDiagnostics, elements.exportDiagnostics, elements.clearDiagnostics, elements.openRecovery]
-    .forEach((button) => { button.disabled = Boolean(isBusy); });
 }
 
 

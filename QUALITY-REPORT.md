@@ -1,4 +1,4 @@
-# Qualitätsbericht Entenarchiv 4.6.8
+# Qualitätsbericht Entenarchiv 4.6.9
 
 ## Stand
 
@@ -69,3 +69,7 @@ Die aktive redundante `customSeries`-Namensliste ist entfernt. `customSeriesConf
 ## 4.6.8 Modul-Cleanup
 
 Zustandsfreie App-Helfer sind in `app-utils.js` ausgelagert und separat getestet.
+
+## 4.6.9 Feature-Split
+
+Die Diagnose-Oberfläche ist vollständig in `diagnostics-ui.js` gekapselt.
