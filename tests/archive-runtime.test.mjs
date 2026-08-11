@@ -128,9 +128,10 @@ test("Archive Runtime verweigert einen unvollständigen Graph statt auf Legacy-D
   );
 });
 
-test("4.6.11 liest die laufende Sammlung ausschließlich aus dem Archivgraph", async () => {
-  const [app, storage, runtimeSource, worker, build] = await Promise.all([
+test("4.6.12 liest die laufende Sammlung ausschließlich aus dem Archivgraph", async () => {
+  const [app, appState, storage, runtimeSource, worker, build] = await Promise.all([
     read("app.js"),
+    read("app-state.js"),
     read("storage.js"),
     read("archive-runtime.js"),
     read("service-worker.js"),
@@ -140,8 +141,8 @@ test("4.6.11 liest die laufende Sammlung ausschließlich aus dem Archivgraph", a
   assert.match(app, /getArchiveRuntimeCollection/);
   assert.doesNotMatch(app, /\bgetAllComics\b/);
   assert.doesNotMatch(app, /state\.comics\b/);
-  assert.match(app, /collectionEntries:\s*\[\]/);
-  assert.match(app, /archiveRuntimeSource:\s*""/);
+  assert.match(appState, /collectionEntries:\s*\[\]/);
+  assert.match(appState, /archiveRuntimeSource:\s*""/);
   assert.match(app, /runtimeLabel = state\.archiveRuntimeSource === "archive-graph"/);
 
   const runtimeReader = storage.match(/export async function getArchiveRuntimeCollection\(\)[\s\S]*?\n}\n/)?.[0] || "";
@@ -154,7 +155,7 @@ test("4.6.11 liest die laufende Sammlung ausschließlich aus dem Archivgraph", a
   assert.match(build, /"archive-runtime\.js"/);
 });
 
-test("4.6.11 hält Legacy-comics nur noch als Import-/Migrationsadapter vor", async () => {
+test("4.6.12 hält Legacy-comics nur noch als Import-/Migrationsadapter vor", async () => {
   const storage = await read("storage.js");
   assert.match(storage, /Kompatibilitätsadapter für alte Backup-\/Migrationspfade/);
   assert.match(storage, /export async function getAllComics\(\)/);

@@ -1,6 +1,6 @@
-const APP_VERSION = "4.6.11";
+const APP_VERSION = "4.6.12";
 const CACHE_PREFIX = "entenarchiv-shell-";
-const CACHE_NAME = `${CACHE_PREFIX}v4-6-11`;
+const CACHE_NAME = `${CACHE_PREFIX}v4-6-12`;
 
 const CORE_SHELL = Object.freeze([
   "./index.html",
@@ -33,6 +33,7 @@ const CORE_SHELL = Object.freeze([
   "./app.js",
   "./app-utils.js",
   "./app-elements.js",
+  "./app-state.js",
   "./manifest.webmanifest",
   "./version.json",
   "./icons/icon-192.png",

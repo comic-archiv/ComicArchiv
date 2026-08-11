@@ -30,9 +30,9 @@ test("App-Version und Cache-Version sind synchron", async () => {
   const [config, worker, metadata, recovery] = await Promise.all([
     read("config.js"), read("service-worker.js"), read("version.json"), read("recovery.js")
   ]);
-  assert.match(config, /appVersion:\s*"4\.6\.11"/);
-  assert.match(worker, /APP_VERSION\s*=\s*"4\.6\.11"/);
-  assert.match(worker, /v4-6-11/);
-  assert.match(recovery, /const APP_VERSION = "4\.6\.11"/);
-  assert.equal(JSON.parse(metadata).appVersion, "4.6.11");
+  assert.match(config, /appVersion:\s*"4\.6\.12"/);
+  assert.match(worker, /APP_VERSION\s*=\s*"4\.6\.12"/);
+  assert.match(worker, /v4-6-12/);
+  assert.match(recovery, /const APP_VERSION = "4\.6\.12"/);
+  assert.equal(JSON.parse(metadata).appVersion, "4.6.12");
 });

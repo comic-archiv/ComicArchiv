@@ -1,7 +1,6 @@
 import {
   APP_CONFIG,
   DEFAULT_CONDITION_CODE,
-  DEFAULT_SETTINGS,
   STANDARD_SERIES_DEFINITIONS,
   STANDARD_DUCKIPEDIA_PATTERNS,
   createDuckipediaUrl as buildDuckipediaUrl,
@@ -81,6 +80,7 @@ import { recordDiagnosticError } from "./diagnostics.js";
 import { createLazyDomManager } from "./lazy-dom.js";
 import { createDiagnosticsUI } from "./diagnostics-ui.js";
 import { createAppElements } from "./app-elements.js";
+import { createInitialAppState, SMART_LIST_DEFINITIONS_LOOKUP } from "./app-state.js";
 import {
   CALENDAR_CATALOG_URL,
   buildCalendarIcs,
@@ -162,88 +162,7 @@ import {
 
 const THEME_STORAGE_KEY = "comicarchiv-theme";
 const IS_TEST_MODE = new URLSearchParams(window.location.search).get("testmode") === "1";
-const SMART_LIST_DEFINITIONS_LOOKUP = Object.freeze({
-  recent: { title: "Neu im Archiv", description: "Zuletzt hinzugefügte oder aktualisierte Bände" },
-  unread: { title: "Noch ungelesen", description: "Bände, von denen noch kein Exemplar gelesen wurde" },
-  duplicates: { title: "Mehrfach vorhanden", description: "Ausgaben mit mindestens zwei physischen Exemplaren" },
-  sealed: { title: "Folierte Exemplare", description: "Ausgaben mit mindestens einem folierten Exemplar" },
-  "needs-care": { title: "Zustand 3 oder schwächer", description: "Bände, die genauer geprüft oder ersetzt werden könnten" },
-  metadata: { title: "Daten ergänzen", description: "Titel, Jahr oder Duckipedia-Verknüpfung fehlen" },
-  "no-cover": { title: "Ohne Cover", description: "Noch ohne eigenes oder geladenes Coverbild" },
-  "current-year": { title: "Aktueller Jahrgang", description: "Bände aus dem laufenden Kalenderjahr" }
-});
-
-const state = {
-  archiveGraph: { series: [], issues: [], copies: [] },
-  archiveRuntimeSource: "",
-  collectionEntries: [],
-  filteredComics: [],
-  missingGroups: [],
-  settings: {
-    ...DEFAULT_SETTINGS,
-    customSeriesConfigs: [],
-    knownHighestBandBySeries: {},
-    missingBandDetails: {},
-    fleaMarketSession: { items: {}, updatedAt: null }
-  },
-  editingId: null,
-  editingComic: null,
-  importBackup: null,
-  importReturnTarget: null,
-  waitingServiceWorker: null,
-  selectedMissingBand: null,
-  scannerResult: null,
-  scannerLookupController: null,
-  scannerQueue: [],
-  scannerMode: SCANNER_MODES.FAST,
-  scannerSessionScans: 0,
-  scannerQueueLookups: new Map(),
-  scannerFlashTimer: null,
-  formMetadata: null,
-  pendingCover: null,
-  removeCoverRequested: false,
-  formCoverObjectUrl: null,
-  formHasLocalCover: false,
-  cardCoverObjectUrls: new Set(),
-  metadataLookupTimer: null,
-  enrichmentRunning: false,
-  collectionScope: "main",
-  collectionPreset: {},
-  collectionReturnTarget: "home",
-  localCoverIds: new Set(),
-  missingScope: "main",
-  missingReturnTarget: "home",
-  openMissingSeries: new Set(),
-  missingLookupSequence: 0,
-  fleaMarketScope: "all",
-  selectedCopyComicId: null,
-  copyManagerDraft: [],
-  archiveCoreStatus: null,
-  dataStackStatus: null,
-  conditionGuideReturnTarget: null,
-  conditionAssistantStep: 1,
-  conditionAssistantAssessment: createConditionAssessment(),
-  conditionAssistantTarget: null,
-  editingCustomSeriesName: "",
-  selectedCalendarEventId: null,
-  calendarImporting: false,
-  calendarCatalog: [],
-  calendarCatalogUpdatedAt: "",
-  calendarCatalogLoading: false,
-  calendarFilter: "all",
-  calendarSearch: "",
-  latestDiagnosticReport: null,
-  diagnosticsRunning: false,
-  shelfCoverResolutionPromises: new Map(),
-  releaseRadarFilter: "open",
-  releaseRadarReturnTarget: "home",
-  releaseLinkEventId: null,
-  collectorMission: null,
-  currentMilestones: [],
-  milestoneSyncPending: false,
-  milestoneCelebrationTimer: null,
-  shareCardRendering: false
-};
+const state = createInitialAppState();
 
 const elements = createAppElements();
 

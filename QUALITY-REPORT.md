@@ -1,4 +1,4 @@
-# Qualitätsbericht Entenarchiv 4.6.11
+# Qualitätsbericht Entenarchiv 4.6.12
 
 ## Stand
 
@@ -81,3 +81,7 @@ Sammlungs-Scope, Filter und Sortierung sind in `collection-query.js` als DOM-fre
 ## 4.6.11 App Shell
 
 Die zentrale DOM-Registry liegt in `app-elements.js`; `app.js` enthält keine hunderte Query-Selector-Zuweisungen mehr.
+
+## 4.6.12 App State
+
+Initialzustand und Smart-List-Definitionen sind in `app-state.js` gekapselt. Damit sind DOM-Registry, State, Utilities, Collection Query und Diagnose bereits aus dem Monolithen getrennt.

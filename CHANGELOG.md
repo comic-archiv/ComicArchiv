@@ -1,5 +1,11 @@
 # Änderungen
 
+## 4.6.12 – App State Extraction
+
+- Initialer Runtime-State und Smart-List-Metadaten liegen in `app-state.js`.
+- Jeder App-Start erzeugt einen frischen State inklusive eigener Sets und Maps.
+- `app.js` fokussiert sich weiter auf Orchestrierung statt Konfiguration.
+
 ## 4.6.11 – DOM Registry Extraction
 
 - Die zentrale DOM-Referenzliste ist aus `app.js` in `app-elements.js` ausgelagert.
