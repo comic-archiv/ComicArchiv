@@ -9,7 +9,7 @@ import {
 } from "../config.js";
 
 test("Version und Zustandssystem sind konsistent", () => {
-  assert.equal(APP_CONFIG.appVersion, "4.6.10");
+  assert.equal(APP_CONFIG.appVersion, "4.6.11");
   assert.equal(APP_CONFIG.dataFormatVersion, 9);
   assert.deepEqual(APP_CONFIG.conditions.map((entry) => entry.code), [
     "0", "0-1", "1", "1-2", "2", "2-3", "3", "3-4", "4", "5"

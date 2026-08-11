@@ -47,7 +47,7 @@ export const LEGACY_CONDITION_MAP = Object.freeze({
 });
 
 export const APP_CONFIG = Object.freeze({
-  appVersion: "4.6.10",
+  appVersion: "4.6.11",
   dataFormatVersion: 9,
   archiveModelVersion: ARCHIVE_MODEL_VERSION,
   dataStackVersion: DATA_STACK_VERSION,

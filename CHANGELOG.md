@@ -1,5 +1,11 @@
 # Änderungen
 
+## 4.6.11 – DOM Registry Extraction
+
+- Die zentrale DOM-Referenzliste ist aus `app.js` in `app-elements.js` ausgelagert.
+- Der Projektvalidator prüft statische HTML-ID-Referenzen jetzt über App, DOM-Registry und Shelf-UI gemeinsam.
+- Lazy-DOM-Hydration und bestehende Elementnamen bleiben unverändert.
+
 ## 4.6.10 – Collection Query Module
 
 - Scope-, Filter- und Sortierlogik der Sammlung ist aus `app.js` in `collection-query.js` ausgelagert.

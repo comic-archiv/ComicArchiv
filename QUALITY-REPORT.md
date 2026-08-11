@@ -1,4 +1,4 @@
-# Qualitätsbericht Entenarchiv 4.6.10
+# Qualitätsbericht Entenarchiv 4.6.11
 
 ## Stand
 
@@ -77,3 +77,7 @@ Die Diagnose-Oberfläche ist vollständig in `diagnostics-ui.js` gekapselt.
 ## 4.6.10 Feature-Split
 
 Sammlungs-Scope, Filter und Sortierung sind in `collection-query.js` als DOM-freie Query-Schicht gekapselt.
+
+## 4.6.11 App Shell
+
+Die zentrale DOM-Registry liegt in `app-elements.js`; `app.js` enthält keine hunderte Query-Selector-Zuweisungen mehr.

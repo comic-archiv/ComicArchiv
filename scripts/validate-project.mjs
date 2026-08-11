@@ -13,6 +13,7 @@ const requiredFiles = [
   "index.html",
   "style.css",
   "app.js",
+  "app-elements.js",
   "archive-model.js",
   "data-stack.js",
   "config.js",
@@ -51,9 +52,10 @@ for (const file of requiredFiles) {
   if (!existsSync(join(root, file))) errors.push(`Pflichtdatei fehlt: ${file}`);
 }
 
-const [html, appSource, shelfUiSource, configSource, storageSource, archiveModelSource, exportSource, recoverySource, serviceWorkerSource, styleSource, releaseRadarSource, syncSource, workflowSource, calendarCatalog, packageJson, versionJson, manifest] = await Promise.all([
+const [html, appSource, appElementsSource, shelfUiSource, configSource, storageSource, archiveModelSource, exportSource, recoverySource, serviceWorkerSource, styleSource, releaseRadarSource, syncSource, workflowSource, calendarCatalog, packageJson, versionJson, manifest] = await Promise.all([
   readText("index.html"),
   readText("app.js"),
+  readText("app-elements.js"),
   readText("shelf-ui.js"),
   readText("config.js"),
   readText("storage.js"),
@@ -101,11 +103,11 @@ const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
 const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
 if (duplicateIds.length) errors.push(`Doppelte HTML-IDs: ${[...new Set(duplicateIds)].join(", ")}`);
 const idSet = new Set(ids);
-const queriedIds = [...`${appSource}\n${shelfUiSource}`.matchAll(/document\.querySelector\("#([A-Za-z0-9_-]+)"\)/g)].map((match) => match[1]);
+const queriedIds = [...`${appSource}\n${appElementsSource}\n${shelfUiSource}`.matchAll(/document\.querySelector\("#([A-Za-z0-9_-]+)"\)/g)].map((match) => match[1]);
 const queriedElementIds = [...shelfUiSource.matchAll(/byId\("([A-Za-z0-9_-]+)"\)/g)].map((match) => match[1]);
 queriedIds.push(...queriedElementIds);
 const missingIds = [...new Set(queriedIds.filter((id) => !idSet.has(id)))];
-if (missingIds.length) errors.push(`app.js referenziert fehlende HTML-IDs: ${missingIds.join(", ")}`);
+if (missingIds.length) errors.push(`App-JavaScript referenziert fehlende HTML-IDs: ${missingIds.join(", ")}`);
 
 if (/vendor\/(?:quagga|jspdf)[^"']*\.js/.test(html)) {
   errors.push("Scanner- oder PDF-Bibliothek wird noch direkt in index.html geladen. Sie soll nur bei Bedarf geladen werden.");
