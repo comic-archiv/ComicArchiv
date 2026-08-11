@@ -177,7 +177,6 @@ export const SETTINGS_GROUP_FIELDS = Object.freeze({
   collectorState: Object.freeze([
     "lastBackupAt",
     "lastMediaBackupAt",
-    "customSeries",
     "customSeriesConfigs",
     "changesSinceBackup",
     "mediaChangesSinceBackup",

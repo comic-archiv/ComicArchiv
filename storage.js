@@ -2190,7 +2190,6 @@ function normalizeSettings(settings) {
     theme: source.theme === "light" ? "light" : DEFAULT_SETTINGS.theme,
     lastBackupAt: isValidDateString(source.lastBackupAt) ? source.lastBackupAt : null,
     lastMediaBackupAt: isValidDateString(source.lastMediaBackupAt) ? source.lastMediaBackupAt : null,
-    customSeries: [...new Set(customSeriesConfigs.map((entry) => entry.name))],
     customSeriesConfigs,
     knownHighestBandBySeries,
     missingBandDetails,

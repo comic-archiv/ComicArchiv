@@ -47,7 +47,7 @@ export const LEGACY_CONDITION_MAP = Object.freeze({
 });
 
 export const APP_CONFIG = Object.freeze({
-  appVersion: "4.6.6",
+  appVersion: "4.6.7",
   dataFormatVersion: 9,
   archiveModelVersion: ARCHIVE_MODEL_VERSION,
   dataStackVersion: DATA_STACK_VERSION,
@@ -135,7 +135,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
   theme: "dark",
   lastBackupAt: null,
   lastMediaBackupAt: null,
-  customSeries: Object.freeze([]),
   customSeriesConfigs: Object.freeze([]),
   knownHighestBandBySeries: Object.freeze({}),
   missingBandDetails: Object.freeze({}),
@@ -196,9 +195,6 @@ export function getConditionRank(code) {
 }
 
 export function getAvailableSeries(settings = DEFAULT_SETTINGS, comics = []) {
-  const customSeries = Array.isArray(settings.customSeries)
-    ? settings.customSeries.filter((entry) => typeof entry === "string" && entry.trim())
-    : [];
   const configuredSeries = Array.isArray(settings.customSeriesConfigs)
     ? settings.customSeriesConfigs
         .map((entry) => entry?.name)
@@ -212,7 +208,6 @@ export function getAvailableSeries(settings = DEFAULT_SETTINGS, comics = []) {
 
   return [...new Set([
     ...APP_CONFIG.series,
-    ...customSeries.map((entry) => entry.trim()),
     ...configuredSeries.map((entry) => entry.trim()),
     ...usedSeries.map((entry) => entry.trim())
   ])];

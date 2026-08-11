@@ -176,7 +176,6 @@ const state = {
   missingGroups: [],
   settings: {
     ...DEFAULT_SETTINGS,
-    customSeries: [],
     customSeriesConfigs: [],
     knownHighestBandBySeries: {},
     missingBandDetails: {},
@@ -6457,7 +6456,6 @@ async function handleSaveCustomSeries(event) {
       .filter(Boolean);
 
     await saveMeaningfulSettings({
-      customSeries: nextConfigs.map((entry) => entry.name),
       customSeriesConfigs: nextConfigs,
       knownHighestBandBySeries: nextHighest,
       missingBandDetails: nextDetails,
@@ -6612,7 +6610,6 @@ async function handleRemoveCustomSeries(seriesName) {
     }
 
     await saveMeaningfulSettings({
-      customSeries: nextConfigs.map((entry) => entry.name),
       customSeriesConfigs: nextConfigs,
       releaseSeriesAliases: nextReleaseAliases,
       releaseEventLinks: nextReleaseLinks,
@@ -7488,9 +7485,6 @@ function mergeImportedSettings(mode, backup, importedChangeAmount = 0) {
 
   return {
     ...state.settings,
-    customSeries: mergedCustomSeriesConfigs.length > 0
-      ? mergedCustomSeriesConfigs.map((entry) => entry.name)
-      : [...new Set([...(state.settings.customSeries || []), ...(importedSettings.customSeries || [])])],
     customSeriesConfigs: mergedCustomSeriesConfigs,
     knownHighestBandBySeries: {
       ...(state.settings.knownHighestBandBySeries || {}),
@@ -8727,7 +8721,6 @@ async function handleReleaseLinkSubmit(event) {
 
   try {
     await saveMeaningfulSettings({
-      customSeries: nextConfigs.map((entry) => entry.name),
       customSeriesConfigs: nextConfigs,
       releaseSeriesAliases: nextAliases,
       releaseEventLinks: nextLinks

@@ -1,5 +1,11 @@
 # Änderungen
 
+## 4.6.7 – Custom Series Legacy Field Retirement
+
+- `customSeriesConfigs` ist die einzige aktive Settings-Quelle für eigene Reihen.
+- Die redundante `customSeries`-Namensliste wird nicht mehr gespeichert oder in Feld-Settings geführt.
+- Alte Backups mit `customSeries` bleiben als Import-Fallback unterstützt und werden in Konfigurationen überführt.
+
 ## 4.6.6 – Archive Storage API Cleanup
 
 - Aktive Storage-APIs tragen keine Legacy-`Comic`-Namen mehr: Einzel-, Batch-, Lösch- und Importpfade sprechen explizit von Archive Entries.

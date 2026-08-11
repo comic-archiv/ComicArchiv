@@ -181,7 +181,7 @@ function createFakeStore(name, options = {}) {
 
 test("Settings Split verteilt alle normalisierten Settings genau einmal auf sechs Bereiche", () => {
   const expectedFields = [
-    "theme", "lastBackupAt", "lastMediaBackupAt", "customSeries", "customSeriesConfigs",
+    "theme", "lastBackupAt", "lastMediaBackupAt", "customSeriesConfigs",
     "knownHighestBandBySeries", "missingBandDetails", "fleaMarketSession", "changesSinceBackup",
     "mediaChangesSinceBackup", "lastBackupComicCount", "showCovers", "duckipediaAutoEnrich",
     "calendarEvents", "calendarSourceUrl", "calendarSourceName", "calendarLastImportAt",
@@ -225,7 +225,7 @@ test("Settings Cutover erkennt vollständige und beschädigte Feld-Datensätze",
   );
   const healthy = validateSettingsFieldValues(values);
   assert.equal(healthy.valid, true);
-  assert.equal(healthy.fieldCount, 35);
+  assert.equal(healthy.fieldCount, 34);
 
   delete values.calendarSelectedMonth;
   const broken = validateSettingsFieldValues(values);
@@ -353,4 +353,14 @@ test("Legacy-Mirror-Reparatur bleibt nur im einmaligen Foundation-Pfad und Live-
   const saveStart = storage.indexOf("export async function saveArchiveEntry");
   const saveEnd = storage.indexOf("export async function deleteArchiveEntry", saveStart);
   assert.doesNotMatch(storage.slice(saveStart, saveEnd), /COMICS_STORE|legacyStore/);
+});
+
+
+test("aktive Settings führen keine redundante customSeries-Namensliste mehr", async () => {
+  const [config, stack, storage] = await Promise.all([read("config.js"), read("data-stack.js"), read("storage.js")]);
+  assert.doesNotMatch(config, /^\s*customSeries:\s*Object\.freeze/m);
+  assert.doesNotMatch(stack, /^\s*"customSeries",$/m);
+  const normalizedReturn = storage.slice(storage.indexOf("function normalizeSettings(settings)"));
+  assert.doesNotMatch(normalizedReturn, /^\s*customSeries:\s*\[\.\.\.new Set/m);
+  assert.match(normalizedReturn, /source\.customSeries/);
 });

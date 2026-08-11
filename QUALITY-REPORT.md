@@ -1,4 +1,4 @@
-# Qualitätsbericht Entenarchiv 4.6.6
+# Qualitätsbericht Entenarchiv 4.6.7
 
 ## Stand
 
@@ -61,3 +61,7 @@ Vor der Legacy-Stilllegung wird lokal ein `pre-legacy-storage-retirement-v1`-Sna
 ## 4.6.6 Source Cleanup
 
 Aktive Schreib- und Löschpfade heißen nun `saveArchiveEntry`, `saveArchiveEntriesBatch`, `upsertArchiveEntries`, `deleteArchiveEntry` und `replaceArchiveEntriesFromLegacy`. Der verbleibende `getAllComics()`-Export ist ausschließlich ein historischer Import-/Migrationsadapter.
+
+## 4.6.7 Settings Hygiene
+
+Die aktive redundante `customSeries`-Namensliste ist entfernt. `customSeriesConfigs` ist die einzige persistente Quelle; alte Backup-Felder werden nur noch beim Normalisieren als Importadapter gelesen.
