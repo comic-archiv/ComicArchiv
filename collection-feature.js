@@ -1,4 +1,5 @@
-import { getAvailableSeries, getConditionLabel } from "./config.js";
+import { getAvailableSeries } from "./config.js";
+import { createConditionBadge } from "./condition-ui.js";
 import { getCoverMedia } from "./storage.js";
 import { getScopedCollectionEntries, filterAndSortCollectionEntries } from "./collection-query.js";
 import { SMART_LIST_DEFINITIONS_LOOKUP } from "./app-state.js";
@@ -365,17 +366,6 @@ export function createCollectionFeature({
   function clearCardCoverObjectUrls() {
     state.cardCoverObjectUrls.forEach((url) => URL.revokeObjectURL(url));
     state.cardCoverObjectUrls.clear();
-  }
-
-  function createConditionBadge(conditionCode, contextLabel) {
-    const badge = document.createElement("span");
-    const normalizedCode = String(conditionCode || "").toUpperCase();
-    const classToken = normalizedCode.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    badge.className = `condition-badge condition-${classToken}`;
-    badge.textContent = normalizedCode || "–";
-    badge.title = `${contextLabel}: ${getConditionLabel(normalizedCode)}`;
-    badge.setAttribute("aria-label", badge.title);
-    return badge;
   }
 
   function createSettingsIcon() {

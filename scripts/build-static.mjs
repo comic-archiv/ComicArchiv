@@ -20,6 +20,7 @@ const runtimeEntries = [
   "asset-loader.js",
   "calendar.js",
   "condition-assistant.js",
+  "condition-ui.js",
   "collector-goals.js",
   "collection-query.js",
   "collection-feature.js",

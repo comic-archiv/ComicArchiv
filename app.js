@@ -108,6 +108,7 @@ import {
 } from "./archive-entry.js";
 import { createShelfUI } from "./shelf-ui.js";
 import { createCollectionFeature } from "./collection-feature.js";
+import { createConditionBadge } from "./condition-ui.js";
 import { createMissingFeature } from "./missing-feature.js";
 import { createCalendarFeature } from "./calendar-feature.js";
 import {
@@ -847,7 +848,7 @@ function bindEvents() {
     if (elements.diagnosticsModal && !elements.diagnosticsModal.classList.contains("hidden")) return diagnosticsUI.close();
     if (elements.shareCardModal && !elements.shareCardModal.classList.contains("hidden")) return closeShareCardModal();
     if (elements.importModal && !elements.importModal.classList.contains("hidden")) return closeImportModal();
-    if (!elements.releaseLinkModal.classList.contains("hidden")) return closeReleaseLinkModal();
+    if (!elements.releaseLinkModal.classList.contains("hidden")) return calendarFeature.closeReleaseLinkModal();
     if (!elements.seriesModal.classList.contains("hidden")) return closeSeriesModal();
     if (!elements.missingDetailModal.classList.contains("hidden")) return closeMissingDetailModal();
     if (!elements.duplicateModal.classList.contains("hidden")) return closeDuplicateModal();
@@ -857,7 +858,7 @@ function bindEvents() {
     if (!elements.collectionPage.classList.contains("hidden")) return closeCollectionPage();
     if (!elements.missingPage.classList.contains("hidden")) return closeMissingPage();
     if (!elements.fleaMarketPage.classList.contains("hidden")) return closeFleaMarketPage();
-    if (!elements.calendarEventModal.classList.contains("hidden")) return closeCalendarEventModal();
+    if (!elements.calendarEventModal.classList.contains("hidden")) return calendarFeature.closeEventModal();
     if (!elements.releaseRadarPage.classList.contains("hidden")) return closeReleaseRadarPage();
     if (!elements.calendarPage.classList.contains("hidden")) return closeCalendarPage();
     if (!elements.progressPage.classList.contains("hidden")) return closeProgressPage();

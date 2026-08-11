@@ -1,5 +1,11 @@
 # Änderungen
 
+## 4.6.19 – Architecture Runtime Hotfix
+
+- `createConditionBadge` ist nach dem Feature-Split wieder als gemeinsames UI-Modul für App-Shell und Sammlung verdrahtet.
+- Zwei beim Calendar-Split verbliebene direkte Modal-Referenzen laufen jetzt über `calendarFeature`.
+- Regressionstests sichern diese Scope-Grenzen gegen Laufzeit-`ReferenceError`s ab.
+
 ## 4.6.18 – Runtime & Feature Architecture
 
 - Die aktive Runtime arbeitet direkt mit `Issue + Copy + Series` als `ArchiveEntry`; eine comic-förmige Projektion existiert nur noch an ausdrücklich markierten Legacy-/Backup-Grenzen.

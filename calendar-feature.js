@@ -86,6 +86,8 @@ export function createCalendarFeature(context) {
     renderReleaseRadarIndicators,
     openReleaseRadar: openReleaseRadarPage,
     closeReleaseRadar: closeReleaseRadarPage,
+    closeReleaseLinkModal,
+    closeEventModal: closeCalendarEventModal,
     isOpen: () => !elements.calendarPage.classList.contains("hidden"),
     isReleaseRadarOpen: () => !elements.releaseRadarPage.classList.contains("hidden")
   };

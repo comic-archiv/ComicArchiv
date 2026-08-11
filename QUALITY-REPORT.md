@@ -1,5 +1,4 @@
-# Qualitätsbericht Entenarchiv 4.6.18
-
+# Qualitätsbericht Entenarchiv 4.6.19
 ## Stand
 
 Version 4.6.18 schließt den Runtime- und Feature-Architecture-Cleanup ab. Archivgraph und Feld-Settings bleiben die einzigen aktiven persistenten Datenquellen; die UI arbeitet jetzt zusätzlich direkt mit `Issue + Copy + Series` als `ArchiveEntry`, statt den Archivgraph für den normalen Runtime-Pfad wieder in ein Legacy-Comic-Modell zurückzuformen.
@@ -80,3 +79,9 @@ Diese Punkte eignen sich für Performance-/Release-Hardening ab 4.6.19, ohne den
 ## Datensicherheit
 
 Datenformat, Archivmodell und IndexedDB-Schema ändern sich in 4.6.18 nicht. Ein externes JSON-Backup vor dem Upgrade bleibt trotzdem empfohlen. Eigene Cover bleiben lokal in IndexedDB und sind nicht Bestandteil des GitHub-Repositories.
+
+## 4.6.19 Runtime-Hotfix
+
+- Gemeinsamer Zustands-Badge-Helfer für App-Shell und Sammlung wiederhergestellt.
+- Verbliebene Kalender-Modal-Scope-Referenzen auf die öffentliche Feature-API umgestellt.
+- Runtime-Scope-Regressionstests ergänzt.

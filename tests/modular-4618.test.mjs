@@ -5,7 +5,7 @@ import { readAppStyles } from "./test-helpers.mjs";
 
 const read = (name) => readFile(new URL(`../${name}`, import.meta.url), "utf8");
 
-test("4.6.18 nutzt den Archivgraph direkt statt einer comic-förmigen Runtime-Projektion", async () => {
+test("4.6.19 nutzt den Archivgraph direkt statt einer comic-förmigen Runtime-Projektion", async () => {
   const [app, runtime, entry] = await Promise.all([
     read("app.js"), read("archive-runtime.js"), read("archive-entry.js")
   ]);

@@ -42,6 +42,7 @@ const requiredFiles = [
   "media.js",
   "calendar.js",
   "condition-assistant.js",
+  "condition-ui.js",
   "asset-loader.js",
   "diagnostics.js",
   "recovery.js",
