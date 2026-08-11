@@ -1,4 +1,4 @@
-# Qualitätsbericht Entenarchiv 4.6.9
+# Qualitätsbericht Entenarchiv 4.6.10
 
 ## Stand
 
@@ -73,3 +73,7 @@ Zustandsfreie App-Helfer sind in `app-utils.js` ausgelagert und separat getestet
 ## 4.6.9 Feature-Split
 
 Die Diagnose-Oberfläche ist vollständig in `diagnostics-ui.js` gekapselt.
+
+## 4.6.10 Feature-Split
+
+Sammlungs-Scope, Filter und Sortierung sind in `collection-query.js` als DOM-freie Query-Schicht gekapselt.

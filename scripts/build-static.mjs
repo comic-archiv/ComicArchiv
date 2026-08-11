@@ -17,6 +17,7 @@ const runtimeEntries = [
   "calendar.js",
   "condition-assistant.js",
   "collector-goals.js",
+  "collection-query.js",
   "config.js",
   "diagnostics.js",
   "diagnostics-ui.js",

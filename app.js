@@ -10,7 +10,6 @@ import {
   getAvailableSeries,
   getConditionDetails,
   getConditionLabel,
-  getConditionRank,
   normalizeConditionCode,
   normalizeDuckipediaPattern
 } from "./config.js";
@@ -111,7 +110,7 @@ import {
   normalizeSeriesLookup
 } from "./archive-model.js";
 import { createShelfUI } from "./shelf-ui.js";
-import { matchesSmartList, sortSmartList } from "./shelf.js";
+import { getScopedCollectionEntries, filterAndSortCollectionEntries } from "./collection-query.js";
 import {
   QUALITY_BUCKETS,
   buildStatisticsDNA,
@@ -150,10 +149,6 @@ import {
 } from "./release-radar.js";
 
 import {
-  compareBandNumbers,
-  compareOptionalText,
-  compareSeries,
-  compareSeriesAndBand,
   createStableId,
   formatBytes,
   formatDateTime,
@@ -3376,7 +3371,7 @@ function renderCollection() {
   clearCardCoverObjectUrls();
   elements.comicList.replaceChildren();
 
-  const scopedComics = getScopedComics();
+  const scopedComics = getScopedCollectionEntries(state.collectionEntries, state.collectionScope);
   const hasComics = scopedComics.length > 0;
   const hasResults = state.filteredComics.length > 0;
   elements.emptyState.classList.toggle("hidden", hasComics);
@@ -3397,103 +3392,22 @@ function renderCollection() {
   });
 }
 
-function getScopedComics() {
-  const mainSeries = "Lustiges Taschenbuch";
-  if (state.collectionScope === "all") return [...state.collectionEntries];
-  return state.collectionScope === "other"
-    ? state.collectionEntries.filter((comic) => comic.series !== mainSeries)
-    : state.collectionEntries.filter((comic) => comic.series === mainSeries);
-}
-
 function getFilteredAndSortedComics() {
-  const searchTerm = normalizeSearchText(elements.search.value);
-  const selectedSeries = elements.filterSeries.value;
-  const selectedCondition = elements.filterCondition.value;
-  const readFilter = elements.filterRead.value;
-  const onlySealed = elements.filterSealed.checked;
-  const onlyDuplicate = elements.filterDuplicate.checked;
-
-  const filtered = getScopedComics().filter((comic) => {
-    if (state.collectionPreset.smartList && !matchesSmartList(comic, state.collectionPreset.smartList, {
-      localCoverIds: state.localCoverIds
-    })) {
-      return false;
-    }
-    if (state.collectionPreset.publicationYear && Number(comic.publicationYear) !== Number(state.collectionPreset.publicationYear)) {
-      return false;
-    }
-    if (state.collectionPreset.series && comic.series !== state.collectionPreset.series) {
-      return false;
-    }
-    if (Array.isArray(state.collectionPreset.conditionCodes) && state.collectionPreset.conditionCodes.length) {
-      const allowedConditions = new Set(state.collectionPreset.conditionCodes);
-      if (!getComicCopies(comic).some((copy) => allowedConditions.has(copy.condition))) return false;
-    }
-    if (selectedSeries !== "all" && comic.series !== selectedSeries) {
-      return false;
-    }
-
-    const copies = getComicCopies(comic);
-    if (selectedCondition !== "all" && !copies.some((copy) => copy.condition === selectedCondition)) return false;
-    if (readFilter === "read" && !copies.some((copy) => copy.isRead)) return false;
-    if (readFilter === "unread" && copies.some((copy) => copy.isRead)) return false;
-    if (onlySealed && !copies.some((copy) => copy.isSealed)) return false;
-    if (onlyDuplicate && copies.length < 2) return false;
-
-    if (searchTerm) {
-      const searchableText = normalizeSearchText([
-        comic.title,
-        comic.series,
-        comic.volumeNumber,
-        comic.publicationYear,
-        comic.notes,
-        ...copies.map((copy) => copy.notes)
-      ].join(" "));
-      if (!searchableText.includes(searchTerm)) return false;
-    }
-
-    return true;
+  return filterAndSortCollectionEntries(state.collectionEntries, {
+    scope: state.collectionScope,
+    preset: state.collectionPreset,
+    localCoverIds: state.localCoverIds,
+    filters: {
+      search: elements.search.value,
+      series: elements.filterSeries.value,
+      condition: elements.filterCondition.value,
+      read: elements.filterRead.value,
+      sealed: elements.filterSealed.checked,
+      duplicate: elements.filterDuplicate.checked
+    },
+    sortBy: elements.sortBy.value
   });
-
-  if (state.collectionPreset.smartList) {
-    return sortSmartList(filtered, state.collectionPreset.smartList).sort(
-      elements.sortBy.value === "recent" ? getSortComparator("recent") : getSortComparator(elements.sortBy.value)
-    );
-  }
-  return filtered.sort(getSortComparator(elements.sortBy.value));
 }
-
-function getSortComparator(sortBy) {
-  if (sortBy === "volume") {
-    return (first, second) => compareBandNumbers(first, second) || compareSeries(first, second);
-  }
-
-  if (sortBy === "title") {
-    return (first, second) => compareOptionalText(first.title, second.title) || compareSeriesAndBand(first, second);
-  }
-
-  if (sortBy === "condition") {
-    return (first, second) => {
-      const firstWorst = Math.max(...getComicCopies(first).map((copy) => getConditionRank(copy.condition)), 0);
-      const secondWorst = Math.max(...getComicCopies(second).map((copy) => getConditionRank(copy.condition)), 0);
-      return firstWorst - secondWorst || compareSeriesAndBand(first, second);
-    };
-  }
-
-  if (sortBy === "recent") {
-    return (first, second) => (
-      (Date.parse(second.updatedAt || second.createdAt || "") || 0)
-      - (Date.parse(first.updatedAt || first.createdAt || "") || 0)
-    ) || compareSeriesAndBand(first, second);
-  }
-
-  return compareSeriesAndBand;
-}
-
-
-
-
-
 
 function createComicCard(comic) {
   const article = document.createElement("article");

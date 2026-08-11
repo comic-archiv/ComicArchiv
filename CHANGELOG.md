@@ -1,5 +1,11 @@
 # Änderungen
 
+## 4.6.10 – Collection Query Module
+
+- Scope-, Filter- und Sortierlogik der Sammlung ist aus `app.js` in `collection-query.js` ausgelagert.
+- Die Query-Schicht ist DOM-frei und separat testbar.
+- Rendering und bestehende Filteroberfläche bleiben unverändert.
+
 ## 4.6.9 – Diagnostics Feature Module
 
 - Diagnose-Dialog, Prüfbericht-Rendering und Diagnoseexport sind aus `app.js` in `diagnostics-ui.js` ausgelagert.
