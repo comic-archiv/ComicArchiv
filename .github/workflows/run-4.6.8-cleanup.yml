@@ -1,0 +1,86 @@
+name: Entenarchiv 4.6.8 – App Utility Extraction
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: entenarchiv-4-6-8-release
+  cancel-in-progress: false
+
+jobs:
+  upgrade:
+    name: Schritt 3 anwenden und pruefen
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Projekt laden
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Node.js einrichten
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Geprueften 4.6.8-Stand anwenden
+        run: node ComicArchiv-4.6.8-apply.mjs
+      - name: Vollstaendige Projekt-CI
+        run: npm run ci
+      - name: Einmalige Upgrade-Dateien entfernen
+        run: |
+          rm -f ComicArchiv-4.6.8-apply.mjs
+          rm -f .github/workflows/run-4.6.8-cleanup.yml
+          git rm -r --cached --ignore-unmatch dist || true
+      - name: Geprueften Stand committen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Keine Aenderungen zu committen."
+          else
+            git commit -m "chore: cleanup step 3 for 4.6.8"
+          fi
+      - name: Mit aktuellem main synchronisieren
+        run: |
+          git fetch origin main
+          if ! git rebase origin/main; then
+            git rebase --abort || true
+            echo "::error::main hat sich in einer betroffenen Datei geaendert. Nichts wurde ueberschrieben."
+            exit 1
+          fi
+      - name: Nach Rebase erneut vollstaendig pruefen
+        run: npm run ci
+      - name: Sicher nach main pushen
+        run: |
+          if ! git push origin HEAD:main; then
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo "::error::Konflikt mit aktuellem main. Kein Force-Push."
+              exit 1
+            fi
+            npm run ci
+            git push origin HEAD:main
+          fi
+      - name: Pages-Paket bereitstellen
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./dist
+
+  deploy:
+    name: GitHub Pages veroeffentlichen
+    needs: upgrade
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Gepruefte 4.6.8 veroeffentlichen
+        id: deployment
+        uses: actions/deploy-pages@v5
