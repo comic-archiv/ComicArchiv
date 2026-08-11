@@ -1457,7 +1457,7 @@ export async function restoreLatestMigrationSnapshot() {
   if (!snapshot || !Array.isArray(snapshot.comics)) {
     throw new Error("Es ist kein alter Datenstand für eine Wiederherstellung vorhanden.");
   }
-  await replaceAllComics(snapshot.comics);
+  await replaceArchiveEntriesFromLegacy(snapshot.comics);
   if (snapshot.settings && typeof snapshot.settings === "object") await saveAppSettings(snapshot.settings);
   return { comics: snapshot.comics.length, createdAt: snapshot.createdAt };
 }
@@ -1473,7 +1473,7 @@ export async function getAllComics() {
   return materializeLegacyComics(graph.issues, graph.copies, graph.series);
 }
 
-export async function saveComic(comic) {
+export async function saveArchiveEntry(comic) {
   const database = await getDatabase();
   const core = await ensureArchiveCoreReady();
   if (!core.ready) {
@@ -1590,7 +1590,7 @@ export async function saveComic(comic) {
   return runtimeEntry;
 }
 
-export async function deleteComic(id) {
+export async function deleteArchiveEntry(id) {
   const database = await getDatabase();
   const core = await ensureArchiveCoreReady();
   if (!core.ready) throw new Error("Der Archivkern ist nicht bereit. Löschen wurde vorsorglich abgebrochen.");
@@ -1603,7 +1603,7 @@ export async function deleteComic(id) {
   await transactionDone(transaction);
 }
 
-export async function replaceAllComics(comics) {
+export async function replaceArchiveEntriesFromLegacy(comics) {
   const database = await getDatabase();
   const core = await ensureArchiveCoreReady();
   if (!core.ready) {
@@ -1696,10 +1696,10 @@ export async function removeSeriesDefinition(seriesId) {
   return { removed: Boolean(series && issueCount === 0), archived: Boolean(series && issueCount > 0), issueCount };
 }
 
-export async function saveComicsBatch(comics) {
+export async function saveArchiveEntriesBatch(comics) {
   const entries = Array.isArray(comics) ? comics.filter(Boolean) : [];
   if (!entries.length) return [];
-  if (entries.length === 1) return [await saveComic(entries[0])];
+  if (entries.length === 1) return [await saveArchiveEntry(entries[0])];
 
   const database = await getDatabase();
   const core = await ensureArchiveCoreReady();
@@ -1892,8 +1892,8 @@ export async function saveComicsBatch(comics) {
   return projectedRecords;
 }
 
-export async function upsertComics(comics) {
-  return saveComicsBatch(comics);
+export async function upsertArchiveEntries(comics) {
+  return saveArchiveEntriesBatch(comics);
 }
 
 async function readCopiesForIssue(database, issueId) {

@@ -1,8 +1,8 @@
-# Qualitätsbericht Entenarchiv 4.6.5
+# Qualitätsbericht Entenarchiv 4.6.6
 
 ## Stand
 
-Version 4.6.5 schließt den Data-Stack-v2-Cutover auf Persistenzebene ab. Archivgraph und Feld-Settings sind die einzigen aktiven Datenquellen. Die früher live gepflegten `comics`- und Mega-`settings`-Datensätze werden nach einem lokalen Sicherheits-Snapshot geleert und anschließend von normalen Schreibpfaden nicht mehr verwendet.
+Version 4.6.6 bereinigt zusätzlich die aktive Storage-API und entfernt Legacy-`Comic`-Begriffe aus allen normalen Schreibpfaden. Archivgraph und Feld-Settings sind die einzigen aktiven Datenquellen. Die früher live gepflegten `comics`- und Mega-`settings`-Datensätze werden nach einem lokalen Sicherheits-Snapshot geleert und anschließend von normalen Schreibpfaden nicht mehr verwendet.
 
 ## Automatisierte Prüfung
 
@@ -57,3 +57,7 @@ Zwei Punkte bleiben absichtlich für die nächste Source-Cleanup-Tranche bestehe
 ## Datensicherheit
 
 Vor der Legacy-Stilllegung wird lokal ein `pre-legacy-storage-retirement-v1`-Snapshot gespeichert. Externe JSON- und Medien-Backups bleiben unabhängig davon empfohlen, da lokale IndexedDB-Snapshots keinen Geräteverlust oder gelöschte Website-Daten absichern.
+
+## 4.6.6 Source Cleanup
+
+Aktive Schreib- und Löschpfade heißen nun `saveArchiveEntry`, `saveArchiveEntriesBatch`, `upsertArchiveEntries`, `deleteArchiveEntry` und `replaceArchiveEntriesFromLegacy`. Der verbleibende `getAllComics()`-Export ist ausschließlich ein historischer Import-/Migrationsadapter.

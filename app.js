@@ -17,7 +17,7 @@ import {
 import {
   clearAllCoverMedia,
   clearMetadataCache,
-  deleteComic,
+  deleteArchiveEntry,
   deleteCoverMedia,
   getArchiveRuntimeCollection,
   getAllCoverMedia,
@@ -32,16 +32,16 @@ import {
   getCoverMediaStats,
   getMetadataCache,
   pruneMetadataCache,
-  replaceAllComics,
+  replaceArchiveEntriesFromLegacy,
   replaceAllCoverMedia,
   replaceMetadataCache,
   removeSeriesDefinition,
   saveSeriesDefinition,
   saveAppSettings,
-  saveComic,
+  saveArchiveEntry,
   saveCoverMedia,
   saveMetadataCache,
-  upsertComics,
+  upsertArchiveEntries,
   upsertCoverMedia,
   upsertMetadataCache
 } from "./storage.js";
@@ -1798,7 +1798,7 @@ async function handleFormSubmit(event) {
       }
     }
 
-    const savedComic = await saveComic(comicToSave);
+    const savedComic = await saveArchiveEntry(comicToSave);
     const coverChanged = await commitCoverChanges(savedComic.id);
     await recordDataChange(1);
     if (coverChanged) await recordMediaChange(1);
@@ -2360,7 +2360,7 @@ async function recordDataChange(changeAmount = 1) {
 async function saveShelfBulkComics(updatedComics, { action = "bulk" } = {}) {
   const entries = Array.isArray(updatedComics) ? updatedComics : [];
   if (!entries.length) return;
-  await upsertComics(entries);
+  await upsertArchiveEntries(entries);
   await recordDataChange(entries.length);
   await refreshCollection();
   await refreshArchiveCoreStatus({ showReport: false });
@@ -2869,7 +2869,7 @@ async function saveFleaMarketFinds() {
       delete nextSessionItems[key];
     }
 
-    if (records.length > 0) await upsertComics(records);
+    if (records.length > 0) await upsertArchiveEntries(records);
     await saveMeaningfulSettings({
       missingBandDetails: nextDetails,
       fleaMarketSession: { items: nextSessionItems, updatedAt: new Date().toISOString() }
@@ -3024,7 +3024,7 @@ async function handleEnrichAll() {
     }
 
     if (updates.length) {
-      await upsertComics(updates);
+      await upsertArchiveEntries(updates);
       await recordDataChange(updates.length);
       await refreshCollection();
     }
@@ -4705,7 +4705,7 @@ async function handleSaveCopyManager(event) {
   try {
     const primary = copies[0];
     const second = copies[1] || null;
-    await saveComic({
+    await saveArchiveEntry({
       ...comic,
       copies,
       copyCount: copies.length,
@@ -4794,7 +4794,7 @@ async function resolveShelfCoverUrl(comic, { force = false } = {}) {
       const currentComic = state.collectionEntries.find((entry) => entry.id === comic.id) || comic;
       const { comic: updatedComic, changed } = mergeComicWithMetadata(currentComic, metadata);
       if (changed) {
-        await saveComic(updatedComic);
+        await saveArchiveEntry(updatedComic);
         replaceComicInMemory(updatedComic);
       }
       return updatedComic.duckipediaCoverUrl || "";
@@ -4830,7 +4830,7 @@ async function enrichSingleComic(comic, { force = false, silent = false } = {}) 
     const { comic: updatedComic, changed } = mergeComicWithMetadata(comic, metadata);
 
     if (changed) {
-      await saveComic(updatedComic);
+      await saveArchiveEntry(updatedComic);
       if (!silent) await recordDataChange(1);
     }
 
@@ -4906,7 +4906,7 @@ async function confirmAndDelete(comic) {
 
   try {
     const hadCover = Boolean(await getCoverMedia(comic.id));
-    await deleteComic(comic.id);
+    await deleteArchiveEntry(comic.id);
     await recordDataChange(1);
     if (hadCover) await recordMediaChange(1);
 
@@ -6090,7 +6090,7 @@ async function saveScannerQueue() {
 
   setScannerControlsBusy(true);
   try {
-    await upsertComics(records);
+    await upsertArchiveEntries(records);
     await recordDataChange(Math.max(1, records.length));
     state.scannerQueueLookups.forEach((controller) => controller.abort());
     state.scannerQueueLookups.clear();
@@ -6467,7 +6467,7 @@ async function handleSaveCustomSeries(event) {
       }
     }, Math.max(1, configuredComics.length));
     await saveSeriesDefinition(nextConfig);
-    if (configuredComics.length > 0) await upsertComics(configuredComics);
+    if (configuredComics.length > 0) await upsertArchiveEntries(configuredComics);
 
     if (configuredComics.length > 0) await refreshCollection();
     else {
@@ -6845,7 +6845,7 @@ async function handleMarkMissingBandOwned() {
       updatedAt: now
     };
 
-    await saveComic(comic);
+    await saveArchiveEntry(comic);
     const nextDetails = { ...(state.settings.missingBandDetails || {}) };
     delete nextDetails[selected.key];
     const nextFleaItems = { ...(state.settings.fleaMarketSession?.items || {}) };
@@ -7352,11 +7352,11 @@ async function handleImportSubmit() {
     let mergeResult = null;
 
     if (mode === "replace") {
-      await replaceAllComics(state.importBackup.comics);
+      await replaceArchiveEntriesFromLegacy(state.importBackup.comics);
       resultMessage = `${state.importBackup.comics.length} Einträge wurden wiederhergestellt.`;
     } else {
       mergeResult = mergeCollections(state.collectionEntries, state.importBackup.comics);
-      await replaceAllComics(mergeResult.comics);
+      await replaceArchiveEntriesFromLegacy(mergeResult.comics);
       importedChangeAmount = mergeResult.added + mergeResult.updated;
       resultMessage = `${mergeResult.added} Ausgaben hinzugefügt, ${mergeResult.updated} aktualisiert`
         + (mergeResult.copiesAdded ? `, ${mergeResult.copiesAdded} zusätzliche Exemplare übernommen` : "")

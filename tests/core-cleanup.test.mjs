@@ -32,10 +32,10 @@ test("versteckte Vollansichten werden nicht bei jedem Collection-Refresh gerende
 test("Bulk-Speicherung und Metadaten-GC sind im Storage-Layer vorhanden", async () => {
   const storage = await source("storage.js");
   const app = await source("app.js");
-  assert.match(storage, /export async function saveComicsBatch\(comics\)/);
+  assert.match(storage, /export async function saveArchiveEntriesBatch\(comics\)/);
   assert.match(storage, /database\.transaction\(stores, "readwrite"\)/);
   assert.match(storage, /export async function pruneMetadataCache/);
-  assert.match(app, /await upsertComics\(entries\);/);
+  assert.match(app, /await upsertArchiveEntries\(entries\);/);
 });
 
 test("Release-Versionstests werden beim Versionsbump synchron gehalten", async () => {

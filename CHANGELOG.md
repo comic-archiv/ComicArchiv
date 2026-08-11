@@ -1,5 +1,11 @@
 # Änderungen
 
+## 4.6.6 – Archive Storage API Cleanup
+
+- Aktive Storage-APIs tragen keine Legacy-`Comic`-Namen mehr: Einzel-, Batch-, Lösch- und Importpfade sprechen explizit von Archive Entries.
+- Die Änderung ist rein semantisch; Datenformat 9, Archivmodell 1 und IndexedDB-Schema 6 bleiben unverändert.
+- `getAllComics()` bleibt ausschließlich als klar markierter historischer Migrationsadapter erhalten.
+
 ## 4.6.5 – Legacy Storage Retirement
 
 - Archivgraph und Feld-Settings sind die einzigen aktiven Datenquellen der App.

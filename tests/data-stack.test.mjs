@@ -350,7 +350,7 @@ test("Legacy-Mirror-Reparatur bleibt nur im einmaligen Foundation-Pfad und Live-
   const saveSeriesStart = storage.indexOf("export async function saveSeriesDefinition");
   const saveSeriesEnd = storage.indexOf("export async function removeSeriesDefinition", saveSeriesStart);
   assert.doesNotMatch(storage.slice(saveSeriesStart, saveSeriesEnd), /COMICS_STORE|materializeLegacyComics/);
-  const saveStart = storage.indexOf("export async function saveComic");
-  const saveEnd = storage.indexOf("export async function deleteComic", saveStart);
+  const saveStart = storage.indexOf("export async function saveArchiveEntry");
+  const saveEnd = storage.indexOf("export async function deleteArchiveEntry", saveStart);
   assert.doesNotMatch(storage.slice(saveStart, saveEnd), /COMICS_STORE|legacyStore/);
 });
