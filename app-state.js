@@ -1,5 +1,4 @@
 import { DEFAULT_SETTINGS } from "./config.js";
-import { SCANNER_MODES } from "./scanner-pro.js";
 import { createConditionAssessment } from "./condition-assistant.js";
 
 export const SMART_LIST_DEFINITIONS_LOOKUP = Object.freeze({
@@ -36,7 +35,7 @@ export function createInitialAppState() {
   scannerResult: null,
   scannerLookupController: null,
   scannerQueue: [],
-  scannerMode: SCANNER_MODES.FAST,
+  scannerMode: "fast",
   scannerSessionScans: 0,
   scannerQueueLookups: new Map(),
   scannerFlashTimer: null,

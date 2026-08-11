@@ -1,5 +1,16 @@
 # Änderungen
 
+## 4.6.18 – Runtime & Feature Architecture
+
+- Die aktive Runtime arbeitet direkt mit `Issue + Copy + Series` als `ArchiveEntry`; eine comic-förmige Projektion existiert nur noch an ausdrücklich markierten Legacy-/Backup-Grenzen.
+- `collection-feature.js` übernimmt Sammlung, Filter, Karten und Sammlungsnavigation aus `app.js`.
+- `missing-feature.js` kapselt Fehlband-Hub, Detaildialog und Prioritäten.
+- `calendar-feature.js` übernimmt Kalender, Terminverwaltung und Release Radar.
+- `scanner-feature.js` kapselt den Scanner vollständig und wird erst beim Öffnen des Scanners dynamisch geladen; Scanner-Module liegen nicht mehr im Core-Precache.
+- `style.css` ist nur noch ein geordneter Import-Manifest; die bisherigen Styles sind ohne Kaskadenänderung in `styles/tokens.css`, `base.css`, `components.css`, `calendar.css`, `collection.css`, `scanner.css`, `statistics.css` und `refinements.css` aufgeteilt.
+- `app.js` schrumpft von rund 359 KB / 8.438 Zeilen auf rund 205 KB / 4.968 Zeilen und konzentriert sich stärker auf App-Orchestrierung.
+- Datenformat 9, Archivmodell 1, Data Stack 2 und IndexedDB-Schema 6 bleiben unverändert.
+
 ## 4.6.12 – App State Extraction
 
 - Initialer Runtime-State und Smart-List-Metadaten liegen in `app-state.js`.

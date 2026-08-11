@@ -12,7 +12,11 @@ test("4.6.0 nutzt einen schlanken, strategiegetrennten Service Worker", async ()
   const core = worker.match(/const CORE_SHELL = Object\.freeze\(\[([\s\S]*?)\]\);/)?.[1] || "";
   assert.doesNotMatch(core, /"\.\/",/);
   assert.doesNotMatch(core, /icon-1024\.png/);
-  assert.match(core, /scanner\.js/);
+  assert.doesNotMatch(core, /scanner(?:-feature|-pro)?\.js/);
+  const onDemand = worker.match(/const ON_DEMAND_ASSETS = Object\.freeze\(\[([\s\S]*?)\]\);/)?.[1] || "";
+  assert.match(onDemand, /scanner-feature\.js/);
+  assert.match(onDemand, /scanner\.js/);
+  assert.match(onDemand, /scanner-pro\.js/);
   assert.match(core, /share-cards\.js/);
   assert.match(worker, /async function cacheFirst\(request\)/);
   assert.match(worker, /shouldUseNetworkFirst\(request, requestUrl\)/);
@@ -25,7 +29,8 @@ test("versteckte Vollansichten werden nicht bei jedem Collection-Refresh gerende
   assert.match(app, /if \(!elements\.progressPage\.classList\.contains\("hidden"\)\) renderSeriesProgress\(\);/);
   assert.match(app, /if \(elements\.statisticsPage\.classList\.contains\("hidden"\)\) return;/);
   assert.match(app, /function openStatisticsPage\(\) \{\s+elements\.statisticsPage\.classList\.remove\("hidden"\);\s+renderStats\(\);/);
-  assert.match(app, /from "\.\/scanner\.js"/);
+  assert.doesNotMatch(app, /from "\.\/scanner(?:-pro)?\.js"/);
+  assert.match(app, /import\("\.\/scanner-feature\.js"\)/);
   assert.match(app, /from "\.\/share-cards\.js"/);
 });
 

@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { readAppStyles } from "./test-helpers.mjs";
 
-const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
+const read = (path) => path === "style.css" ? readAppStyles() : readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("globale Kopfzeile verdeckt keine Zurück-Buttons mehr", async () => {
   const css = await read("style.css");
@@ -12,7 +13,7 @@ test("globale Kopfzeile verdeckt keine Zurück-Buttons mehr", async () => {
 });
 
 test("Erscheinungsradar ist auf Startseite, Kalenderseite und in der Navigation erreichbar", async () => {
-  const [html, app, css] = await Promise.all([read("index.html"), read("app.js"), read("style.css")]);
+  const [html, app, calendarFeature, css] = await Promise.all([read("index.html"), read("app.js"), read("calendar-feature.js"), read("style.css")]);
   for (const id of [
     "open-release-radar-home",
     "open-release-radar-calendar",
@@ -23,10 +24,11 @@ test("Erscheinungsradar ist auf Startseite, Kalenderseite und in der Navigation 
     "release-radar-badge-enabled",
     "calendar-nav-badge"
   ]) assert.match(html, new RegExp(`id="${id}"`));
-  assert.match(app, /createReleaseRadarItems/);
-  assert.match(app, /openReleaseRadarPage/);
-  assert.match(app, /renderReleaseRadarIndicators/);
-  assert.match(app, /exportWatchedReleaseReminders/);
+  assert.match(app, /createCalendarFeature/);
+  assert.match(calendarFeature, /createReleaseRadarItems/);
+  assert.match(calendarFeature, /openReleaseRadarPage/);
+  assert.match(calendarFeature, /renderReleaseRadarIndicators/);
+  assert.match(calendarFeature, /exportWatchedReleaseReminders/);
   assert.match(css, /\.release-radar-card/);
   assert.match(css, /\.release-radar-home-card/);
   assert.match(css, /\.bottom-nav-badge/);
@@ -35,7 +37,7 @@ test("Erscheinungsradar ist auf Startseite, Kalenderseite und in der Navigation 
 test("Erscheinungsradar bleibt bei Data Stack v2 mit Datenformat 9 und Archivmodell 1 kompatibel", async () => {
   const [config, storage, version] = await Promise.all([read("config.js"), read("storage.js"), read("version.json")]);
   const metadata = JSON.parse(version);
-  assert.equal(metadata.appVersion, "4.6.12");
+  assert.equal(metadata.appVersion, "4.6.18");
   assert.equal(metadata.dataFormatVersion, 9);
   assert.equal(metadata.archiveModelVersion, 1);
   assert.match(config, /releaseRadarDecisions:\s*Object\.freeze\(\{\}\)/);
@@ -72,16 +74,16 @@ test("GitHub Actions prüft wöchentlich auf offizielle Jahrespläne", async () 
 });
 
 test("App-Badge ist optional und wird nur über die Plattform-API gesetzt", async () => {
-  const app = await read("app.js");
-  assert.match(app, /navigator\.setAppBadge/);
-  assert.match(app, /navigator\.clearAppBadge/);
-  assert.match(app, /Notification\.requestPermission/);
-  assert.match(app, /releaseRadarBadgeEnabled/);
+  const calendarFeature = await read("calendar-feature.js");
+  assert.match(calendarFeature, /navigator\.setAppBadge/);
+  assert.match(calendarFeature, /navigator\.clearAppBadge/);
+  assert.match(calendarFeature, /Notification\.requestPermission/);
+  assert.match(calendarFeature, /releaseRadarBadgeEnabled/);
 });
 
 
 test("nicht zugeordnete Neuerscheinungen können direkt einer Reihe zugeordnet werden", async () => {
-  const [html, app, css] = await Promise.all([read("index.html"), read("app.js"), read("style.css")]);
+  const [html, calendarFeature, css] = await Promise.all([read("index.html"), read("calendar-feature.js"), read("style.css")]);
   for (const id of [
     "release-link-modal",
     "release-link-form",
@@ -90,8 +92,8 @@ test("nicht zugeordnete Neuerscheinungen können direkt einer Reihe zugeordnet w
     "release-link-alias",
     "release-link-band"
   ]) assert.match(html, new RegExp(`id="${id}"`));
-  assert.match(app, /openReleaseLinkModal/);
-  assert.match(app, /handleReleaseLinkSubmit/);
-  assert.match(app, /dataset\.calendarReleaseLink/);
+  assert.match(calendarFeature, /openReleaseLinkModal/);
+  assert.match(calendarFeature, /handleReleaseLinkSubmit/);
+  assert.match(calendarFeature, /dataset\.calendarReleaseLink/);
   assert.match(css, /\.release-link-card/);
 });

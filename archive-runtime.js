@@ -1,15 +1,8 @@
-import {
-  APP_CONFIG,
-  ARCHIVE_MODEL_VERSION,
-  DEFAULT_CONDITION_CODE,
-  normalizeConditionCode
-} from "./config.js";
-import {
-  compareCopies,
-  validateArchiveGraph
-} from "./archive-model.js";
+import { APP_CONFIG } from "./config.js";
+import { validateArchiveGraph } from "./archive-model.js";
+import { createArchiveEntry } from "./archive-entry.js";
 
-export const ARCHIVE_RUNTIME_VERSION = 1;
+export const ARCHIVE_RUNTIME_VERSION = 2;
 
 export function createArchiveRuntimeCollection({ series = [], issues = [], copies = [] } = {}, {
   dataFormatVersion = APP_CONFIG.dataFormatVersion
@@ -31,15 +24,14 @@ export function createArchiveRuntimeCollection({ series = [], issues = [], copie
     if (!copiesByIssue.has(issueId)) copiesByIssue.set(issueId, []);
     copiesByIssue.get(issueId).push(copy);
   });
-  copiesByIssue.forEach((entries) => entries.sort(compareCopies));
 
   const entries = graph.issues
-    .map((issue) => createArchiveRuntimeEntry(issue, {
+    .map((issue) => createArchiveEntry({
+      issue: { ...issue, dataFormatVersion },
       series: seriesById.get(String(issue.seriesId || "")),
-      copies: copiesByIssue.get(String(issue.id || "")) || [],
-      dataFormatVersion
+      copies: copiesByIssue.get(String(issue.id || "")) || []
     }))
-    .sort(compareRuntimeEntries);
+    .sort(compareArchiveEntries);
 
   return {
     runtimeVersion: ARCHIVE_RUNTIME_VERSION,
@@ -52,61 +44,8 @@ export function createArchiveRuntimeCollection({ series = [], issues = [], copie
   };
 }
 
-export function createArchiveRuntimeEntry(issue, {
-  series,
-  copies = [],
-  dataFormatVersion = APP_CONFIG.dataFormatVersion
-} = {}) {
-  if (!issue?.id) throw new Error("Runtime-Ausgabe benötigt eine ID.");
-  if (!series?.id) throw new Error(`Runtime-Ausgabe ${issue.id} verweist auf eine unbekannte Reihe.`);
-
-  const orderedCopies = (Array.isArray(copies) ? copies : []).slice().sort(compareCopies);
-  if (!orderedCopies.length) throw new Error(`Runtime-Ausgabe ${issue.id} besitzt kein Exemplar.`);
-
-  const normalizedCopies = orderedCopies.map((copy, index) => ({
-    id: copy.id,
-    issueId: copy.issueId,
-    condition: normalizeConditionCode(copy.condition, DEFAULT_CONDITION_CODE),
-    isRead: Boolean(copy.isRead),
-    isSealed: Boolean(copy.isSealed),
-    notes: String(copy.notes || ""),
-    displayOrder: Number(copy.displayOrder) || index + 1,
-    source: String(copy.source || "manual"),
-    createdAt: copy.createdAt || issue.createdAt,
-    updatedAt: copy.updatedAt || issue.updatedAt
-  }));
-  const primary = normalizedCopies[0];
-  const secondary = normalizedCopies[1] || null;
-
-  return {
-    id: issue.id,
-    issueId: issue.id,
-    seriesId: series.id,
-    dataFormatVersion,
-    archiveModelVersion: ARCHIVE_MODEL_VERSION,
-    series: series.name,
-    volumeNumber: issue.volumeNumber,
-    numericBandNumber: Number.isSafeInteger(issue.numericBandNumber) ? issue.numericBandNumber : null,
-    title: issue.title || "",
-    publicationYear: issue.publicationYear ?? null,
-    condition: primary.condition,
-    duplicateCondition: secondary?.condition || null,
-    isRead: Boolean(primary.isRead),
-    isDuplicate: normalizedCopies.length > 1,
-    isSealed: Boolean(primary.isSealed),
-    notes: primary.notes || "",
-    copies: normalizedCopies,
-    copyCount: normalizedCopies.length,
-    duckipediaPageUrl: issue.duckipediaPageUrl || "",
-    duckipediaCoverUrl: issue.duckipediaCoverUrl || "",
-    duckipediaCoverFileName: issue.duckipediaCoverFileName || "",
-    duckipediaCoverSource: issue.duckipediaCoverSource || "",
-    duckipediaCoverLookupVersion: Number(issue.duckipediaCoverLookupVersion || 0),
-    metadataStatus: issue.metadataStatus || "",
-    metadataFetchedAt: issue.metadataFetchedAt || null,
-    createdAt: issue.createdAt,
-    updatedAt: latestDate([issue.updatedAt, ...normalizedCopies.map((copy) => copy.updatedAt)]) || issue.updatedAt
-  };
+export function createArchiveRuntimeEntry(issue, { series, copies = [], dataFormatVersion = APP_CONFIG.dataFormatVersion } = {}) {
+  return createArchiveEntry({ issue: { ...issue, dataFormatVersion }, series, copies });
 }
 
 export function createArchiveRuntimeIndex(runtime) {
@@ -126,13 +65,14 @@ function groupCopiesByIssue(copies) {
     if (!grouped.has(issueId)) grouped.set(issueId, []);
     grouped.get(issueId).push(copy);
   }
-  grouped.forEach((entries) => entries.sort(compareCopies));
+  grouped.forEach((entries) => entries.sort((first, second) => (Number(first?.displayOrder) || 0) - (Number(second?.displayOrder) || 0)
+    || String(first?.id || "").localeCompare(String(second?.id || ""), "de", { numeric: true })));
   return grouped;
 }
 
-function compareRuntimeEntries(first, second) {
-  return String(first?.series || "").localeCompare(String(second?.series || ""), "de", { sensitivity: "base" })
-    || compareVolumeNumbers(first?.volumeNumber, second?.volumeNumber);
+function compareArchiveEntries(first, second) {
+  return String(first?.series?.name || "").localeCompare(String(second?.series?.name || ""), "de", { sensitivity: "base" })
+    || compareVolumeNumbers(first?.issue?.volumeNumber, second?.issue?.volumeNumber);
 }
 
 function compareVolumeNumbers(first, second) {
@@ -148,11 +88,4 @@ function parsePositiveInteger(value) {
   if (!/^[0-9]+$/.test(String(value ?? "").trim())) return null;
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
-}
-
-function latestDate(values) {
-  return (Array.isArray(values) ? values : [])
-    .filter((value) => typeof value === "string" && value.trim() && Number.isFinite(Date.parse(value)))
-    .sort()
-    .at(-1) || null;
 }

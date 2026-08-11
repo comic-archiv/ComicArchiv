@@ -24,6 +24,7 @@ import {
   normalizeSeriesLookup,
   validateArchiveGraph
 } from "./archive-model.js";
+import { getEntryCopies, getEntryPublicationYear, getEntrySeriesName, getEntryTitle, getEntryVolumeNumber, getEntryDuckipediaPageUrl, toLegacyComic, toLegacyComics } from "./archive-entry.js";
 import { normalizeCalendarEvent } from "./calendar.js";
 import {
   RELEASE_RADAR_FILTERS,
@@ -61,19 +62,19 @@ export function createCollectionCsv(comics, settings = {}) {
   ]];
 
   (Array.isArray(comics) ? comics : []).forEach((comic) => {
-    const copies = getComicCopies(comic);
+    const copies = getEntryCopies(comic);
     copies.forEach((copy, index) => {
       rows.push([
-        comic.series,
-        comic.volumeNumber,
-        comic.title || "",
-        comic.publicationYear ?? "",
+        getEntrySeriesName(comic),
+        getEntryVolumeNumber(comic),
+        getEntryTitle(comic) || "",
+        getEntryPublicationYear(comic) ?? "",
         index + 1,
         copy.condition,
         copy.isRead ? "Ja" : "Nein",
         copy.isSealed ? "Ja" : "Nein",
         copy.notes || "",
-        comic.duckipediaPageUrl || createDuckipediaSearchUrl(comic.series, comic.volumeNumber, comic.title || "", settings)
+        getEntryDuckipediaPageUrl(comic) || createDuckipediaSearchUrl(getEntrySeriesName(comic), getEntryVolumeNumber(comic), getEntryTitle(comic) || "", settings)
       ]);
     });
   });
@@ -446,7 +447,7 @@ export async function createMediaBackup(comics, settings, metadataCache = [], co
 }
 
 function createBackupObject({ backupType, comics, settings, metadataCache, covers }) {
-  const safeComics = Array.isArray(comics) ? comics : [];
+  const safeComics = toLegacyComics(Array.isArray(comics) ? comics : []);
   const safeSettings = serializeSettings(settings);
   const catalog = buildSeriesCatalog({ legacyComics: safeComics, settings: safeSettings });
   const archiveCore = migrateLegacyComicsToArchive(safeComics, catalog.series, {
@@ -708,7 +709,7 @@ export function parseAndValidateBackup(text) {
 }
 
 export function mergeCollections(existingComics, importedComics) {
-  const merged = (Array.isArray(existingComics) ? existingComics : []).map((comic) => normalizeComicCopiesForMerge(comic));
+  const merged = toLegacyComics(Array.isArray(existingComics) ? existingComics : []).map((comic) => normalizeComicCopiesForMerge(comic));
   const byId = new Map(merged.map((comic) => [comic.id, comic]));
   const byIdentity = new Map(merged.map((comic) => [createIssueMergeKey(comic), comic]));
   const idMap = {};

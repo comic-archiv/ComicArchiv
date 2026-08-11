@@ -47,7 +47,7 @@ export const LEGACY_CONDITION_MAP = Object.freeze({
 });
 
 export const APP_CONFIG = Object.freeze({
-  appVersion: "4.6.12",
+  appVersion: "4.6.18",
   dataFormatVersion: 9,
   archiveModelVersion: ARCHIVE_MODEL_VERSION,
   dataStackVersion: DATA_STACK_VERSION,
@@ -202,7 +202,7 @@ export function getAvailableSeries(settings = DEFAULT_SETTINGS, comics = []) {
     : [];
   const usedSeries = Array.isArray(comics)
     ? comics
-        .map((comic) => comic?.series)
+        .map((entry) => typeof entry?.series === "object" ? entry.series?.name : entry?.series)
         .filter((entry) => typeof entry === "string" && entry.trim())
     : [];
 

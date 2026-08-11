@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { readAppStyles } from "./test-helpers.mjs";
 
-const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
+const read = (path) => path === "style.css" ? readAppStyles() : readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("schwere Scanner- und PDF-Bibliotheken werden nicht beim App-Start geladen", async () => {
   const html = await read("index.html");
@@ -53,7 +54,7 @@ test("Archivkern, Migrationsbericht und getrennte physische Exemplare sind einge
 });
 
 
-test("Version 4.6.12, Datenformat 9 und Datenbank 6 sind durchgängig verdrahtet", async () => {
+test("Version 4.6.18, Datenformat 9 und Datenbank 6 sind durchgängig verdrahtet", async () => {
   const [config, storage, dataStack, recovery, version, serviceWorker] = await Promise.all([
     read("config.js"),
     read("storage.js"),
@@ -63,19 +64,19 @@ test("Version 4.6.12, Datenformat 9 und Datenbank 6 sind durchgängig verdrahtet
     read("service-worker.js")
   ]);
   const versionData = JSON.parse(version);
-  assert.equal(versionData.appVersion, "4.6.12");
+  assert.equal(versionData.appVersion, "4.6.18");
   assert.equal(versionData.dataFormatVersion, 9);
   assert.equal(versionData.archiveModelVersion, 1);
   assert.equal(versionData.dataStackVersion, 2);
   assert.match(config, /export const DATA_STACK_VERSION = 2/);
-  assert.match(config, /appVersion:\s*"4\.6\.12"/);
+  assert.match(config, /appVersion:\s*"4\.6\.18"/);
   assert.match(config, /dataFormatVersion:\s*9/);
   assert.match(storage, /const DATABASE_VERSION = 6/);
   assert.match(storage, /getDataStackStatus/);
   assert.match(dataStack, /validateDataStackFoundation/);
-  assert.match(recovery, /const APP_VERSION = "4\.6\.12"/);
+  assert.match(recovery, /const APP_VERSION = "4\.6\.18"/);
   assert.match(recovery, /const DATA_FORMAT_VERSION = 9/);
-  assert.match(serviceWorker, /const APP_VERSION = "4\.6\.12"/);
+  assert.match(serviceWorker, /const APP_VERSION = "4\.6\.18"/);
 });
 
 test("Service Worker hält den Archivkern im kritischen Offline-Paket", async () => {
@@ -142,9 +143,10 @@ test("Cover-Hotfix nutzt die Duckipedia-Infobox, lädt Regale selbstständig und
 });
 
 test("Version 4.2 bindet Scanner Pro, Zustandsassistent und einen überlagerungsfreien Seitenkopf ein", async () => {
-  const [html, app, css, serviceWorker, buildScript] = await Promise.all([
+  const [html, app, scannerFeature, css, serviceWorker, buildScript] = await Promise.all([
     read("index.html"),
     read("app.js"),
+    read("scanner-feature.js"),
     read("style.css"),
     read("service-worker.js"),
     read("scripts/build-static.mjs")
@@ -154,8 +156,9 @@ test("Version 4.2 bindet Scanner Pro, Zustandsassistent und einen überlagerungs
   assert.match(html, /id="scanner-mode-review"/);
   assert.match(html, /id="condition-assistant-modal"/);
   assert.match(html, /id="scanner-stat-scanned"/);
-  assert.match(app, /mergeScannerQueueItem/);
-  assert.match(app, /renderScannerSessionStats/);
+  assert.match(app, /import\("\.\/scanner-feature\.js"\)/);
+  assert.match(scannerFeature, /mergeScannerQueueItem/);
+  assert.match(scannerFeature, /renderScannerSessionStats/);
   assert.match(app, /evaluateConditionAssessment/);
   assert.match(css, /\.app-page\s*\{[\s\S]*?isolation:\s*isolate/);
   assert.match(css, /\.app-page-header\s*\{[\s\S]*?z-index:\s*1000/);

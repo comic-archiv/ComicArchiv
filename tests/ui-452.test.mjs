@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { readAppStyles } from "./test-helpers.mjs";
 
-const read = (name) => readFile(new URL(`../${name}`, import.meta.url), "utf8");
+const read = (name) => name === "style.css" ? readAppStyles() : readFile(new URL(`../${name}`, import.meta.url), "utf8");
 
 test("Dashboard nutzt eine volle Fehlbandzeile und kompakte Mission ohne sichtbare Dachzeile", async () => {
   const [html, css] = await Promise.all([read("index.html"), read("style.css")]);
@@ -65,10 +66,10 @@ test("App-Version und Cache-Version sind synchron", async () => {
   const [config, worker, metadata, recovery, packageSource] = await Promise.all([
     read("config.js"), read("service-worker.js"), read("version.json"), read("recovery.js"), read("package.json")
   ]);
-  assert.match(config, /appVersion:\s*"4\.6\.12"/);
-  assert.match(worker, /APP_VERSION\s*=\s*"4\.6\.12"/);
-  assert.match(worker, /v4-6-12/);
-  assert.match(recovery, /const APP_VERSION = "4\.6\.12"/);
-  assert.equal(JSON.parse(metadata).appVersion, "4.6.12");
-  assert.equal(JSON.parse(packageSource).version, "4.6.12");
+  assert.match(config, /appVersion:\s*"4\.6\.18"/);
+  assert.match(worker, /APP_VERSION\s*=\s*"4\.6\.18"/);
+  assert.match(worker, /v4-6-18/);
+  assert.match(recovery, /const APP_VERSION = "4\.6\.18"/);
+  assert.equal(JSON.parse(metadata).appVersion, "4.6.18");
+  assert.equal(JSON.parse(packageSource).version, "4.6.18");
 });

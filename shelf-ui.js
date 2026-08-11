@@ -1,6 +1,19 @@
 import { APP_CONFIG, DEFAULT_CONDITION_CODE, getConditionLabel, getConditionRank } from "./config.js";
 import { DUCKIPEDIA_LOOKUP_VERSION } from "./duckipedia.js";
-import { getComicCopies, normalizeSeriesLookup } from "./archive-model.js";
+import { normalizeSeriesLookup } from "./archive-model.js";
+import {
+  getEntryCopies,
+  getEntryDuckipediaCoverLookupVersion,
+  getEntryDuckipediaCoverUrl,
+  getEntryDuckipediaPageUrl,
+  getEntryId,
+  getEntryNotes,
+  getEntryNumericBandNumber,
+  getEntryPublicationYear,
+  getEntrySeriesName,
+  getEntryTitle,
+  getEntryVolumeNumber
+} from "./archive-entry.js";
 import {
   SHELF_PAGE_SIZE,
   SMART_LIST_DEFINITIONS,
@@ -94,7 +107,7 @@ export function createShelfUI({
     synchronizeResolvedCoverCache();
     rebuildSummaries();
     state.selectedIssueIds = new Set(
-      [...state.selectedIssueIds].filter((id) => state.snapshot.comics.some((comic) => comic.id === id))
+      [...state.selectedIssueIds].filter((id) => state.snapshot.comics.some((comic) => getEntryId(comic) === id))
     );
     if (isVisible(elements.libraryPage)) renderLibrary();
     if (isVisible(elements.seriesPage)) renderSeries();
@@ -285,15 +298,15 @@ export function createShelfUI({
     if (!comic?.id || typeof onResolveCover !== "function") return Promise.resolve("");
     // Map.has is intentional: an empty result is cached for this session too,
     // so pages without a usable infobox cover are not requested on every rerender.
-    if (!force && state.resolvedCoverUrls.has(comic.id)) {
-      return Promise.resolve(state.resolvedCoverUrls.get(comic.id) || "");
+    if (!force && state.resolvedCoverUrls.has(getEntryId(comic))) {
+      return Promise.resolve(state.resolvedCoverUrls.get(getEntryId(comic)) || "");
     }
-    const pending = state.remoteCoverPromises.get(comic.id);
+    const pending = state.remoteCoverPromises.get(getEntryId(comic));
     if (pending) return pending;
 
     let resolveTask;
     const promise = new Promise((resolve) => { resolveTask = resolve; });
-    state.remoteCoverPromises.set(comic.id, promise);
+    state.remoteCoverPromises.set(getEntryId(comic), promise);
     state.remoteCoverQueue.push({ comic, force, resolve: resolveTask });
     pumpRemoteCoverQueue();
     return promise;
@@ -308,19 +321,19 @@ export function createShelfUI({
           const normalizedSource = typeof source === "string" ? source.trim() : "";
           // Store both successful and authoritative empty results. The resolver
           // persists the current metadata before this promise resolves.
-          state.resolvedCoverUrls.set(task.comic.id, normalizedSource);
-          const latestComic = state.snapshot.comics.find((entry) => entry.id === task.comic.id);
+          state.resolvedCoverUrls.set(getEntryId(task.comic), normalizedSource);
+          const latestComic = state.snapshot.comics.find((entry) => entry.id === getEntryId(task.comic));
           if (latestComic && latestComic !== task.comic) Object.assign(task.comic, latestComic);
           task.resolve(normalizedSource);
         })
         .catch((error) => {
           console.warn("Automatisches Coverladen fehlgeschlagen:", error);
           // Do not cache transient failures; a later render may retry.
-          task.resolve(task.comic.duckipediaCoverUrl || "");
+          task.resolve(getEntryDuckipediaCoverUrl(task.comic) || "");
         })
         .finally(() => {
           state.remoteCoverActive = Math.max(0, state.remoteCoverActive - 1);
-          state.remoteCoverPromises.delete(task.comic.id);
+          state.remoteCoverPromises.delete(getEntryId(task.comic));
           globalThis.setTimeout(pumpRemoteCoverQueue, REMOTE_COVER_DELAY_MS);
         });
     }
@@ -474,7 +487,7 @@ export function createShelfUI({
       const slot = document.createElement("span");
       slot.className = "series-cover-collage-slot";
       const comic = candidates[index];
-      if (comic) appendCoverToSlot(slot, comic, summary.series, comic.volumeNumber);
+      if (comic) appendCoverToSlot(slot, comic, summary.series, getEntryVolumeNumber(comic));
       else appendMiniFallback(slot, summary.series, summary.issueCount ? "…" : "0");
       collage.append(slot);
     }
@@ -552,7 +565,7 @@ export function createShelfUI({
       const slot = document.createElement("span");
       slot.className = "series-hero-cover";
       const comic = candidates[index];
-      if (comic) appendCoverToSlot(slot, comic, summary.series, comic.volumeNumber);
+      if (comic) appendCoverToSlot(slot, comic, summary.series, getEntryVolumeNumber(comic));
       else {
         slot.classList.add("is-fallback");
         slot.textContent = index === 0 ? getSeriesAbbreviation(summary.series) : "•";
@@ -602,7 +615,7 @@ export function createShelfUI({
     const maximumBand = summary.target || summary.highestOwned;
     const fullContent = maximumBand > 0
       ? buildShelfSlots(summary.comics, { target: maximumBand, startBand: 1, maximumBand })
-      : { slots: [], nonNumericComics: summary.comics.filter((comic) => !comic.numericBandNumber) };
+      : { slots: [], nonNumericComics: summary.comics.filter((comic) => !getEntryNumericBandNumber(comic)) };
 
     let visibleSlots = fullContent.slots.filter((slot) => {
       if (state.seriesFilter === "owned" && slot.type !== "owned") return false;
@@ -629,7 +642,7 @@ export function createShelfUI({
       ...visibleSlots.map((slot) => ({ kind: "slot", slot })),
       ...visibleNonNumeric.map((comic) => ({
         kind: "nonnumeric",
-        slot: { type: "owned", comic, bandNumber: comic.volumeNumber }
+        slot: { type: "owned", comic, bandNumber: getEntryVolumeNumber(comic) }
       }))
     ];
     const visibleEntries = allEntries.slice(0, state.seriesVisibleLimit);
@@ -642,7 +655,7 @@ export function createShelfUI({
 
     if (state.seriesView === "shelf") {
       displayedSlots.forEach((slot) => elements.seriesShelfGrid.append(createShelfTile(slot, summary)));
-      displayedNonNumeric.forEach((comic) => elements.seriesNonnumeric.append(createShelfTile({ type: "owned", comic, bandNumber: comic.volumeNumber }, summary)));
+      displayedNonNumeric.forEach((comic) => elements.seriesNonnumeric.append(createShelfTile({ type: "owned", comic, bandNumber: getEntryVolumeNumber(comic) }, summary)));
     } else {
       visibleEntries.forEach((entry) => elements.seriesComicList.append(createSeriesListCard(entry.slot, summary)));
     }
@@ -707,33 +720,33 @@ export function createShelfUI({
     }
 
     const comic = slot.comic;
-    button.dataset.issueId = comic.id;
-    if (state.selectedIssueIds.has(comic.id)) button.classList.add("is-selected");
+    button.dataset.issueId = getEntryId(comic);
+    if (state.selectedIssueIds.has(getEntryId(comic))) button.classList.add("is-selected");
     if (state.selectionMode) {
       const indicator = document.createElement("span");
       indicator.className = "shelf-selection-indicator";
-      indicator.textContent = state.selectedIssueIds.has(comic.id) ? "✓" : "+";
+      indicator.textContent = state.selectedIssueIds.has(getEntryId(comic)) ? "✓" : "+";
       button.append(indicator);
     }
 
     const cover = document.createElement("span");
     cover.className = "shelf-cover";
-    appendShelfCover(cover, comic, summary.series, comic.volumeNumber);
+    appendShelfCover(cover, comic, summary.series, getEntryVolumeNumber(comic));
 
     const body = document.createElement("span");
     body.className = "shelf-tile-body";
     const title = document.createElement("strong");
-    title.textContent = `Band ${comic.volumeNumber}`;
+    title.textContent = `Band ${getEntryVolumeNumber(comic)}`;
     const subtitle = document.createElement("small");
-    subtitle.textContent = comic.title || "Titel noch nicht ergänzt";
+    subtitle.textContent = getEntryTitle(comic) || "Titel noch nicht ergänzt";
     const footer = document.createElement("span");
     footer.className = "shelf-tile-footer";
-    getComicCopies(comic).slice(0, 2).forEach((copy) => footer.append(createConditionChip(copy.condition)));
-    if (getComicCopies(comic).length > 1) footer.append(createMiniTag(`${getComicCopies(comic).length}×`));
-    if (!getComicCopies(comic).some((copy) => copy.isRead)) footer.append(createMiniTag("ungelesen"));
+    getEntryCopies(comic).slice(0, 2).forEach((copy) => footer.append(createConditionChip(copy.condition)));
+    if (getEntryCopies(comic).length > 1) footer.append(createMiniTag(`${getEntryCopies(comic).length}×`));
+    if (!getEntryCopies(comic).some((copy) => copy.isRead)) footer.append(createMiniTag("ungelesen"));
     body.append(title, subtitle, footer);
     button.append(cover, body);
-    button.setAttribute("aria-label", `${summary.series}, Band ${comic.volumeNumber}${comic.title ? `, ${comic.title}` : ""}. ${state.selectionMode ? "Auswählen" : "Details öffnen"}.`);
+    button.setAttribute("aria-label", `${summary.series}, Band ${getEntryVolumeNumber(comic)}${getEntryTitle(comic) ? `, ${getEntryTitle(comic)}` : ""}. ${state.selectionMode ? "Auswählen" : "Details öffnen"}.`);
     return button;
   }
 
@@ -764,33 +777,33 @@ export function createShelfUI({
     }
 
     const comic = slot.comic;
-    article.dataset.issueId = comic.id;
-    if (state.selectedIssueIds.has(comic.id)) article.classList.add("is-selected");
+    article.dataset.issueId = getEntryId(comic);
+    if (state.selectedIssueIds.has(getEntryId(comic))) article.classList.add("is-selected");
 
     if (state.selectionMode) {
       const select = document.createElement("button");
       select.type = "button";
       select.className = "series-list-select";
-      select.dataset.selectIssue = comic.id;
-      select.textContent = state.selectedIssueIds.has(comic.id) ? "✓" : "+";
-      select.setAttribute("aria-label", `Band ${comic.volumeNumber} ${state.selectedIssueIds.has(comic.id) ? "abwählen" : "auswählen"}`);
+      select.dataset.selectIssue = getEntryId(comic);
+      select.textContent = state.selectedIssueIds.has(getEntryId(comic)) ? "✓" : "+";
+      select.setAttribute("aria-label", `Band ${getEntryVolumeNumber(comic)} ${state.selectedIssueIds.has(getEntryId(comic)) ? "abwählen" : "auswählen"}`);
       article.append(select);
     }
 
     const main = document.createElement("button");
     main.type = "button";
     main.className = "series-list-main";
-    main.dataset.issueId = comic.id;
+    main.dataset.issueId = getEntryId(comic);
     const band = document.createElement("span");
     band.className = "series-list-band";
-    band.textContent = String(comic.volumeNumber);
+    band.textContent = String(getEntryVolumeNumber(comic));
     const copy = document.createElement("span");
     copy.className = "series-list-copy";
     const title = document.createElement("strong");
-    title.textContent = comic.title || `Band ${comic.volumeNumber}`;
+    title.textContent = getEntryTitle(comic) || `Band ${getEntryVolumeNumber(comic)}`;
     const detail = document.createElement("small");
-    const copies = getComicCopies(comic);
-    detail.textContent = `${comic.publicationYear || "Jahr offen"} · ${copies.length} ${copies.length === 1 ? "Exemplar" : "Exemplare"}`;
+    const copies = getEntryCopies(comic);
+    detail.textContent = `${getEntryPublicationYear(comic) || "Jahr offen"} · ${copies.length} ${copies.length === 1 ? "Exemplar" : "Exemplare"}`;
     copy.append(title, detail);
     const badges = document.createElement("span");
     badges.className = "series-list-badges";
@@ -866,9 +879,9 @@ export function createShelfUI({
   async function commitBulkPatch(patch, action) {
     if (!state.selectedIssueIds.size || typeof onBulkSave !== "function") return;
     const selectedIds = new Set(state.selectedIssueIds);
-    const before = state.snapshot.comics.filter((comic) => selectedIds.has(comic.id)).map(cloneValue);
+    const before = state.snapshot.comics.filter((comic) => selectedIds.has(getEntryId(comic))).map(cloneValue);
     const result = applyBulkPatch(state.snapshot.comics, selectedIds, patch);
-    const updated = result.comics.filter((comic) => selectedIds.has(comic.id));
+    const updated = result.comics.filter((comic) => selectedIds.has(getEntryId(comic)));
     if (!result.changed) return;
 
     setBulkControlsDisabled(true);
@@ -915,18 +928,18 @@ export function createShelfUI({
     state.issueDetailId = issueId;
     revokeIssueDetailObjectUrl();
 
-    elements.issueDetailSeries.textContent = comic.series;
-    elements.issueDetailTitle.textContent = comic.title || `Band ${comic.volumeNumber}`;
-    elements.issueDetailMeta.textContent = `Band ${comic.volumeNumber}${comic.publicationYear ? ` · ${comic.publicationYear}` : ""}`;
-    elements.issueDetailNotes.textContent = comic.notes || "";
-    elements.issueDetailNotes.classList.toggle("hidden", !comic.notes);
-    const hasDuckipediaLink = Boolean(String(comic.duckipediaPageUrl || "").trim());
+    elements.issueDetailSeries.textContent = getEntrySeriesName(comic);
+    elements.issueDetailTitle.textContent = getEntryTitle(comic) || `Band ${getEntryVolumeNumber(comic)}`;
+    elements.issueDetailMeta.textContent = `Band ${getEntryVolumeNumber(comic)}${getEntryPublicationYear(comic) ? ` · ${getEntryPublicationYear(comic)}` : ""}`;
+    elements.issueDetailNotes.textContent = getEntryNotes(comic) || "";
+    elements.issueDetailNotes.classList.toggle("hidden", !getEntryNotes(comic));
+    const hasDuckipediaLink = Boolean(String(getEntryDuckipediaPageUrl(comic) || "").trim());
     elements.issueDetailDuckipedia.classList.toggle("hidden", !hasDuckipediaLink);
-    if (hasDuckipediaLink) elements.issueDetailDuckipedia.href = comic.duckipediaPageUrl;
+    if (hasDuckipediaLink) elements.issueDetailDuckipedia.href = getEntryDuckipediaPageUrl(comic);
     else elements.issueDetailDuckipedia.removeAttribute("href");
     elements.issueDetailCopies.replaceChildren();
 
-    getComicCopies(comic).forEach((copy, index) => {
+    getEntryCopies(comic).forEach((copy, index) => {
       const card = document.createElement("article");
       card.className = "issue-detail-copy";
       const heading = document.createElement("div");
@@ -949,7 +962,7 @@ export function createShelfUI({
     delete elements.issueDetailCoverImage.dataset.coverRetry;
     elements.issueDetailCoverFallback.classList.remove("hidden");
     const fallbackStrong = elements.issueDetailCoverFallback.querySelector("strong");
-    if (fallbackStrong) fallbackStrong.textContent = String(comic.volumeNumber || "–");
+    if (fallbackStrong) fallbackStrong.textContent = String(getEntryVolumeNumber(comic) || "–");
     hydrateDetailCover(comic);
 
     elements.issueDetailModal.classList.remove("hidden");
@@ -961,8 +974,8 @@ export function createShelfUI({
 
   async function hydrateDetailCover(comic) {
     try {
-      const local = typeof getCoverMedia === "function" ? await getCoverMedia(comic.id) : null;
-      if (state.issueDetailId !== comic.id || !isVisible(elements.issueDetailModal)) return;
+      const local = typeof getCoverMedia === "function" ? await getCoverMedia(getEntryId(comic)) : null;
+      if (state.issueDetailId !== getEntryId(comic) || !isVisible(elements.issueDetailModal)) return;
       if (local?.blob instanceof Blob) {
         const objectUrl = URL.createObjectURL(local.blob);
         state.issueDetailObjectUrl = objectUrl;
@@ -970,14 +983,14 @@ export function createShelfUI({
         return;
       }
 
-      const hasSessionResult = state.resolvedCoverUrls.has(comic.id);
+      const hasSessionResult = state.resolvedCoverUrls.has(getEntryId(comic));
       const remoteSource = hasSessionResult
-        ? state.resolvedCoverUrls.get(comic.id) || ""
-        : comic.duckipediaCoverUrl || "";
+        ? state.resolvedCoverUrls.get(getEntryId(comic)) || ""
+        : getEntryDuckipediaCoverUrl(comic) || "";
       if (remoteSource) showDetailCover(remoteSource, comic);
 
       const resolved = await requestRemoteCover(comic);
-      if (state.issueDetailId !== comic.id || !isVisible(elements.issueDetailModal)) return;
+      if (state.issueDetailId !== getEntryId(comic) || !isVisible(elements.issueDetailModal)) return;
       if (resolved && resolved !== remoteSource) {
         showDetailCover(resolved, comic);
       } else if (!resolved && remoteSource) {
@@ -996,7 +1009,7 @@ export function createShelfUI({
     if (!normalizedSource) return;
     const token = String((Number(image.dataset.coverToken || 0) + 1) % 1000000);
     image.dataset.coverToken = token;
-    image.alt = `Cover von ${comic.series}, Band ${comic.volumeNumber}`;
+    image.alt = `Cover von ${getEntrySeriesName(comic)}, Band ${getEntryVolumeNumber(comic)}`;
     image.referrerPolicy = "no-referrer";
     image.decoding = "async";
     const reveal = () => {
@@ -1012,7 +1025,7 @@ export function createShelfUI({
       if (!/^https?:/i.test(normalizedSource) || image.dataset.coverRetry === "1") return;
       image.dataset.coverRetry = "1";
       requestRemoteCover(comic, { force: true }).then((replacement) => {
-        if (!replacement || replacement === normalizedSource || state.issueDetailId !== comic.id) return;
+        if (!replacement || replacement === normalizedSource || state.issueDetailId !== getEntryId(comic)) return;
         showDetailCover(replacement, comic);
       });
     };
@@ -1186,32 +1199,32 @@ export function createShelfUI({
   async function hydrateCoverImage(image, fallback, comic) {
     delete image.dataset.coverRetry;
     try {
-      const cachedObjectUrl = state.coverObjectUrlByComic.get(comic.id);
+      const cachedObjectUrl = state.coverObjectUrlByComic.get(getEntryId(comic));
       if (cachedObjectUrl) {
         setImageSource(image, fallback, cachedObjectUrl, comic);
         return;
       }
 
-      const local = typeof getCoverMedia === "function" ? await getCoverMedia(comic.id) : null;
+      const local = typeof getCoverMedia === "function" ? await getCoverMedia(getEntryId(comic)) : null;
       if (!image.isConnected) return;
       if (local?.blob instanceof Blob) {
         const objectUrl = URL.createObjectURL(local.blob);
         state.coverObjectUrls.add(objectUrl);
-        state.coverObjectUrlByComic.set(comic.id, objectUrl);
+        state.coverObjectUrlByComic.set(getEntryId(comic), objectUrl);
         setImageSource(image, fallback, objectUrl, comic);
         return;
       }
 
-      const hasSessionResult = state.resolvedCoverUrls.has(comic.id);
+      const hasSessionResult = state.resolvedCoverUrls.has(getEntryId(comic));
       const remoteSource = hasSessionResult
-        ? state.resolvedCoverUrls.get(comic.id) || ""
-        : comic.duckipediaCoverUrl || "";
+        ? state.resolvedCoverUrls.get(getEntryId(comic)) || ""
+        : getEntryDuckipediaCoverUrl(comic) || "";
       if (remoteSource) setImageSource(image, fallback, remoteSource, comic);
 
       // Do not wait for an IntersectionObserver notification. iOS can skip it
       // for fixed pages that were hidden and reopened. The bounded queue keeps
       // network activity controlled while every rendered card starts loading.
-      if (!comic.numericBandNumber || typeof onResolveCover !== "function") return;
+      if (!getEntryNumericBandNumber(comic) || typeof onResolveCover !== "function") return;
       const resolvedSource = await requestRemoteCover(comic);
       if (!image.isConnected) return;
       if (resolvedSource) {
@@ -1236,13 +1249,13 @@ export function createShelfUI({
   }
 
   function synchronizeResolvedCoverCache() {
-    const validIds = new Set(state.snapshot.comics.map((comic) => comic.id));
+    const validIds = new Set(state.snapshot.comics.map((comic) => getEntryId(comic)));
     for (const id of [...state.resolvedCoverUrls.keys()]) {
       if (!validIds.has(id)) state.resolvedCoverUrls.delete(id);
     }
     state.snapshot.comics.forEach((comic) => {
-      if (Number(comic.duckipediaCoverLookupVersion || 0) >= DUCKIPEDIA_LOOKUP_VERSION) {
-        state.resolvedCoverUrls.set(comic.id, String(comic.duckipediaCoverUrl || ""));
+      if (Number(getEntryDuckipediaCoverLookupVersion(comic) || 0) >= DUCKIPEDIA_LOOKUP_VERSION) {
+        state.resolvedCoverUrls.set(getEntryId(comic), String(getEntryDuckipediaCoverUrl(comic) || ""));
       }
     });
   }
@@ -1470,14 +1483,14 @@ function createConditionChip(code) {
 
 function comicMatchesSearch(comic, normalizedSearch) {
   if (!normalizedSearch) return true;
-  const copies = getComicCopies(comic);
+  const copies = getEntryCopies(comic);
   return [
-    comic.series,
-    comic.volumeNumber,
-    comic.numericBandNumber,
-    comic.title,
-    comic.publicationYear,
-    comic.notes,
+    getEntrySeriesName(comic),
+    getEntryVolumeNumber(comic),
+    getEntryNumericBandNumber(comic),
+    getEntryTitle(comic),
+    getEntryPublicationYear(comic),
+    getEntryNotes(comic),
     ...copies.map((copy) => copy.notes)
   ].some((value) => normalizeText(value).includes(normalizedSearch));
 }

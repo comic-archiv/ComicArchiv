@@ -12,14 +12,27 @@ const requiredFiles = [
   ".gitignore",
   "index.html",
   "style.css",
+  "styles/tokens.css",
+  "styles/base.css",
+  "styles/components.css",
+  "styles/calendar.css",
+  "styles/collection.css",
+  "styles/scanner.css",
+  "styles/statistics.css",
+  "styles/refinements.css",
   "app.js",
   "app-elements.js",
   "archive-model.js",
+  "archive-entry.js",
   "data-stack.js",
   "config.js",
   "storage.js",
   "missing.js",
+  "missing-feature.js",
+  "collection-feature.js",
+  "calendar-feature.js",
   "export.js",
+  "scanner-feature.js",
   "scanner.js",
   "scanner-pro.js",
   "shelf.js",
@@ -52,7 +65,7 @@ for (const file of requiredFiles) {
   if (!existsSync(join(root, file))) errors.push(`Pflichtdatei fehlt: ${file}`);
 }
 
-const [html, appSource, appElementsSource, shelfUiSource, configSource, storageSource, archiveModelSource, exportSource, recoverySource, serviceWorkerSource, styleSource, releaseRadarSource, syncSource, workflowSource, calendarCatalog, packageJson, versionJson, manifest] = await Promise.all([
+const [html, appSource, appElementsSource, shelfUiSource, configSource, storageSource, archiveModelSource, exportSource, recoverySource, serviceWorkerSource, styleManifestSource, releaseRadarSource, calendarFeatureSource, syncSource, workflowSource, calendarCatalog, packageJson, versionJson, manifest] = await Promise.all([
   readText("index.html"),
   readText("app.js"),
   readText("app-elements.js"),
@@ -65,6 +78,7 @@ const [html, appSource, appElementsSource, shelfUiSource, configSource, storageS
   readText("service-worker.js"),
   readText("style.css"),
   readText("release-radar.js"),
+  readText("calendar-feature.js"),
   readText("scripts/sync-release-calendars.mjs"),
   readText(".github/workflows/deploy-pages.yml"),
   readJson("data/kalender-index.json"),
@@ -72,6 +86,10 @@ const [html, appSource, appElementsSource, shelfUiSource, configSource, storageS
   readJson("version.json"),
   readJson("manifest.webmanifest")
 ]);
+const styleImportPaths = [...styleManifestSource.matchAll(/@import\s+url\(["'](.+?)["']\)/g)].map((match) => match[1].replace(/^\.\//, ""));
+const styleSource = styleImportPaths.length
+  ? (await Promise.all(styleImportPaths.map((file) => readText(file)))).join("\n")
+  : styleManifestSource;
 
 const configVersion = matchOne(configSource, /appVersion:\s*"([^"]+)"/, "App-Version in config.js");
 const configDataVersion = Number(matchOne(configSource, /dataFormatVersion:\s*(\d+)/, "Datenformat in config.js"));
@@ -150,7 +168,7 @@ if (!exportSource.includes("archiveCore")) {
 if (!html.includes('id="release-radar-page"') || !html.includes('id="open-release-radar-home"')) {
   errors.push("Erscheinungsradar oder Startseiten-Einstieg fehlt in index.html.");
 }
-if (!appSource.includes("createReleaseRadarItems") || !releaseRadarSource.includes("buildReleaseRadarItems")) {
+if (!calendarFeatureSource.includes("createReleaseRadarItems") || !releaseRadarSource.includes("buildReleaseRadarItems")) {
   errors.push("Erscheinungsradar ist nicht vollständig in App und Modul verdrahtet.");
 }
 if (!styleSource.includes("body.app-page-open > .app-header") || !styleSource.includes("visibility: hidden")) {
@@ -176,6 +194,10 @@ for (const asset of shellAssets) {
 const coreShellAssets = extractArrayStrings(serviceWorkerSource, "CORE_SHELL");
 if (coreShellAssets.includes("./")) errors.push("Service Worker darf ./ und ./index.html nicht doppelt precachen.");
 if (coreShellAssets.includes("./icons/icon-1024.png")) errors.push("Das 1024er Icon darf nicht Teil des Core-Precaches sein.");
+if (coreShellAssets.includes("./scanner.js") || coreShellAssets.includes("./scanner-pro.js") || coreShellAssets.includes("./scanner-feature.js")) errors.push("Scanner-Module dürfen nicht Teil des Core-Precaches sein.");
+for (const cssFile of styleImportPaths) {
+  if (!coreShellAssets.includes(`./${cssFile}`)) errors.push(`CSS-Modul fehlt im Core-Precache: ${cssFile}`);
+}
 if (!serviceWorkerSource.includes("async function cacheFirst(request)")) errors.push("Cache-first-Strategie für statische Assets fehlt im Service Worker.");
 
 for (const icon of manifest.icons || []) {
@@ -210,8 +232,8 @@ for (const file of syntaxFiles) {
   }
 }
 
-if (appSource.length > 350_000) notes.push(`app.js ist mit ${Math.round(appSource.length / 1024)} KB groß und sollte in Version 4 modularisiert werden.`);
-if (styleSource.length > 180_000) notes.push(`style.css ist mit ${Math.round(styleSource.length / 1024)} KB groß und sollte in Version 4 aufgeteilt werden.`);
+if (appSource.length > 260_000) notes.push(`app.js ist mit ${Math.round(appSource.length / 1024)} KB noch groß; weitere Feature-Extraktion bleibt sinnvoll.`);
+if (!styleImportPaths.length) errors.push("CSS-Architektur ist nicht modularisiert: style.css enthält keine Imports.");
 
 if (errors.length) {
   console.error("\nEntenarchiv-Validierung fehlgeschlagen:\n");

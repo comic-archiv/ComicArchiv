@@ -12,6 +12,7 @@ import {
   createArchiveRuntimeCollection,
   createArchiveRuntimeIndex
 } from "../archive-runtime.js";
+import { toLegacyComics } from "../archive-entry.js";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 const NOW = "2026-08-10T00:00:00.000Z";
@@ -95,14 +96,16 @@ function createGraphFixture() {
   return { series: [main, special], issues, copies };
 }
 
-test("Archive Runtime erzeugt aus einem validen Graph dieselbe UI-Sicht wie die bisherige Legacy-Materialisierung", () => {
+test("Archive Runtime hält den Archivgraph direkt und bewahrt Legacy-Kompatibilität nur am Adapterrand", () => {
   const graph = createGraphFixture();
   const runtime = createArchiveRuntimeCollection(graph, { dataFormatVersion: 9 });
   const legacyProjection = materializeLegacyComics(graph.issues, graph.copies, graph.series, { dataFormatVersion: 9 });
 
   assert.equal(runtime.runtimeVersion, ARCHIVE_RUNTIME_VERSION);
   assert.equal(runtime.source, "archive-graph");
-  assert.deepEqual(runtime.entries, legacyProjection);
+  assert.deepEqual(toLegacyComics(runtime.entries, { dataFormatVersion: 9 }), legacyProjection);
+  assert.ok(runtime.entries.every((entry) => entry.issue && entry.series && Array.isArray(entry.copies)));
+  assert.ok(runtime.entries.every((entry) => !("volumeNumber" in entry) && !("condition" in entry)));
   assert.deepEqual(runtime.counts, { series: 2, issues: 2, copies: 3 });
 });
 
@@ -110,13 +113,13 @@ test("Archive Runtime sortiert Exemplare stabil und baut direkte Indizes", () =>
   const runtime = createArchiveRuntimeCollection(createGraphFixture(), { dataFormatVersion: 9 });
   const mainEntry = runtime.entries.find((entry) => entry.id === "issue-240");
   assert.deepEqual(mainEntry.copies.map((copy) => copy.id), ["copy-240-a", "copy-240-b"]);
-  assert.equal(mainEntry.copyCount, 2);
-  assert.equal(mainEntry.condition, "1");
-  assert.equal(mainEntry.duplicateCondition, "2");
+  assert.equal(mainEntry.copies.length, 2);
+  assert.equal(mainEntry.copies[0].condition, "1");
+  assert.equal(mainEntry.copies[1].condition, "2");
 
   const index = createArchiveRuntimeIndex(runtime);
   assert.equal(index.issueById.get("issue-240").title, "Band 240");
-  assert.equal(index.entryById.get("issue-special-2").series, "LTB Spezial");
+  assert.equal(index.entryById.get("issue-special-2").series.name, "LTB Spezial");
   assert.equal(index.copiesByIssue.get("issue-240").length, 2);
 });
 
@@ -128,7 +131,7 @@ test("Archive Runtime verweigert einen unvollständigen Graph statt auf Legacy-D
   );
 });
 
-test("4.6.12 liest die laufende Sammlung ausschließlich aus dem Archivgraph", async () => {
+test("4.6.18 liest die laufende Sammlung ausschließlich aus dem Archivgraph", async () => {
   const [app, appState, storage, runtimeSource, worker, build] = await Promise.all([
     read("app.js"),
     read("app-state.js"),
@@ -155,7 +158,7 @@ test("4.6.12 liest die laufende Sammlung ausschließlich aus dem Archivgraph", a
   assert.match(build, /"archive-runtime\.js"/);
 });
 
-test("4.6.12 hält Legacy-comics nur noch als Import-/Migrationsadapter vor", async () => {
+test("4.6.18 hält Legacy-comics nur noch als Import-/Migrationsadapter vor", async () => {
   const storage = await read("storage.js");
   assert.match(storage, /Kompatibilitätsadapter für alte Backup-\/Migrationspfade/);
   assert.match(storage, /export async function getAllComics\(\)/);

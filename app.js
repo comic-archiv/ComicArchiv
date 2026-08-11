@@ -45,15 +45,6 @@ import {
 } from "./storage.js";
 import { calculateMissingBands, countMissingBands } from "./missing.js";
 import { DUCKIPEDIA_LOOKUP_VERSION, lookupDuckipediaMetadata } from "./duckipedia.js";
-import { MagazineBarcodeScanner, parseSupplementToBandNumber } from "./scanner.js";
-import {
-  SCANNER_MODES,
-  classifyScannerResult,
-  createScannerQueueKey,
-  mergeScannerQueueItem,
-  normalizeScannerMode,
-  summarizeScannerQueue
-} from "./scanner-pro.js";
 import {
   CONDITION_ASSISTANT_DEFECT_GROUPS,
   CONDITION_ASSISTANT_IMPRESSIONS,
@@ -75,31 +66,12 @@ import {
   shareOrDownloadText
 } from "./export.js";
 import { dataUrlToBlob, prepareCoverImage } from "./media.js";
-import { ensurePdfLibrary, ensureScannerLibrary, getOptionalAssetStatus } from "./asset-loader.js";
+import { ensurePdfLibrary, getOptionalAssetStatus } from "./asset-loader.js";
 import { recordDiagnosticError } from "./diagnostics.js";
 import { createLazyDomManager } from "./lazy-dom.js";
 import { createDiagnosticsUI } from "./diagnostics-ui.js";
 import { createAppElements } from "./app-elements.js";
 import { createInitialAppState, SMART_LIST_DEFINITIONS_LOOKUP } from "./app-state.js";
-import {
-  CALENDAR_CATALOG_URL,
-  buildCalendarIcs,
-  compareCalendarEvents,
-  createCalendarCatalogSignature,
-  createCalendarEventId,
-  filterCalendarEvents,
-  formatCalendarDate,
-  getEventsForMonth,
-  getEventsForYear,
-  getMonthName,
-  getUpcomingEvents,
-  isToday,
-  mergePublisherCalendarEvents,
-  normalizeCalendarCatalog,
-  normalizeCalendarEvent,
-  parseIcsCalendar,
-  removePublisherCalendarYear
-} from "./calendar.js";
 import {
   countPhysicalCopies,
   createCustomSeriesId,
@@ -110,8 +82,34 @@ import {
   normalizeCopy,
   normalizeSeriesLookup
 } from "./archive-model.js";
+import {
+  getEntryCondition,
+  getEntryCopies,
+  getEntryCreatedAt,
+  getEntryDuckipediaCoverFileName,
+  getEntryDuckipediaCoverLookupVersion,
+  getEntryDuckipediaCoverSource,
+  getEntryDuckipediaCoverUrl,
+  getEntryDuckipediaPageUrl,
+  getEntryId,
+  getEntryMetadataFetchedAt,
+  getEntryMetadataStatus,
+  getEntryNotes,
+  getEntryNumericBandNumber,
+  getEntryPublicationYear,
+  getEntrySeriesId,
+  getEntrySeriesName,
+  getEntryTitle,
+  getEntryUpdatedAt,
+  getEntryVolumeNumber,
+  isEntryRead,
+  isEntrySealed,
+  toLegacyComic,
+} from "./archive-entry.js";
 import { createShelfUI } from "./shelf-ui.js";
-import { getScopedCollectionEntries, filterAndSortCollectionEntries } from "./collection-query.js";
+import { createCollectionFeature } from "./collection-feature.js";
+import { createMissingFeature } from "./missing-feature.js";
+import { createCalendarFeature } from "./calendar-feature.js";
 import {
   QUALITY_BUCKETS,
   buildStatisticsDNA,
@@ -131,23 +129,6 @@ import {
   canvasToPngBlob,
   renderShareCard
 } from "./share-cards.js";
-import {
-  RELEASE_RADAR_FILTERS,
-  buildReleaseRadarItems as createReleaseRadarItems,
-  createReleaseEventSignature,
-  filterReleaseRadarItems,
-  getReleaseRadarBadgeCount,
-  getReleaseTimingLabel,
-  mergeKnownReleaseSignatures,
-  normalizeKnownReleaseSignatures,
-  normalizeReleaseDecisionMap,
-  normalizeReleaseEventLinks,
-  normalizeReleaseSeriesAliases,
-  normalizeReleaseSeriesCatalog,
-  resolveReleaseIdentity,
-  suggestReleaseSeriesDetails,
-  summarizeReleaseRadar
-} from "./release-radar.js";
 
 import {
   createStableId,
@@ -223,8 +204,99 @@ const diagnosticsUI = createDiagnosticsUI({
 
 let toastTimer;
 let importInProgress = false;
-let barcodeScanner;
 let shelfUI;
+const collectionFeature = createCollectionFeature({
+  state,
+  elements,
+  getShelfUI: () => shelfUI,
+  createConfiguredDuckipediaUrl,
+  startEditing,
+  openDuplicateModal,
+  enrichSingleComic,
+  confirmAndDelete,
+  showToast
+});
+const missingFeature = createMissingFeature({
+  state,
+  elements,
+  createConfiguredDuckipediaUrl,
+  getMetadataForBand,
+  saveMeaningfulSettings,
+  renderStats,
+  renderFleaMarketHubStatus,
+  renderFleaMarket,
+  restoreBodyModalState,
+  refreshCollection,
+  refreshArchiveCoreStatus,
+  showToast
+});
+const calendarFeature = createCalendarFeature({
+  state,
+  elements,
+  getShelfUI: () => shelfUI,
+  refreshArchiveCoreStatus,
+  createAppFilename,
+  populateConfiguration,
+  openAddPage,
+  lookupFormMetadata,
+  createConfiguredDuckipediaUrl,
+  saveMeaningfulSettings,
+  openCollectionPage,
+  renderMissingHub,
+  renderMissingBands,
+  openMissingDetailModal,
+  hasMissingDetailContent,
+  renderFleaMarketHubStatus,
+  renderSeriesProgress,
+  renderStats,
+  resetForm,
+  renderCustomSeriesList,
+  restoreBodyModalState,
+  showFormMessage,
+  showToast
+});
+let scannerFeature = null;
+let scannerFeaturePromise = null;
+
+async function ensureScannerFeature() {
+  if (scannerFeature) return scannerFeature;
+  if (!scannerFeaturePromise) {
+    scannerFeaturePromise = import("./scanner-feature.js").then(({ createScannerFeature }) => {
+      scannerFeature = createScannerFeature({
+        state,
+        elements,
+        showToast,
+        restoreBodyModalState,
+        getMetadataForBand,
+        recordDataChange,
+        refreshCollection,
+        refreshArchiveCoreStatus,
+        showFormMessage,
+        openAddPage,
+        updateDuplicateConditionVisibility,
+        setFormCoverPreview,
+        setFormBusy,
+        resolveConfiguredSeriesId,
+        findComicBySeriesAndVolume
+      });
+      return scannerFeature;
+    }).catch((error) => {
+      scannerFeaturePromise = null;
+      recordDiagnosticError(error, "Scanner-Feature laden", "error");
+      throw error;
+    });
+  }
+  return scannerFeaturePromise;
+}
+
+async function openScannerFeature() {
+  try {
+    const feature = await ensureScannerFeature();
+    await feature.open();
+  } catch (error) {
+    showToast(`Scanner konnte nicht geladen werden: ${error.message}`, "error");
+  }
+}
 
 initializeApp().catch((error) => {
   console.error(error);
@@ -268,7 +340,7 @@ async function initializeApp() {
     applyTheme(state.settings.theme);
     elements.showCovers.checked = state.settings.showCovers !== false;
     elements.autoEnrich.checked = state.settings.duckipediaAutoEnrich !== false;
-    state.scannerMode = normalizeScannerMode(state.settings.scannerMode);
+    state.scannerMode = state.settings.scannerMode === "review" ? "review" : "fast";
     state.releaseRadarFilter = RELEASE_RADAR_FILTERS.includes(state.settings.releaseRadarFilter)
       ? state.settings.releaseRadarFilter
       : "open";
@@ -282,8 +354,6 @@ async function initializeApp() {
   renderConditionGuide();
   populateConfiguration();
   updateDuplicateConditionVisibility();
-  updateScannerModeUI();
-  renderScannerQueue();
   resetCoverEditorState();
   await refreshCollection();
   await initializeReleaseRadarIfNeeded();
@@ -696,8 +766,6 @@ function bindEvents() {
   elements.volumeNumber.addEventListener("input", scheduleFormMetadataLookup);
   elements.isDuplicate.addEventListener("change", updateDuplicateConditionVisibility);
   elements.cancelEdit.addEventListener("click", resetForm);
-  elements.comicList.addEventListener("click", handleCardAction);
-  elements.missingList.addEventListener("click", handleMissingBandClick);
   elements.themeToggle.addEventListener("click", toggleTheme);
   elements.backupReminderAction.addEventListener("click", handleJsonExport);
   elements.progressTargetForm.addEventListener("submit", handleProgressTargetSubmit);
@@ -705,10 +773,8 @@ function bindEvents() {
   elements.progressRemove.addEventListener("click", handleRemoveProgressTarget);
   elements.openMainCollection.addEventListener("click", () => shelfUI?.openSeries("ltb-main", { returnTarget: "home" }));
   elements.openOtherCollection.addEventListener("click", () => shelfUI?.openLibrary("other"));
-  elements.closeCollection.addEventListener("click", closeCollectionPage);
   elements.openMainMissing.addEventListener("click", () => openMissingPage("main"));
   elements.openOtherMissing.addEventListener("click", () => openMissingPage("other"));
-  elements.closeMissingPage.addEventListener("click", closeMissingPage);
   elements.openFleaMarket.addEventListener("click", openFleaMarketPage);
   elements.closeFleaMarket.addEventListener("click", closeFleaMarketPage);
   elements.fleaMarketSearch.addEventListener("input", renderFleaMarket);
@@ -718,99 +784,10 @@ function bindEvents() {
   elements.fleaMarketApplyCondition.addEventListener("click", applyFleaMarketDefaultCondition);
   elements.fleaMarketSave.addEventListener("click", saveFleaMarketFinds);
   elements.fleaMarketClear.addEventListener("click", clearFleaMarketFinds);
-  elements.openCalendar.addEventListener("click", openCalendarPage);
-  elements.closeCalendar.addEventListener("click", closeCalendarPage);
-  elements.openReleaseRadarHome.addEventListener("click", () => openReleaseRadarPage({ returnTarget: "home" }));
-  elements.openReleaseRadarCalendar.addEventListener("click", () => openReleaseRadarPage({ returnTarget: "calendar" }));
-  elements.closeReleaseRadar.addEventListener("click", closeReleaseRadarPage);
-  elements.releaseRadarPage.addEventListener("click", handleReleaseRadarPageClick);
-  elements.releaseRadarList.addEventListener("change", handleReleaseRadarPriorityChange);
-  elements.releaseRadarMarkSeen.addEventListener("click", markVisibleReleaseRadarItemsSeen);
-  elements.releaseRadarExport.addEventListener("click", exportWatchedReleaseReminders);
-  elements.releaseRadarBadgeEnabled.addEventListener("change", handleReleaseRadarBadgeToggle);
-  elements.releaseLinkForm.addEventListener("submit", handleReleaseLinkSubmit);
-  elements.releaseLinkModeExisting.addEventListener("change", syncReleaseLinkMode);
-  elements.releaseLinkModeNew.addEventListener("change", syncReleaseLinkMode);
-  elements.closeReleaseLink.addEventListener("click", closeReleaseLinkModal);
-  elements.releaseLinkModal.addEventListener("click", (event) => {
-    if (event.target.closest("[data-close-release-link]")) closeReleaseLinkModal();
-  });
-  elements.calendarPrevYear.addEventListener("click", () => changeCalendarYear(-1));
-  elements.calendarNextYear.addEventListener("click", () => changeCalendarYear(1));
-  elements.calendarYearSelect.addEventListener("change", () => setCalendarYear(Number(elements.calendarYearSelect.value)));
-  elements.calendarToday.addEventListener("click", jumpCalendarToToday);
-  elements.calendarSearch.addEventListener("input", () => {
-    state.calendarSearch = elements.calendarSearch.value;
-    renderCalendarPage();
-  });
-  elements.calendarCategoryFilter.addEventListener("change", () => {
-    state.calendarFilter = elements.calendarCategoryFilter.value;
-    renderCalendarPage();
-  });
-  elements.calendarMonthTabs.addEventListener("click", handleCalendarMonthTabClick);
-  elements.calendarGrid.addEventListener("click", handleCalendarDayClick);
-  elements.calendarEventList.addEventListener("click", handleCalendarEventListClick);
-  elements.calendarFile.addEventListener("change", handleCalendarFileImport);
-  elements.calendarRefreshCatalog.addEventListener("click", () => refreshCalendarCatalog({ silent: false, autoImport: true }));
-  elements.calendarAutoSync.addEventListener("change", handleCalendarAutoSyncChange);
-  elements.calendarCatalogList.addEventListener("click", handleCalendarCatalogClick);
-  elements.calendarAddEvent.addEventListener("click", () => openCalendarEventModal());
-  elements.calendarExportReminders.addEventListener("click", exportCalendarWithReminders);
-  elements.calendarReminderTime.addEventListener("change", handleCalendarReminderTimeChange);
-  elements.calendarEventForm.addEventListener("submit", handleCalendarEventSubmit);
-  elements.calendarEventAllDay.addEventListener("change", syncCalendarEventTimeVisibility);
-  elements.calendarEventDelete.addEventListener("click", deleteSelectedCalendarEvent);
-  elements.closeCalendarEvent.addEventListener("click", closeCalendarEventModal);
-  elements.calendarEventModal.addEventListener("click", (event) => {
-    if (event.target.closest("[data-close-calendar-event]")) closeCalendarEventModal();
-  });
   elements.openProgress.addEventListener("click", openProgressPage);
   elements.closeProgress.addEventListener("click", closeProgressPage);
-  elements.openScanner.addEventListener("click", openScannerModal);
-  elements.closeScanner.addEventListener("click", closeScannerModal);
-  elements.scannerModeFast.addEventListener("click", () => setScannerMode(SCANNER_MODES.FAST));
-  elements.scannerModeReview.addEventListener("click", () => setScannerMode(SCANNER_MODES.REVIEW));
-  elements.scannerStart.addEventListener("click", startScannerCamera);
-  elements.scannerStop.addEventListener("click", stopScannerCamera);
-  elements.scannerPhoto.addEventListener("change", handleScannerPhoto);
-  elements.scannerManualApply.addEventListener("click", handleScannerManualCode);
-  elements.scannerIsDuplicate.addEventListener("change", updateScannerDuplicateConditionVisibility);
-  elements.scannerSeries.addEventListener("change", () => {
-    if (state.scannerResult && state.scannerResult.series !== elements.scannerSeries.value) {
-      clearScannerResult();
-      setScannerStatus("Reihe geändert. Bitte scanne den Band erneut.");
-    }
-  });
-  elements.scannerSave.addEventListener("click", handleScannerSave);
-  elements.scannerApplyForm.addEventListener("click", handleScannerApplyToForm);
-  elements.scannerRescan.addEventListener("click", resetScannerForNext);
-  elements.scannerApplyDefaults.addEventListener("click", applyScannerDefaultsToQueue);
-  elements.scannerSaveQueue.addEventListener("click", saveScannerQueue);
-  elements.scannerClearQueue.addEventListener("click", clearScannerQueue);
-  elements.scannerQueueList.addEventListener("input", handleScannerQueueInput);
-  elements.scannerQueueList.addEventListener("change", handleScannerQueueInput);
-  elements.scannerQueueList.addEventListener("click", handleScannerQueueClick);
-  elements.scannerModal.addEventListener("click", (event) => {
-    if (event.target.closest("[data-close-scanner]")) closeScannerModal();
-  });
+  elements.openScanner.addEventListener("click", openScannerFeature);
 
-  [
-    elements.search,
-    elements.filterSeries,
-    elements.filterCondition,
-    elements.filterRead,
-    elements.filterSealed,
-    elements.filterDuplicate,
-    elements.sortBy
-  ].forEach((control) => {
-    control.addEventListener(control === elements.search ? "input" : "change", renderCollection);
-  });
-
-  elements.resetFilters.addEventListener("click", resetFilters);
-  elements.clearSmartList.addEventListener("click", () => {
-    state.collectionPreset = {};
-    resetFilters({ keepPageOpen: true, clearPreset: false });
-  });
   elements.exportJson.addEventListener("click", handleJsonExport);
   elements.exportCsv.addEventListener("click", handleCollectionCsvExport);
   elements.exportMissingCsv.addEventListener("click", handleMissingCsvExport);
@@ -836,13 +813,6 @@ function bindEvents() {
   elements.customSeriesList.addEventListener("click", handleCustomSeriesAction);
   elements.seriesModal.addEventListener("click", (event) => {
     if (event.target.closest("[data-close-series]")) closeSeriesModal();
-  });
-  elements.closeMissingDetail.addEventListener("click", closeMissingDetailModal);
-  elements.missingDetailForm.addEventListener("submit", handleSaveMissingDetail);
-  elements.deleteMissingDetail.addEventListener("click", handleDeleteMissingDetail);
-  elements.missingMarkOwned.addEventListener("click", handleMarkMissingBandOwned);
-  elements.missingDetailModal.addEventListener("click", (event) => {
-    if (event.target.closest("[data-close-missing-detail]")) closeMissingDetailModal();
   });
   elements.duplicateForm.addEventListener("submit", handleSaveCopyManager);
   elements.copyManagerAdd.addEventListener("click", addCopyManagerCopy);
@@ -881,7 +851,7 @@ function bindEvents() {
     if (!elements.seriesModal.classList.contains("hidden")) return closeSeriesModal();
     if (!elements.missingDetailModal.classList.contains("hidden")) return closeMissingDetailModal();
     if (!elements.duplicateModal.classList.contains("hidden")) return closeDuplicateModal();
-    if (!elements.scannerModal.classList.contains("hidden")) return closeScannerModal();
+    if (!elements.scannerModal.classList.contains("hidden")) return scannerFeature?.close();
     if (!elements.addPage.classList.contains("hidden")) return closeAddPage();
     if (!elements.statisticsPage.classList.contains("hidden")) return closeStatisticsPage();
     if (!elements.collectionPage.classList.contains("hidden")) return closeCollectionPage();
@@ -1029,8 +999,8 @@ function handleConditionAssistantTrigger(event) {
         copyDraft.condition = code;
         if (note) copyDraft.notes = appendConditionNote(copyDraft.notes, note);
         item.copyDrafts = drafts;
-        syncScannerQueueLegacyFields(item);
-        renderScannerQueue();
+        scannerFeature?.syncQueueItem(item);
+        scannerFeature?.renderQueue();
       }
     });
     return;
@@ -1324,7 +1294,7 @@ async function handleFormSubmit(event) {
       const existing = findComicBySeriesAndVolume(formComic.series, formComic.volumeNumber);
       if (existing) {
         const confirmed = window.confirm(
-          `${existing.series}, Band ${existing.volumeNumber} ist bereits vorhanden. ` +
+          `${getEntrySeriesName(existing)}, Band ${getEntryVolumeNumber(existing)} ist bereits vorhanden. ` +
           `Die neue Eingabe wird als weiteres physisches Exemplar gespeichert, ohne einen doppelten Bandeintrag anzulegen. Fortfahren?`
         );
         if (!confirmed) return;
@@ -1372,15 +1342,15 @@ function findComicBySeriesAndVolume(series, volumeNumber) {
   const volumeKey = /^[0-9]+$/.test(rawVolume) && Number(rawVolume) > 0 ? String(Number(rawVolume)) : rawVolume;
 
   return state.collectionEntries.find((comic) => {
-    const comicSeriesId = comic.seriesId || resolveConfiguredSeriesId(comic.series);
+    const comicSeriesId = getEntrySeriesId(comic) || resolveConfiguredSeriesId(getEntrySeriesName(comic));
     if (identityKey && comicSeriesId) {
-      return createIssueIdentityKey(comicSeriesId, comic.volumeNumber) === identityKey;
+      return createIssueIdentityKey(comicSeriesId, getEntryVolumeNumber(comic)) === identityKey;
     }
-    const comicRawVolume = String(comic.volumeNumber || "").trim().normalize("NFC");
+    const comicRawVolume = String(getEntryVolumeNumber(comic) || "").trim().normalize("NFC");
     const comicVolumeKey = /^[0-9]+$/.test(comicRawVolume) && Number(comicRawVolume) > 0
       ? String(Number(comicRawVolume))
       : comicRawVolume;
-    return normalizeSeriesLookup(comic.series) === seriesKey && comicVolumeKey === volumeKey;
+    return normalizeSeriesLookup(getEntrySeriesName(comic)) === seriesKey && comicVolumeKey === volumeKey;
   }) || null;
 }
 
@@ -1401,33 +1371,34 @@ function resolveConfiguredSeriesId(seriesName) {
 
 function appendFormCopiesToExistingComic(existing, formComic) {
   const now = new Date().toISOString();
-  const existingCopies = getComicCopies(existing);
+  const existingView = toLegacyComic(existing);
+  const existingCopies = getEntryCopies(existing);
   const incomingCopies = getComicCopies(formComic).map((copy, index) => normalizeCopy({
     ...copy,
     id: createEntityId("copy"),
-    issueId: existing.id,
+    issueId: getEntryId(existing),
     displayOrder: existingCopies.length + index + 1,
     source: "manual-additional",
     createdAt: now,
     updatedAt: now
-  }, { issueId: existing.id, position: existingCopies.length + index + 1, now }));
+  }, { issueId: getEntryId(existing), position: existingCopies.length + index + 1, now }));
   const copies = [...existingCopies, ...incomingCopies].map((copy, index) => ({
     ...copy,
-    issueId: existing.id,
+    issueId: getEntryId(existing),
     displayOrder: index + 1
   }));
   const primary = copies[0];
   const secondary = copies[1] || null;
 
   return {
-    ...existing,
-    seriesId: existing.seriesId || formComic.seriesId || null,
-    title: existing.title || formComic.title || "",
-    publicationYear: existing.publicationYear || formComic.publicationYear || null,
-    duckipediaPageUrl: existing.duckipediaPageUrl || formComic.duckipediaPageUrl || "",
-    duckipediaCoverUrl: existing.duckipediaCoverUrl || formComic.duckipediaCoverUrl || "",
-    metadataStatus: existing.metadataStatus || formComic.metadataStatus || "",
-    metadataFetchedAt: existing.metadataFetchedAt || formComic.metadataFetchedAt || null,
+    ...existingView,
+    seriesId: existingView.seriesId || formComic.seriesId || null,
+    title: existingView.title || formComic.title || "",
+    publicationYear: existingView.publicationYear || formComic.publicationYear || null,
+    duckipediaPageUrl: existingView.duckipediaPageUrl || formComic.duckipediaPageUrl || "",
+    duckipediaCoverUrl: existingView.duckipediaCoverUrl || formComic.duckipediaCoverUrl || "",
+    metadataStatus: existingView.metadataStatus || formComic.metadataStatus || "",
+    metadataFetchedAt: existingView.metadataFetchedAt || formComic.metadataFetchedAt || null,
     copies,
     copyCount: copies.length,
     condition: primary.condition,
@@ -1677,8 +1648,8 @@ async function loadExistingCoverIntoForm(comic) {
   clearFormCoverPreview("");
 
   try {
-    const cover = await getCoverMedia(comic.id);
-    if (state.editingId !== comic.id) return;
+    const cover = await getCoverMedia(getEntryId(comic));
+    if (state.editingId !== getEntryId(comic)) return;
 
     if (cover?.blob instanceof Blob) {
       state.formHasLocalCover = true;
@@ -1687,8 +1658,8 @@ async function loadExistingCoverIntoForm(comic) {
       return;
     }
 
-    if (comic.duckipediaCoverUrl) {
-      setFormCoverPreview(comic.duckipediaCoverUrl, "Duckipedia-Vorschau · nicht lokal gespeichert", false);
+    if (getEntryDuckipediaCoverUrl(comic)) {
+      setFormCoverPreview(getEntryDuckipediaCoverUrl(comic), "Duckipedia-Vorschau · nicht lokal gespeichert", false);
     }
   } catch (error) {
     console.warn("Cover konnte nicht geladen werden:", error);
@@ -1884,6 +1855,30 @@ async function saveShelfBulkComics(updatedComics, { action = "bulk" } = {}) {
   if (action !== "undo") await refreshMediaStatus().catch(() => {});
 }
 
+function syncCollectionSeriesFilter(availableSeries, preferredValue) {
+  return collectionFeature.syncSeriesFilter(availableSeries, preferredValue);
+}
+
+function renderCollectionHub() {
+  return collectionFeature.renderHub();
+}
+
+function openCollectionPage(scope, presets = {}) {
+  return collectionFeature.open(scope, presets);
+}
+
+function closeCollectionPage(options) {
+  return collectionFeature.close(options);
+}
+
+function renderCollection() {
+  return collectionFeature.render();
+}
+
+function resetFilters(options) {
+  return collectionFeature.resetFilters(options);
+}
+
 function openProgressForSeries(seriesName) {
   openProgressPage();
   const optionExists = [...elements.progressSeries.options].some((option) => option.value === seriesName);
@@ -1896,166 +1891,40 @@ function openProgressForSeries(seriesName) {
 }
 
 
-function syncCollectionSeriesFilter(availableSeries = getAvailableSeries(state.settings, state.collectionEntries), preferredValue = elements.filterSeries.value) {
-  const mainSeries = "Lustiges Taschenbuch";
-  const options = state.collectionScope === "main"
-    ? [mainSeries]
-    : state.collectionScope === "other"
-      ? availableSeries.filter((seriesName) => seriesName !== mainSeries)
-      : availableSeries;
 
-  elements.filterSeries.replaceChildren();
 
-  if (state.collectionScope === "main") {
-    elements.filterSeries.append(createOption(mainSeries, mainSeries));
-    elements.filterSeries.value = mainSeries;
-    elements.filterSeriesField.classList.add("hidden");
-    return;
-  }
 
-  elements.filterSeries.append(createOption("all", state.collectionScope === "other" ? "Alle Sonderreihen" : "Alle Reihen"));
-  options.forEach((seriesName) => elements.filterSeries.append(createOption(seriesName, seriesName)));
-  elements.filterSeries.value = options.includes(preferredValue) ? preferredValue : "all";
-  elements.filterSeriesField.classList.remove("hidden");
-}
 
-function renderCollectionHub() {
-  const mainCount = state.collectionEntries.filter((comic) => comic.series === "Lustiges Taschenbuch").length;
-  const otherCount = state.collectionEntries.length - mainCount;
-  elements.mainCollectionCount.textContent = String(mainCount);
-  elements.otherCollectionCount.textContent = String(otherCount);
-  elements.mainCollectionCount.setAttribute("aria-label", formatEntryCount(mainCount));
-  elements.otherCollectionCount.setAttribute("aria-label", formatEntryCount(otherCount));
-}
 
-function openCollectionPage(scope, presets = {}) {
-  state.collectionScope = scope === "other" ? "other" : scope === "all" ? "all" : "main";
-  state.collectionReturnTarget = presets.returnTarget || (
-    shelfUI?.isSeriesOpen() ? "series" : shelfUI?.isLibraryOpen() ? "library" : "home"
-  );
-  state.collectionPreset = { ...presets };
-  resetFilters({ keepPageOpen: true, clearPreset: false });
-  syncCollectionSeriesFilter(getAvailableSeries(state.settings, state.collectionEntries));
 
-  if (presets.series && [...elements.filterSeries.options].some((option) => option.value === presets.series)) {
-    elements.filterSeries.value = presets.series;
-  }
-  if (presets.read) elements.filterRead.value = presets.read;
-  if (presets.sealed) elements.filterSealed.checked = true;
-  if (presets.duplicate) elements.filterDuplicate.checked = true;
-  if (presets.search) elements.search.value = String(presets.search);
-  if (presets.smartList === "recent") elements.sortBy.value = "recent";
 
-  elements.collectionPageTitle.textContent = presets.title || (
-    state.collectionScope === "main"
-      ? "Lustige Taschenbücher"
-      : state.collectionScope === "other"
-        ? "Sonderbände & weitere Reihen"
-        : "Alle Comics"
-  );
-  renderCollection();
-  elements.collectionPage.classList.remove("hidden");
-  elements.collectionPage.setAttribute("aria-hidden", "false");
-  document.body.classList.add("app-page-open");
-  elements.collectionPage.scrollTop = 0;
-  window.setTimeout(() => elements.closeCollection.focus({ preventScroll: true }), 0);
-}
-
-function closeCollectionPage({ returnFocus = true } = {}) {
-  elements.collectionPage.classList.add("hidden");
-  elements.collectionPage.setAttribute("aria-hidden", "true");
-  const anotherPageOpen = [...document.querySelectorAll(".app-page")]
-    .some((page) => !page.classList.contains("hidden"));
-  document.body.classList.toggle("app-page-open", anotherPageOpen);
-
-  if (!returnFocus) return;
-  window.setTimeout(() => {
-    if (state.collectionReturnTarget === "series" && shelfUI?.isSeriesOpen()) {
-      document.querySelector("#close-series-page")?.focus({ preventScroll: true });
-      return;
-    }
-    if (state.collectionReturnTarget === "library" && shelfUI?.isLibraryOpen()) {
-      document.querySelector("#close-library")?.focus({ preventScroll: true });
-      return;
-    }
-    if (state.collectionReturnTarget === "statistics" && !elements.statisticsPage.classList.contains("hidden")) {
-      elements.closeStatistics?.focus({ preventScroll: true });
-      return;
-    }
-    const target = state.collectionScope === "main"
-      ? elements.openMainCollection
-      : state.collectionScope === "other"
-        ? elements.openOtherCollection
-        : elements.dashboardStats;
-    target?.focus({ preventScroll: true });
-  }, 0);
-}
-
-function getScopedMissingGroups() {
-  const mainSeries = "Lustiges Taschenbuch";
-  return state.missingGroups.filter((group) => (
-    state.missingScope === "main"
-      ? group.series === mainSeries
-      : state.missingScope === "other"
-        ? group.series !== mainSeries
-        : true
-  ));
-}
 
 function renderMissingHub() {
-  const mainSeries = "Lustiges Taschenbuch";
-  const mainMissing = state.missingGroups
-    .filter((group) => group.series === mainSeries)
-    .reduce((sum, group) => sum + group.missingBands.length, 0);
-  const otherMissing = state.missingGroups
-    .filter((group) => group.series !== mainSeries)
-    .reduce((sum, group) => sum + group.missingBands.length, 0);
-  const totalMissing = mainMissing + otherMissing;
-
-  elements.mainMissingCount.textContent = String(mainMissing);
-  elements.otherMissingCount.textContent = String(otherMissing);
-  elements.mainMissingCount.setAttribute("aria-label", `${mainMissing} fehlende Bände`);
-  elements.otherMissingCount.setAttribute("aria-label", `${otherMissing} fehlende Bände`);
-  elements.missingCount.textContent = totalMissing === 1 ? "1 fehlt" : `${totalMissing} fehlen`;
+  return missingFeature.renderHub();
 }
 
-function openMissingPage(scope, { returnTarget = "home" } = {}) {
-  state.missingScope = scope === "other" ? "other" : scope === "all" ? "all" : "main";
-  state.missingReturnTarget = returnTarget;
-  state.openMissingSeries = new Set();
-  elements.missingPageTitle.textContent = state.missingScope === "main"
-    ? "Lustige Taschenbücher"
-    : state.missingScope === "other"
-      ? "Sonderbände & weitere Reihen"
-      : "Alle fehlenden Bände";
-  renderMissingBands();
-  elements.missingPage.classList.remove("hidden");
-  elements.missingPage.setAttribute("aria-hidden", "false");
-  document.body.classList.add("app-page-open");
-  elements.missingPage.scrollTop = 0;
-  window.setTimeout(() => elements.closeMissingPage.focus({ preventScroll: true }), 0);
+function openMissingPage(scope, options) {
+  return missingFeature.open(scope, options);
 }
 
-function closeMissingPage({ returnFocus = true } = {}) {
-  elements.missingPage.classList.add("hidden");
-  elements.missingPage.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("app-page-open");
-  if (returnFocus) {
-    window.setTimeout(() => {
-      if (state.missingReturnTarget === "statistics" && !elements.statisticsPage.classList.contains("hidden")) {
-        elements.closeStatistics.focus({ preventScroll: true });
-        state.missingReturnTarget = "home";
-        return;
-      }
-      const target = state.missingScope === "main"
-        ? elements.openMainMissing
-        : state.missingScope === "other"
-          ? elements.openOtherMissing
-          : elements.dashboardStats;
-      target.focus({ preventScroll: true });
-      state.missingReturnTarget = "home";
-    }, 0);
-  }
+function closeMissingPage(options) {
+  return missingFeature.close(options);
+}
+
+function renderMissingBands(options) {
+  return missingFeature.render(options);
+}
+
+function openMissingDetailModal(series, bandNumber) {
+  return missingFeature.openDetail(series, bandNumber);
+}
+
+function closeMissingDetailModal() {
+  return missingFeature.closeDetail();
+}
+
+function hasMissingDetailContent(detail) {
+  return missingFeature.hasDetailContent(detail);
 }
 
 function getFleaMarketCandidates() {
@@ -2320,8 +2189,8 @@ async function saveFleaMarketFinds() {
         ? session.condition
         : DEFAULT_CONDITION_CODE;
       const existing = state.collectionEntries.find((comic) => (
-        normalizeSeriesLookup(comic.series) === normalizeSeriesLookup(candidate.series)
-        && comic.numericBandNumber === candidate.bandNumber
+        normalizeSeriesLookup(getEntrySeriesName(comic)) === normalizeSeriesLookup(candidate.series)
+        && getEntryNumericBandNumber(comic) === candidate.bandNumber
       ));
 
       if (existing) {
@@ -2330,7 +2199,7 @@ async function saveFleaMarketFinds() {
           ...existingCopies,
           normalizeCopy({
             id: createEntityId(`${existing.id}-copy`),
-            issueId: existing.id,
+            issueId: getEntryId(existing),
             condition,
             isRead: false,
             isSealed: false,
@@ -2338,7 +2207,7 @@ async function saveFleaMarketFinds() {
             source: "flea-market",
             createdAt: now,
             updatedAt: now
-          }, { issueId: existing.id, position: existingCopies.length + 1, now })
+          }, { issueId: getEntryId(existing), position: existingCopies.length + 1, now })
         ];
         records.push({
           ...existing,
@@ -2471,8 +2340,8 @@ async function refreshMediaStatus() {
     elements.showCovers.checked = state.settings.showCovers !== false;
     elements.autoEnrich.checked = state.settings.duckipediaAutoEnrich !== false;
 
-    const eligibleCount = state.collectionEntries.filter((comic) => comic.numericBandNumber && (
-      !comic.title || !comic.publicationYear || !comic.duckipediaCoverUrl || !isMetadataFresh(comic)
+    const eligibleCount = state.collectionEntries.filter((comic) => getEntryNumericBandNumber(comic) && (
+      !getEntryTitle(comic) || !getEntryPublicationYear(comic) || !getEntryDuckipediaCoverUrl(comic) || !isMetadataFresh(comic)
     )).length;
     elements.enrichmentCount.textContent = eligibleCount === 1 ? "1 Band prüfbar" : `${eligibleCount} Bände prüfbar`;
 
@@ -2507,7 +2376,7 @@ async function handleAutoEnrichChange() {
 
 async function handleEnrichAll() {
   if (state.enrichmentRunning) return;
-  const candidates = state.collectionEntries.filter((comic) => comic.numericBandNumber);
+  const candidates = state.collectionEntries.filter((comic) => getEntryNumericBandNumber(comic));
 
   if (candidates.length === 0) {
     elements.enrichmentStatus.textContent = "Es gibt noch keine Comics mit rein numerischer Bandnummer.";
@@ -2530,8 +2399,8 @@ async function handleEnrichAll() {
   try {
     for (let index = 0; index < candidates.length; index += 1) {
       const comic = candidates[index];
-      elements.enrichmentStatus.textContent = `${comic.series}, Band ${comic.volumeNumber} wird geprüft (${index + 1}/${candidates.length}) …`;
-      const metadata = await getMetadataForBand(comic.series, comic.numericBandNumber, { force: false });
+      elements.enrichmentStatus.textContent = `${getEntrySeriesName(comic)}, Band ${getEntryVolumeNumber(comic)} wird geprüft (${index + 1}/${candidates.length}) …`;
+      const metadata = await getMetadataForBand(getEntrySeriesName(comic), getEntryNumericBandNumber(comic), { force: false });
       const { comic: updatedComic, changed } = mergeComicWithMetadata(comic, metadata);
 
       if (metadata.found) found += 1; else failed += 1;
@@ -2674,8 +2543,8 @@ async function handleProgressTargetSubmit(event) {
       return;
     }
     const highestPresent = state.collectionEntries
-      .filter((comic) => comic.series === series && Number.isSafeInteger(comic.numericBandNumber))
-      .reduce((maximum, comic) => Math.max(maximum, comic.numericBandNumber), 0);
+      .filter((comic) => getEntrySeriesName(comic) === series && Number.isSafeInteger(getEntryNumericBandNumber(comic)))
+      .reduce((maximum, comic) => Math.max(maximum, getEntryNumericBandNumber(comic)), 0);
     if (target < highestPresent) {
       elements.progressMessage.textContent = `Das Ziel kann nicht unter dem bereits vorhandenen Band ${highestPresent} liegen.`;
       elements.progressMessage.dataset.type = "error";
@@ -2739,9 +2608,9 @@ function getSeriesProgressData() {
   const numericBandsBySeries = new Map();
 
   state.collectionEntries.forEach((comic) => {
-    if (!Number.isSafeInteger(comic.numericBandNumber) || comic.numericBandNumber < 1) return;
-    if (!numericBandsBySeries.has(comic.series)) numericBandsBySeries.set(comic.series, new Set());
-    numericBandsBySeries.get(comic.series).add(comic.numericBandNumber);
+    if (!Number.isSafeInteger(getEntryNumericBandNumber(comic)) || getEntryNumericBandNumber(comic) < 1) return;
+    if (!numericBandsBySeries.has(getEntrySeriesName(comic))) numericBandsBySeries.set(getEntrySeriesName(comic), new Set());
+    numericBandsBySeries.get(getEntrySeriesName(comic)).add(getEntryNumericBandNumber(comic));
   });
 
   const configuredTargets = state.settings.knownHighestBandBySeries || {};
@@ -2876,279 +2745,21 @@ function renderSeriesProgress() {
   });
 }
 
-function renderCollection() {
-  state.filteredComics = getFilteredAndSortedComics();
-  const smartDefinition = state.collectionPreset.smartList
-    ? SMART_LIST_DEFINITIONS_LOOKUP[state.collectionPreset.smartList]
-    : null;
-  const presetBanner = smartDefinition || (state.collectionPreset.bannerTitle ? {
-    title: state.collectionPreset.bannerTitle,
-    description: state.collectionPreset.bannerDescription || "Statistische Auswahl aus deiner Sammlung"
-  } : null);
-  elements.smartListBanner.classList.toggle("hidden", !presetBanner);
-  if (presetBanner) {
-    elements.smartListTitle.textContent = presetBanner.title;
-    elements.smartListDescription.textContent = presetBanner.description;
-  }
-  clearCardCoverObjectUrls();
-  elements.comicList.replaceChildren();
 
-  const scopedComics = getScopedCollectionEntries(state.collectionEntries, state.collectionScope);
-  const hasComics = scopedComics.length > 0;
-  const hasResults = state.filteredComics.length > 0;
-  elements.emptyState.classList.toggle("hidden", hasComics);
-  elements.noResults.classList.toggle("hidden", !hasComics || hasResults);
 
-  elements.collectionCount.textContent = hasComics
-    ? `${state.filteredComics.length} von ${scopedComics.length}`
-    : "0 Einträge";
-  elements.filterResult.textContent = hasComics
-    ? `${formatEntryCount(state.filteredComics.length)} sichtbar.`
-    : "";
-  elements.filterSummary.textContent = getActiveFilterCount() > 0
-    ? `${getActiveFilterCount()} aktiv`
-    : "Standardansicht";
 
-  state.filteredComics.forEach((comic) => {
-    elements.comicList.append(createComicCard(comic));
-  });
-}
 
-function getFilteredAndSortedComics() {
-  return filterAndSortCollectionEntries(state.collectionEntries, {
-    scope: state.collectionScope,
-    preset: state.collectionPreset,
-    localCoverIds: state.localCoverIds,
-    filters: {
-      search: elements.search.value,
-      series: elements.filterSeries.value,
-      condition: elements.filterCondition.value,
-      read: elements.filterRead.value,
-      sealed: elements.filterSealed.checked,
-      duplicate: elements.filterDuplicate.checked
-    },
-    sortBy: elements.sortBy.value
-  });
-}
 
-function createComicCard(comic) {
-  const article = document.createElement("article");
-  article.className = "comic-card";
-  article.dataset.comicId = comic.id;
 
-  const shell = document.createElement("div");
-  shell.className = "comic-card-shell";
-  const content = document.createElement("div");
-  content.className = "comic-card-content";
 
-  if (state.settings.showCovers !== false) {
-    const cover = document.createElement("figure");
-    cover.className = "comic-card-cover hidden";
-    const image = document.createElement("img");
-    image.alt = `Cover von ${comic.series}, Band ${comic.volumeNumber}`;
-    image.loading = "lazy";
-    image.decoding = "async";
-    image.referrerPolicy = "no-referrer";
-    cover.append(image);
-    shell.append(cover);
-    hydrateComicCardCover(shell, cover, image, comic);
-  }
-
-  const top = document.createElement("div");
-  top.className = "comic-card-top";
-
-  const headingGroup = document.createElement("div");
-  const series = document.createElement("p");
-  series.className = "comic-series";
-  series.textContent = comic.series;
-
-  const title = document.createElement("h3");
-  title.className = "comic-title";
-  title.textContent = comic.title || `Band ${comic.volumeNumber}`;
-
-  const subtitle = document.createElement("p");
-  subtitle.className = "comic-subtitle";
-  subtitle.textContent = comic.title
-    ? `Band ${comic.volumeNumber}${comic.publicationYear ? ` · ${comic.publicationYear}` : ""}`
-    : comic.publicationYear
-      ? `Erscheinungsjahr ${comic.publicationYear}`
-      : "Titel nicht eingetragen";
-
-  headingGroup.append(series, title, subtitle);
-
-  const rightColumn = document.createElement("div");
-  rightColumn.className = "card-right-column";
-
-  const comicCopies = getComicCopies(comic);
-  const conditions = document.createElement("div");
-  conditions.className = "condition-badge-list";
-  comicCopies.slice(0, 3).forEach((copy, index) => {
-    conditions.append(createConditionBadge(copy.condition, comicCopies.length > 1 ? `Exemplar ${index + 1}` : "Zustand"));
-  });
-  if (comicCopies.length > 3) {
-    const more = document.createElement("span");
-    more.className = "condition-badge condition-more";
-    more.textContent = `+${comicCopies.length - 3}`;
-    more.title = `${comicCopies.length - 3} weitere Exemplare`;
-    conditions.append(more);
-  }
-
-  const menu = document.createElement("details");
-  menu.className = "card-menu";
-  const menuSummary = document.createElement("summary");
-  menuSummary.setAttribute("aria-label", `${comic.series}, Band ${comic.volumeNumber} verwalten`);
-  menuSummary.append(createSettingsIcon());
-  const menuContent = document.createElement("div");
-  menuContent.className = "card-menu-content";
-
-  const editButton = document.createElement("button");
-  editButton.type = "button";
-  editButton.className = "menu-action";
-  editButton.dataset.action = "edit";
-  editButton.textContent = "Bearbeiten";
-
-  const duplicateButton = document.createElement("button");
-  duplicateButton.type = "button";
-  duplicateButton.className = "menu-action";
-  duplicateButton.dataset.action = "duplicate";
-  duplicateButton.textContent = `Exemplare verwalten (${comicCopies.length})`;
-
-  const enrichButton = document.createElement("button");
-  enrichButton.type = "button";
-  enrichButton.className = "menu-action";
-  enrichButton.dataset.action = "enrich";
-  enrichButton.textContent = "Duckipedia aktualisieren";
-  enrichButton.disabled = !comic.numericBandNumber;
-
-  const deleteButton = document.createElement("button");
-  deleteButton.type = "button";
-  deleteButton.className = "menu-action menu-action-danger";
-  deleteButton.dataset.action = "delete";
-  deleteButton.textContent = "Löschen";
-
-  menuContent.append(editButton, duplicateButton, enrichButton, deleteButton);
-  menu.append(menuSummary, menuContent);
-  rightColumn.append(conditions, menu);
-  top.append(headingGroup, rightColumn);
-
-  const tags = document.createElement("div");
-  tags.className = "tag-list";
-  const anyRead = comicCopies.some((copy) => copy.isRead);
-  const anySealed = comicCopies.some((copy) => copy.isSealed);
-  tags.append(createTag(anyRead ? "Gelesen" : "Ungelesen", anyRead));
-  if (anySealed) tags.append(createTag("Foliert", true));
-  if (comicCopies.length > 1) tags.append(createTag(`${comicCopies.length} Exemplare`, true));
-
-  const duckipediaLink = document.createElement("a");
-  duckipediaLink.className = "duckipedia-link";
-  duckipediaLink.href = comic.duckipediaPageUrl || createConfiguredDuckipediaUrl(comic.series, comic.volumeNumber, comic.title);
-  duckipediaLink.target = "_blank";
-  duckipediaLink.rel = "noopener noreferrer";
-  duckipediaLink.textContent = "In Duckipedia nachschlagen ↗";
-
-  content.append(top, tags);
-
-  if (comic.notes) {
-    const notes = document.createElement("p");
-    notes.className = "comic-notes";
-    notes.textContent = comic.notes;
-    content.append(notes);
-  }
-
-  if (comic.metadataFetchedAt) {
-    const metadataNote = document.createElement("p");
-    metadataNote.className = "metadata-source-note";
-    metadataNote.textContent = `Duckipedia zuletzt geprüft: ${formatDateTime(comic.metadataFetchedAt)}`;
-    content.append(metadataNote);
-  }
-
-  content.append(duckipediaLink);
-  shell.append(content);
-  article.append(shell);
-  return article;
-}
-
-async function hydrateComicCardCover(shell, figure, image, comic) {
-  try {
-    const localCover = await getCoverMedia(comic.id);
-    if (!figure.isConnected) return;
-
-    if (localCover?.blob instanceof Blob) {
-      const objectUrl = URL.createObjectURL(localCover.blob);
-      state.cardCoverObjectUrls.add(objectUrl);
-      image.src = objectUrl;
-      figure.classList.remove("hidden");
-      shell.classList.add("has-cover");
-      return;
-    }
-
-    if (comic.duckipediaCoverUrl) {
-      image.src = comic.duckipediaCoverUrl;
-      image.addEventListener("load", () => {
-        if (!figure.isConnected) return;
-        figure.classList.remove("hidden");
-        shell.classList.add("has-cover");
-      }, { once: true });
-      image.addEventListener("error", () => {
-        figure.remove();
-        shell.classList.remove("has-cover");
-      }, { once: true });
-    } else {
-      figure.remove();
-    }
-  } catch (error) {
-    console.warn("Cover konnte in der Kartenansicht nicht geladen werden:", error);
-    figure.remove();
-  }
-}
-
-function clearCardCoverObjectUrls() {
-  state.cardCoverObjectUrls.forEach((url) => URL.revokeObjectURL(url));
-  state.cardCoverObjectUrls.clear();
-}
-
-function createConditionBadge(conditionCode, contextLabel) {
-  const badge = document.createElement("span");
-  const normalizedCode = String(conditionCode || "").toUpperCase();
-  const classToken = normalizedCode.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-  badge.className = `condition-badge condition-${classToken}`;
-  badge.textContent = normalizedCode || "–";
-  badge.title = `${contextLabel}: ${getConditionLabel(normalizedCode)}`;
-  badge.setAttribute("aria-label", badge.title);
-  return badge;
-}
-
-function createSettingsIcon() {
-  const svgNamespace = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(svgNamespace, "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("width", "20");
-  svg.setAttribute("height", "20");
-  svg.setAttribute("aria-hidden", "true");
-  svg.setAttribute("focusable", "false");
-  svg.classList.add("settings-icon");
-
-  const path = document.createElementNS(svgNamespace, "path");
-  path.setAttribute("d", "M12 8.25A3.75 3.75 0 1 0 12 15.75 3.75 3.75 0 0 0 12 8.25Zm9 3.75c0-.55-.05-1.08-.15-1.6l-2.08-.48a7.32 7.32 0 0 0-.72-1.74l1.13-1.82a9.1 9.1 0 0 0-2.26-2.26L15.1 5.22a7.32 7.32 0 0 0-1.74-.72L12.88 2.4a9.47 9.47 0 0 0-3.2 0L9.2 4.5c-.62.18-1.2.42-1.75.72L5.64 4.09a9.1 9.1 0 0 0-2.26 2.26L4.5 8.18c-.3.55-.54 1.13-.72 1.74l-2.08.48a9.47 9.47 0 0 0 0 3.2l2.08.48c.18.61.42 1.2.72 1.74l-1.13 1.82a9.1 9.1 0 0 0 2.26 2.26l1.82-1.13c.55.3 1.13.54 1.75.72l.48 2.08a9.47 9.47 0 0 0 3.2 0l.48-2.08a7.32 7.32 0 0 0 1.74-.72l1.82 1.13a9.1 9.1 0 0 0 2.26-2.26l-1.13-1.82c.3-.55.54-1.13.72-1.74l2.08-.48c.1-.52.15-1.05.15-1.6Z");
-  path.setAttribute("fill", "currentColor");
-  svg.append(path);
-  return svg;
-}
-
-function createTag(label, active) {
-  const tag = document.createElement("span");
-  tag.className = active ? "tag tag-active" : "tag";
-  tag.textContent = label;
-  return tag;
-}
 
 function renderStats() {
   const total = state.collectionEntries.length;
-  const read = state.collectionEntries.filter((comic) => getComicCopies(comic).some((copy) => copy.isRead)).length;
-  const sealed = state.collectionEntries.filter((comic) => getComicCopies(comic).some((copy) => copy.isSealed)).length;
-  const duplicate = state.collectionEntries.filter((comic) => getComicCopies(comic).length > 1).length;
+  const read = state.collectionEntries.filter((comic) => getEntryCopies(comic).some((copy) => copy.isRead)).length;
+  const sealed = state.collectionEntries.filter((comic) => getEntryCopies(comic).some((copy) => copy.isSealed)).length;
+  const duplicate = state.collectionEntries.filter((comic) => getEntryCopies(comic).length > 1).length;
   const physicalCopies = countPhysicalCopies(state.collectionEntries);
-  const seriesCount = new Set(state.collectionEntries.map((comic) => comic.seriesId || comic.series)).size;
+  const seriesCount = new Set(state.collectionEntries.map((comic) => getEntrySeriesId(comic) || getEntrySeriesName(comic))).size;
   const missingCount = countMissingBands(state.missingGroups);
 
   elements.statTotal.textContent = total;
@@ -3179,7 +2790,7 @@ function renderStats() {
 
   elements.conditionStatsTotal.textContent = physicalCopies === 1 ? "1 Exemplar" : `${physicalCopies} Exemplare`;
 
-  const allCopies = state.collectionEntries.flatMap((comic) => getComicCopies(comic));
+  const allCopies = state.collectionEntries.flatMap((comic) => getEntryCopies(comic));
   elements.conditionStats.replaceChildren();
   APP_CONFIG.conditions.forEach((condition) => {
     const count = allCopies.filter((copy) => copy.condition === condition.code).length;
@@ -3376,7 +2987,7 @@ function createShareCardContext() {
     dna,
     mainProgress: progressData.find((entry) => entry.series === "Lustiges Taschenbuch") || null,
     milestone: state.currentMilestones[0] || buildMilestones({ comics: state.collectionEntries, progressData })[0] || null,
-    totalSeries: new Set(state.collectionEntries.map((comic) => comic.seriesId || comic.series)).size,
+    totalSeries: new Set(state.collectionEntries.map((comic) => getEntrySeriesId(comic) || getEntrySeriesName(comic))).size,
     totalMissing: countMissingBands(state.missingGroups),
     generatedAt: new Date()
   };
@@ -3771,146 +3382,27 @@ function renderHorizontalChart(container, data, options = {}) {
   });
 }
 
-function renderMissingBands({ forceOpenSeries = "" } = {}) {
-  const currentlyOpen = new Set(state.openMissingSeries || []);
-  elements.missingList.querySelectorAll("details[open][data-series]").forEach((details) => {
-    currentlyOpen.add(details.dataset.series);
-  });
-  if (forceOpenSeries) currentlyOpen.add(forceOpenSeries);
-  state.openMissingSeries = currentlyOpen;
 
-  const groupsWithMissing = getScopedMissingGroups().filter((group) => group.missingBands.length > 0);
-  const totalMissing = countMissingBands(groupsWithMissing);
-
-  elements.missingList.replaceChildren();
-  elements.missingEmpty.classList.toggle("hidden", groupsWithMissing.length > 0);
-  elements.missingPageCount.textContent = totalMissing === 1 ? "1 fehlt" : `${totalMissing} fehlen`;
-  renderMissingHub();
-
-  groupsWithMissing.forEach((group) => {
-    const details = document.createElement("details");
-    details.className = "missing-card missing-series-details";
-    details.dataset.series = group.series;
-    details.open = currentlyOpen.has(group.series);
-    details.addEventListener("toggle", () => {
-      if (details.open) state.openMissingSeries.add(group.series);
-      else state.openMissingSeries.delete(group.series);
-    });
-
-    const summary = document.createElement("summary");
-    const summaryText = document.createElement("span");
-    const heading = document.createElement("strong");
-    heading.textContent = group.series;
-    const meta = document.createElement("small");
-    meta.textContent = `${group.missingBands.length} fehlend · geprüft bis Band ${group.highestChecked}`;
-    summaryText.append(heading, meta);
-    const icon = document.createElement("span");
-    icon.className = "disclosure-icon";
-    icon.setAttribute("aria-hidden", "true");
-    icon.textContent = "⌄";
-    summary.append(summaryText, icon);
-
-    const list = document.createElement("div");
-    list.className = "missing-band-list detailed-missing-list";
-
-    group.missingBands.forEach((bandNumber) => {
-      const key = createMissingDetailKey(group.series, bandNumber);
-      const detail = state.settings.missingBandDetails?.[key] || {};
-      const button = document.createElement("button");
-      button.type = "button";
-      const priorityId = normalizeWishlistPriority(detail.priority);
-      button.className = detail.title || detail.desiredCondition || detail.notes || detail.publicationYear || priorityId
-        ? "missing-band missing-band-detailed"
-        : "missing-band";
-      if (priorityId) button.classList.add(`missing-priority-${priorityId}`);
-      button.dataset.series = group.series;
-      button.dataset.bandNumber = String(bandNumber);
-
-      const number = document.createElement("strong");
-      number.textContent = `Band ${bandNumber}`;
-      button.append(number);
-      const priorityDefinition = getWishlistPriorityDefinition(priorityId);
-      if (priorityDefinition) {
-        const priority = document.createElement("span");
-        priority.className = `wishlist-priority wishlist-priority-${priorityId}`;
-        priority.textContent = priorityDefinition.shortLabel;
-        button.append(priority);
-      }
-
-      const detailsText = [
-        detail.title,
-        detail.publicationYear ? String(detail.publicationYear) : "",
-        detail.desiredCondition ? `Wunsch: ${getConditionLabel(detail.desiredCondition)}` : ""
-      ].filter(Boolean).join(" · ");
-
-      if (detailsText) {
-        const extra = document.createElement("small");
-        extra.textContent = detailsText;
-        button.append(extra);
-      }
-
-      list.append(button);
-    });
-
-    details.append(summary, list);
-    elements.missingList.append(details);
-  });
-}
-
-async function handleCardAction(event) {
-  const button = event.target.closest("button[data-action]");
-
-  if (!button) {
-    return;
-  }
-
-  const card = button.closest("[data-comic-id]");
-  const comic = state.collectionEntries.find((entry) => entry.id === card?.dataset.comicId);
-
-  if (!comic) {
-    showToast("Der Eintrag wurde nicht gefunden.", "error");
-    return;
-  }
-
-  if (button.dataset.action === "edit") {
-    closeCollectionPage({ returnFocus: false });
-    startEditing(comic);
-    return;
-  }
-
-  if (button.dataset.action === "duplicate") {
-    openDuplicateModal(comic);
-    return;
-  }
-
-  if (button.dataset.action === "enrich") {
-    await enrichSingleComic(comic, { force: true });
-    return;
-  }
-
-  if (button.dataset.action === "delete") {
-    await confirmAndDelete(comic);
-  }
-}
 
 function openDuplicateModal(comic) {
-  state.selectedCopyComicId = comic.id;
+  const comicView = toLegacyComic(comic);
+  state.selectedCopyComicId = comicView.id;
   state.copyManagerDraft = getComicCopies(comic).map((copy, index) => normalizeCopy({ ...copy }, {
-    issueId: comic.id,
+    issueId: comicView.id,
     position: index + 1,
-    createdAt: comic.createdAt,
-    updatedAt: comic.updatedAt
+    createdAt: comicView.createdAt,
+    updatedAt: comicView.updatedAt
   }));
   if (state.copyManagerDraft.length === 0) {
     state.copyManagerDraft = [normalizeCopy({
-      id: createEntityId(`${comic.id}-copy`),
-      issueId: comic.id,
-      condition: comic.condition || DEFAULT_CONDITION_CODE,
-      isRead: comic.isRead,
-      isSealed: comic.isSealed
-    }, { issueId: comic.id, position: 1 })];
+      id: createEntityId(`${comicView.id}-copy`),
+      issueId: comicView.id,
+      condition: comicView.condition || DEFAULT_CONDITION_CODE,
+      isRead: comicView.isRead,
+      isSealed: comicView.isSealed
+    }, { issueId: comicView.id, position: 1 })];
   }
-  elements.duplicateContext.textContent = `${comic.series} · Band ${comic.volumeNumber}${comic.title ? ` · ${comic.title}` : ""}`;
+  elements.duplicateContext.textContent = `${comicView.series} · Band ${comicView.volumeNumber}${comicView.title ? ` · ${comicView.title}` : ""}`;
   elements.duplicateMessage.textContent = "";
   renderCopyManager();
   elements.duplicateModal.classList.remove("hidden");
@@ -4032,15 +3524,15 @@ function addCopyManagerCopy() {
   const now = new Date().toISOString();
   const reference = state.copyManagerDraft[0];
   state.copyManagerDraft.push(normalizeCopy({
-    id: createEntityId(`${comic.id}-copy`),
-    issueId: comic.id,
+    id: createEntityId(`${getEntryId(comic)}-copy`),
+    issueId: getEntryId(comic),
     condition: reference?.condition || DEFAULT_CONDITION_CODE,
     isRead: false,
     isSealed: false,
     notes: "",
     createdAt: now,
     updatedAt: now
-  }, { issueId: comic.id, position: state.copyManagerDraft.length + 1 }));
+  }, { issueId: getEntryId(comic), position: state.copyManagerDraft.length + 1 }));
   renderCopyManager();
   window.setTimeout(() => elements.copyManagerList.lastElementChild?.querySelector("select")?.focus(), 0);
 }
@@ -4083,9 +3575,9 @@ async function handleSaveCopyManager(event) {
   const now = new Date().toISOString();
   const copies = state.copyManagerDraft.map((copy, index) => normalizeCopy({
     ...copy,
-    issueId: comic.id,
+    issueId: getEntryId(comic),
     updatedAt: now
-  }, { issueId: comic.id, position: index + 1, createdAt: comic.createdAt }));
+  }, { issueId: getEntryId(comic), position: index + 1, createdAt: getEntryCreatedAt(comic) }));
   if (copies.some((copy) => !APP_CONFIG.conditions.some((entry) => entry.code === copy.condition))) {
     elements.duplicateMessage.textContent = "Bitte prüfe die Zustände aller Exemplare.";
     elements.duplicateMessage.dataset.type = "error";
@@ -4124,6 +3616,7 @@ async function handleSaveCopyManager(event) {
 }
 
 function mergeComicWithMetadata(comic, metadata) {
+  const comicView = toLegacyComic(comic);
   const lookupVersion = Number(metadata?.lookupVersion || 0);
   const hasResolvedInfoboxCover = Boolean(
     metadata?.found
@@ -4139,66 +3632,67 @@ function mergeComicWithMetadata(comic, metadata) {
   const hasAuthoritativeCoverResult = hasResolvedInfoboxCover || hasConfirmedNoInfoboxCover;
   const nextCoverUrl = hasAuthoritativeCoverResult
     ? String(metadata.coverUrl || "")
-    : String(metadata?.coverUrl || comic.duckipediaCoverUrl || "");
+    : String(metadata?.coverUrl || comicView.duckipediaCoverUrl || "");
 
   const nextValues = {
-    title: comic.title || metadata.title || "",
-    publicationYear: comic.publicationYear || metadata.publicationYear || null,
-    duckipediaPageUrl: metadata.pageUrl || comic.duckipediaPageUrl || createConfiguredDuckipediaUrl(comic.series, comic.volumeNumber, comic.title),
+    title: comicView.title || metadata.title || "",
+    publicationYear: comicView.publicationYear || metadata.publicationYear || null,
+    duckipediaPageUrl: metadata.pageUrl || comicView.duckipediaPageUrl || createConfiguredDuckipediaUrl(comicView.series, comicView.volumeNumber, comicView.title),
     duckipediaCoverUrl: nextCoverUrl,
-    duckipediaCoverFileName: hasAuthoritativeCoverResult ? String(metadata.coverFileName || "") : String(comic.duckipediaCoverFileName || ""),
-    duckipediaCoverSource: hasAuthoritativeCoverResult ? String(metadata.coverSource || "") : String(comic.duckipediaCoverSource || ""),
-    duckipediaCoverLookupVersion: hasAuthoritativeCoverResult ? lookupVersion : Number(comic.duckipediaCoverLookupVersion || 0),
+    duckipediaCoverFileName: hasAuthoritativeCoverResult ? String(metadata.coverFileName || "") : String(comicView.duckipediaCoverFileName || ""),
+    duckipediaCoverSource: hasAuthoritativeCoverResult ? String(metadata.coverSource || "") : String(comicView.duckipediaCoverSource || ""),
+    duckipediaCoverLookupVersion: hasAuthoritativeCoverResult ? lookupVersion : Number(comicView.duckipediaCoverLookupVersion || 0),
     metadataStatus: metadata.found ? "found" : "not-found",
-    metadataFetchedAt: metadata.fetchedAt || comic.metadataFetchedAt || new Date().toISOString(),
+    metadataFetchedAt: metadata.fetchedAt || comicView.metadataFetchedAt || new Date().toISOString(),
     dataFormatVersion: APP_CONFIG.dataFormatVersion
   };
-  const changed = Object.entries(nextValues).some(([key, value]) => comic[key] !== value);
+  const changed = Object.entries(nextValues).some(([key, value]) => comicView[key] !== value);
   return {
     changed,
-    comic: changed ? { ...comic, ...nextValues, updatedAt: new Date().toISOString() } : comic
+    comic: changed ? { ...comicView, ...nextValues, updatedAt: new Date().toISOString() } : comicView
   };
 }
 
 async function resolveShelfCoverUrl(comic, { force = false } = {}) {
-  if (!comic || !comic.id || !comic.numericBandNumber) return "";
+  if (!comic || !getEntryId(comic) || !getEntryNumericBandNumber(comic)) return "";
 
   // Only a cover produced by the current infobox lookup may skip validation.
   // Older URLs can originate from PageImages and are repaired automatically.
-  const storedLookupVersion = Number(comic.duckipediaCoverLookupVersion || 0);
+  const storedLookupVersion = getEntryDuckipediaCoverLookupVersion(comic);
   if (!force && storedLookupVersion >= DUCKIPEDIA_LOOKUP_VERSION) {
-    return comic.duckipediaCoverUrl || "";
+    return getEntryDuckipediaCoverUrl(comic) || "";
   }
 
   // A previously stored URL is still useful while offline or when automatic
   // enrichment is disabled. It is not marked as validated, so the next online
   // session can replace it with the cover declared by the Duckipedia infobox.
   if (state.settings.duckipediaAutoEnrich === false || !navigator.onLine) {
-    return comic.duckipediaCoverUrl || "";
+    return getEntryDuckipediaCoverUrl(comic) || "";
   }
 
-  const existingPromise = state.shelfCoverResolutionPromises.get(comic.id);
+  const existingPromise = state.shelfCoverResolutionPromises.get(getEntryId(comic));
   if (existingPromise) return existingPromise;
 
   const promise = (async () => {
     try {
-      const metadata = await getMetadataForBand(comic.series, comic.numericBandNumber, { force });
-      const currentComic = state.collectionEntries.find((entry) => entry.id === comic.id) || comic;
+      const metadata = await getMetadataForBand(getEntrySeriesName(comic), getEntryNumericBandNumber(comic), { force });
+      const currentComic = state.collectionEntries.find((entry) => getEntryId(entry) === getEntryId(comic)) || comic;
       const { comic: updatedComic, changed } = mergeComicWithMetadata(currentComic, metadata);
       if (changed) {
-        await saveArchiveEntry(updatedComic);
-        replaceComicInMemory(updatedComic);
+        const savedEntry = await saveArchiveEntry(updatedComic);
+        replaceComicInMemory(savedEntry);
+        return getEntryDuckipediaCoverUrl(savedEntry) || "";
       }
-      return updatedComic.duckipediaCoverUrl || "";
+      return getEntryDuckipediaCoverUrl(currentComic) || "";
     } catch (error) {
-      console.warn(`Cover für ${comic.series}, Band ${comic.volumeNumber} konnte nicht automatisch geladen werden:`, error);
-      return comic.duckipediaCoverUrl || "";
+      console.warn(`Cover für ${getEntrySeriesName(comic)}, Band ${getEntryVolumeNumber(comic)} konnte nicht automatisch geladen werden:`, error);
+      return getEntryDuckipediaCoverUrl(comic) || "";
     } finally {
-      state.shelfCoverResolutionPromises.delete(comic.id);
+      state.shelfCoverResolutionPromises.delete(getEntryId(comic));
     }
   })();
 
-  state.shelfCoverResolutionPromises.set(comic.id, promise);
+  state.shelfCoverResolutionPromises.set(getEntryId(comic), promise);
   return promise;
 }
 
@@ -4212,17 +3706,18 @@ function replaceComicInMemory(updatedComic) {
 }
 
 async function enrichSingleComic(comic, { force = false, silent = false } = {}) {
-  if (!comic.numericBandNumber) {
+  if (!getEntryNumericBandNumber(comic)) {
     if (!silent) showToast("Dieser Eintrag besitzt keine rein numerische Bandnummer.", "error");
     return { changed: false, found: false };
   }
 
   try {
-    const metadata = await getMetadataForBand(comic.series, comic.numericBandNumber, { force });
+    const metadata = await getMetadataForBand(getEntrySeriesName(comic), getEntryNumericBandNumber(comic), { force });
     const { comic: updatedComic, changed } = mergeComicWithMetadata(comic, metadata);
 
     if (changed) {
-      await saveArchiveEntry(updatedComic);
+      const savedEntry = await saveArchiveEntry(updatedComic);
+      replaceComicInMemory(savedEntry);
       if (!silent) await recordDataChange(1);
     }
 
@@ -4241,32 +3736,33 @@ async function enrichSingleComic(comic, { force = false, silent = false } = {}) 
 }
 
 function startEditing(comic) {
-  state.editingId = comic.id;
-  state.editingComic = comic;
+  const comicView = toLegacyComic(comic);
+  state.editingId = comicView.id;
+  state.editingComic = comicView;
 
-  elements.series.value = comic.series;
-  elements.volumeNumber.value = comic.volumeNumber;
-  elements.publicationYear.value = comic.publicationYear ?? "";
-  elements.title.value = comic.title;
-  elements.condition.value = comic.condition;
-  elements.duplicateCondition.value = comic.duplicateCondition || comic.condition;
-  elements.isRead.checked = comic.isRead;
-  elements.isDuplicate.checked = comic.isDuplicate;
-  elements.isSealed.checked = comic.isSealed;
-  elements.notes.value = comic.notes;
+  elements.series.value = comicView.series;
+  elements.volumeNumber.value = comicView.volumeNumber;
+  elements.publicationYear.value = comicView.publicationYear ?? "";
+  elements.title.value = comicView.title;
+  elements.condition.value = comicView.condition;
+  elements.duplicateCondition.value = comicView.duplicateCondition || comicView.condition;
+  elements.isRead.checked = comicView.isRead;
+  elements.isDuplicate.checked = comicView.isDuplicate;
+  elements.isSealed.checked = comicView.isSealed;
+  elements.notes.value = comicView.notes;
   state.formMetadata = {
-    series: comic.series,
-    bandNumber: comic.numericBandNumber,
-    found: comic.metadataStatus === "found",
-    pageUrl: comic.duckipediaPageUrl || createConfiguredDuckipediaUrl(comic.series, comic.volumeNumber, comic.title),
-    coverUrl: comic.duckipediaCoverUrl || "",
-    coverFileName: comic.duckipediaCoverFileName || "",
-    coverSource: comic.duckipediaCoverSource || "",
-    lookupVersion: Number(comic.duckipediaCoverLookupVersion || 0),
-    fetchedAt: comic.metadataFetchedAt || null
+    series: comicView.series,
+    bandNumber: comicView.numericBandNumber,
+    found: comicView.metadataStatus === "found",
+    pageUrl: comicView.duckipediaPageUrl || createConfiguredDuckipediaUrl(comicView.series, comicView.volumeNumber, comicView.title),
+    coverUrl: comicView.duckipediaCoverUrl || "",
+    coverFileName: comicView.duckipediaCoverFileName || "",
+    coverSource: comicView.duckipediaCoverSource || "",
+    lookupVersion: Number(comicView.duckipediaCoverLookupVersion || 0),
+    fetchedAt: comicView.metadataFetchedAt || null
   };
-  elements.metadataStatus.textContent = comic.metadataFetchedAt
-    ? `Duckipedia-Daten zuletzt geprüft: ${formatDateTime(comic.metadataFetchedAt)}.`
+  elements.metadataStatus.textContent = comicView.metadataFetchedAt
+    ? `Duckipedia-Daten zuletzt geprüft: ${formatDateTime(comicView.metadataFetchedAt)}.`
     : "Für diesen Eintrag wurden noch keine Duckipedia-Metadaten gespeichert.";
   elements.metadataStatus.dataset.type = "info";
   loadExistingCoverIntoForm(comic);
@@ -4284,9 +3780,10 @@ function startEditing(comic) {
 }
 
 async function confirmAndDelete(comic) {
-  const label = comic.title
-    ? `${comic.series}, Band ${comic.volumeNumber} „${comic.title}“`
-    : `${comic.series}, Band ${comic.volumeNumber}`;
+  const comicView = toLegacyComic(comic);
+  const label = comicView.title
+    ? `${comicView.series}, Band ${comicView.volumeNumber} „${comicView.title}“`
+    : `${comicView.series}, Band ${comicView.volumeNumber}`;
 
   const confirmed = window.confirm(
     `Möchtest du ${label} wirklich löschen? Ohne aktuelles JSON-Backup kann dieser Schritt nicht rückgängig gemacht werden.`
@@ -4297,12 +3794,12 @@ async function confirmAndDelete(comic) {
   }
 
   try {
-    const hadCover = Boolean(await getCoverMedia(comic.id));
-    await deleteArchiveEntry(comic.id);
+    const hadCover = Boolean(await getCoverMedia(comicView.id));
+    await deleteArchiveEntry(comicView.id);
     await recordDataChange(1);
     if (hadCover) await recordMediaChange(1);
 
-    if (state.editingId === comic.id) {
+    if (state.editingId === comicView.id) {
       resetForm();
     }
 
@@ -4355,34 +3852,7 @@ function resetForm() {
   showFormMessage("");
 }
 
-function resetFilters({ keepPageOpen = false, clearPreset = true } = {}) {
-  elements.search.value = "";
-  syncCollectionSeriesFilter(getAvailableSeries(state.settings, state.collectionEntries));
-  elements.filterCondition.value = "all";
-  elements.filterRead.value = "all";
-  elements.filterSealed.checked = false;
-  elements.filterDuplicate.checked = false;
-  elements.sortBy.value = "series";
-  if (clearPreset) state.collectionPreset = {};
-  renderCollection();
-  elements.filterPanel.open = false;
-  if (!keepPageOpen) elements.search.blur();
-}
 
-function getActiveFilterCount() {
-  return [
-    Boolean(elements.search.value.trim()),
-    state.collectionScope === "other" && elements.filterSeries.value !== "all",
-    elements.filterCondition.value !== "all",
-    elements.filterRead.value !== "all",
-    elements.filterSealed.checked,
-    elements.filterDuplicate.checked,
-    elements.sortBy.value !== "series",
-    Boolean(state.collectionPreset.smartList),
-    Boolean(state.collectionPreset.publicationYear),
-    Boolean(state.collectionPreset.series)
-  ].filter(Boolean).length;
-}
 
 function updateDuplicateConditionVisibility() {
   const isDuplicate = elements.isDuplicate.checked;
@@ -4439,1275 +3909,6 @@ function setFormBusy(isBusy) {
   elements.form.querySelectorAll("button, input, select, textarea").forEach((control) => {
     control.disabled = isBusy;
   });
-}
-
-function getBarcodeScanner() {
-  if (!barcodeScanner) {
-    barcodeScanner = new MagazineBarcodeScanner(elements.scannerCameraTarget);
-  }
-  return barcodeScanner;
-}
-
-async function openScannerModal() {
-  if (state.editingId) {
-    showToast("Beende zuerst die Bearbeitung des geöffneten Eintrags.", "error");
-    return;
-  }
-
-  const availableSeries = getAvailableSeries(state.settings, state.collectionEntries);
-  if (availableSeries.includes(elements.series.value)) {
-    elements.scannerSeries.value = elements.series.value;
-  }
-
-  elements.scannerCondition.value = elements.condition.value || DEFAULT_CONDITION_CODE;
-  elements.scannerDuplicateCondition.value = elements.duplicateCondition.value || elements.scannerCondition.value;
-  elements.scannerIsRead.checked = elements.isRead.checked;
-  elements.scannerIsDuplicate.checked = elements.isDuplicate.checked;
-  elements.scannerIsSealed.checked = elements.isSealed.checked;
-  state.scannerMode = normalizeScannerMode(state.settings.scannerMode || state.scannerMode);
-  state.scannerSessionScans = summarizeScannerQueue(state.scannerQueue).scans;
-  updateScannerDuplicateConditionVisibility();
-  updateScannerModeUI();
-  clearScannerResult();
-  renderScannerQueue();
-  elements.scannerModal.classList.remove("hidden");
-  document.body.classList.add("modal-open");
-  setScannerStatus("Scanner-Modul wird geladen …");
-
-  try {
-    await startScannerCamera();
-  } catch (error) {
-    console.warn("Scanner konnte beim Öffnen nicht automatisch starten:", error);
-    recordDiagnosticError(error, "Scanner-Modul laden", "warning");
-    setScannerStatus(error.message, "error");
-  }
-}
-
-function closeScannerModal() {
-  stopScannerCamera();
-  abortScannerLookup();
-  clearScannerResult();
-  hideScannerDetectedFlash();
-  elements.scannerPhoto.value = "";
-  elements.scannerManualCode.value = "";
-  elements.scannerModal.classList.add("hidden");
-  restoreBodyModalState();
-}
-
-async function setScannerMode(mode) {
-  const nextMode = normalizeScannerMode(mode);
-  if (state.scannerMode === nextMode) return;
-  state.scannerMode = nextMode;
-  state.settings = await saveAppSettings({ ...state.settings, scannerMode: nextMode }).catch((error) => {
-    recordDiagnosticError(error, "Scanner-Modus speichern", "warning");
-    return { ...state.settings, scannerMode: nextMode };
-  });
-  clearScannerResult();
-  updateScannerModeUI();
-  if (!elements.scannerModal.classList.contains("hidden")) {
-    stopScannerCamera();
-    await startScannerCamera();
-  }
-}
-
-function updateScannerModeUI() {
-  const isFast = state.scannerMode === SCANNER_MODES.FAST;
-  elements.scannerModeFast.classList.toggle("is-active", isFast);
-  elements.scannerModeReview.classList.toggle("is-active", !isFast);
-  elements.scannerModeFast.setAttribute("aria-pressed", String(isFast));
-  elements.scannerModeReview.setAttribute("aria-pressed", String(!isFast));
-  elements.scannerModeDescription.textContent = isFast
-    ? "Erkannte Bände landen sofort in der Warteschlange. Duckipedia-Daten werden parallel ergänzt."
-    : "Nach jedem Scan kannst du Titel, Jahr und vorhandene Exemplare prüfen, bevor der Band vorgemerkt wird.";
-  elements.scannerModal.dataset.scannerMode = state.scannerMode;
-  elements.scannerSave.textContent = isFast ? "Änderungen übernehmen" : "Vormerken & weiter";
-  elements.scannerRescan.textContent = isFast ? "Treffer ausblenden" : "Neu scannen";
-  renderScannerSessionStats();
-}
-
-async function startScannerCamera() {
-  if (!elements.scannerSeries.value) {
-    setScannerStatus("Bitte wähle zuerst eine Reihe aus.", "error");
-    elements.scannerSeries.focus();
-    return;
-  }
-
-  try {
-    setScannerStatus("Scanner-Modul wird geladen …");
-    await ensureScannerLibrary();
-  } catch (error) {
-    recordDiagnosticError(error, "Scanner-Modul laden", "warning");
-    setScannerStatus(error.message, "error");
-    return;
-  }
-
-  const scanner = getBarcodeScanner();
-  if (!scanner.isSupported()) {
-    setScannerStatus(
-      "Live-Scan ist hier nicht verfügbar. Nutze den Foto-Fallback oder prüfe, ob die App über HTTPS geöffnet wurde.",
-      "error"
-    );
-    return;
-  }
-
-  stopScannerCamera();
-  if (state.scannerMode === SCANNER_MODES.REVIEW) clearScannerResult();
-  elements.scannerStart.disabled = true;
-  elements.scannerCameraPlaceholder.classList.add("hidden");
-  elements.scannerStart.classList.add("hidden");
-  elements.scannerStop.classList.remove("hidden");
-  setScannerStatus(state.scannerMode === SCANNER_MODES.FAST
-    ? "Kamera aktiv: Halte die gesamte weiße Barcodefläche in den Rahmen und nimm den Band nach der Bestätigung wieder heraus."
-    : "Kamera aktiv: Richte die gesamte weiße Barcodefläche waagerecht im Rahmen aus.");
-
-  try {
-    await scanner.start({
-      continuous: state.scannerMode === SCANNER_MODES.FAST,
-      onDetected: (payload) => handleScannerDetected(payload, { source: "camera" }),
-      onInterim: ({ type }) => {
-        if (type === "main-code-only") {
-          setScannerStatus("Großer Barcode erkannt. Bewege das Heft etwas weiter weg, damit auch der kleine Zusatzcode rechts sichtbar ist.");
-        }
-      },
-      onError: (error) => {
-        console.warn("Scannerfehler:", error);
-        setScannerStatus("Das Bild konnte noch nicht gelesen werden. Halte Barcode und Zusatzcode ruhig und möglichst gerade.");
-      }
-    });
-  } catch (error) {
-    console.error("Kamera konnte nicht gestartet werden:", error);
-    stopScannerCamera();
-    setScannerStatus(error.message, "error");
-  } finally {
-    elements.scannerStart.disabled = false;
-  }
-}
-
-function stopScannerCamera() {
-  barcodeScanner?.stop();
-  elements.scannerStart.classList.remove("hidden");
-  elements.scannerStop.classList.add("hidden");
-  elements.scannerCameraPlaceholder.classList.remove("hidden");
-}
-
-async function handleScannerPhoto() {
-  const [file] = elements.scannerPhoto.files || [];
-  elements.scannerPhoto.value = "";
-
-  if (!file) return;
-  if (!elements.scannerSeries.value) {
-    setScannerStatus("Bitte wähle vor der Fotoauswertung eine Reihe aus.", "error");
-    return;
-  }
-
-  stopScannerCamera();
-  clearScannerResult();
-  setScannerStatus("Foto wird lokal auf dem iPhone ausgewertet …");
-  elements.scannerStart.disabled = true;
-
-  try {
-    await ensureScannerLibrary();
-    const payload = await getBarcodeScanner().decodeImageFile(file);
-    await handleScannerDetected(payload, { source: "photo" });
-  } catch (error) {
-    console.error("Barcodefoto konnte nicht ausgewertet werden:", error);
-    recordDiagnosticError(error, "Barcodefoto auswerten", "warning");
-    setScannerStatus(error.message, "error");
-  } finally {
-    elements.scannerStart.disabled = false;
-  }
-}
-
-async function handleScannerManualCode() {
-  const extension = elements.scannerManualCode.value.trim();
-  const bandNumber = parseSupplementToBandNumber(extension);
-
-  if (bandNumber === null) {
-    setScannerStatus("Der Zusatzcode muss genau zwei oder fünf Ziffern enthalten und darf nicht nur aus Nullen bestehen.", "error");
-    elements.scannerManualCode.focus();
-    return;
-  }
-
-  if (!elements.scannerSeries.value) {
-    setScannerStatus("Bitte wähle zuerst eine Reihe aus.", "error");
-    elements.scannerSeries.focus();
-    return;
-  }
-
-  stopScannerCamera();
-  elements.scannerManualCode.value = "";
-  await handleScannerDetected({ extension, bandNumber, mainBarcode: "", format: null }, { source: "manual" });
-}
-
-async function handleScannerDetected(payload, { source = "camera" } = {}) {
-  state.scannerSessionScans += 1;
-  renderScannerSessionStats();
-
-  if (state.scannerMode === SCANNER_MODES.FAST) {
-    await queueScannerDetectedPayload(payload, { source });
-    if (source !== "camera" && !elements.scannerModal.classList.contains("hidden")) {
-      window.setTimeout(() => startScannerCamera(), 220);
-    }
-    return;
-  }
-
-  const series = elements.scannerSeries.value;
-  const token = `${series}::${payload.bandNumber}::${Date.now()}::${Math.random()}`;
-  const pageUrl = createConfiguredDuckipediaUrl(series, payload.bandNumber);
-
-  stopScannerCamera();
-  abortScannerLookup();
-  state.scannerResult = {
-    ...payload,
-    recognitionSource: source,
-    series,
-    pageUrl,
-    metadataStatus: navigator.onLine ? "loading" : "offline",
-    token
-  };
-
-  elements.scannerBandNumber.textContent = String(payload.bandNumber);
-  elements.scannerExtension.textContent = source === "manual" ? `Manuell ${payload.extension}` : `Code ${payload.extension}`;
-  elements.scannerResultName.value = "";
-  elements.scannerResultYear.value = "";
-  elements.scannerDuckipediaLink.href = pageUrl;
-  elements.scannerResult.classList.remove("hidden");
-  setScannerStatus(`Band ${payload.bandNumber} wurde erkannt. Prüfe die Angaben und merke den Band vor.`, "success");
-  showScannerDetectedFlash(payload.bandNumber, source === "manual" ? "Manuell erkannt" : "Erkannt", "Bitte Angaben prüfen");
-
-  const existingIssue = findExistingScannerIssue(series, payload.bandNumber);
-  const existingCopyCount = existingIssue ? getComicCopies(existingIssue).length : 0;
-  elements.scannerExistingWarning.classList.toggle("hidden", existingCopyCount === 0);
-  elements.scannerExistingWarning.textContent = existingCopyCount === 0
-    ? ""
-    : existingCopyCount === 1
-      ? "Dieser Band ist bereits mit einem Exemplar vorhanden."
-      : `Dieser Band ist bereits mit ${existingCopyCount} Exemplaren vorhanden.`;
-
-  await lookupScannerMetadata(token);
-}
-
-async function queueScannerDetectedPayload(payload, { source = "camera" } = {}) {
-  const series = elements.scannerSeries.value;
-  if (!series) {
-    setScannerStatus("Bitte wähle zuerst eine Reihe aus.", "error");
-    return;
-  }
-
-  const existingIssue = findExistingScannerIssue(series, payload.bandNumber);
-  const now = new Date().toISOString();
-  const queueId = createStableId();
-  const pageUrl = createConfiguredDuckipediaUrl(series, payload.bandNumber);
-  const copyCount = elements.scannerIsDuplicate.checked ? 2 : 1;
-  const copyDrafts = Array.from({ length: copyCount }, (_, index) => ({
-    condition: index === 1
-      ? (elements.scannerDuplicateCondition.value || elements.scannerCondition.value || DEFAULT_CONDITION_CODE)
-      : (elements.scannerCondition.value || DEFAULT_CONDITION_CODE),
-    isRead: index === 0 ? elements.scannerIsRead.checked : false,
-    isSealed: index === 0 ? elements.scannerIsSealed.checked : false,
-    notes: ""
-  }));
-
-  const incoming = {
-    queueId,
-    queueKey: createScannerQueueKey(series, payload.bandNumber),
-    series,
-    volumeNumber: String(payload.bandNumber),
-    numericBandNumber: payload.bandNumber,
-    title: "",
-    publicationYear: null,
-    condition: copyDrafts[0].condition,
-    isRead: copyDrafts[0].isRead,
-    isSealed: copyDrafts[0].isSealed,
-    isDuplicate: copyDrafts.length > 1,
-    duplicateCondition: copyDrafts[1]?.condition || null,
-    notes: "",
-    copyDrafts,
-    extension: payload.extension,
-    mainBarcode: payload.mainBarcode || "",
-    recognitionSource: source,
-    pageUrl,
-    existingComicId: existingIssue?.id || null,
-    action: existingIssue ? "additional-copy" : "add",
-    metadataStatus: navigator.onLine ? "queued" : "offline",
-    metadataError: "",
-    scanCount: 1,
-    lastDetectedAt: now,
-    createdAt: now,
-    updatedAt: now
-  };
-
-  const merged = mergeScannerQueueItem(state.scannerQueue, incoming);
-  if (!merged.item) {
-    setScannerStatus("Der erkannte Band konnte nicht vorgemerkt werden.", "error");
-    return;
-  }
-  state.scannerQueue = merged.queue;
-  renderScannerQueue();
-
-  const label = merged.merged
-    ? `${merged.addedCopies} weiteres Exemplar${merged.addedCopies === 1 ? "" : "e"}`
-    : existingIssue
-      ? "Als weiteres Exemplar"
-      : "Neue Ausgabe";
-  showScannerDetectedFlash(payload.bandNumber, "Vorgemerkt", label);
-  setScannerStatus(`${series}, Band ${payload.bandNumber} wurde vorgemerkt. Nächsten Band in den Rahmen halten.`, "success");
-  try { navigator.vibrate?.(35); } catch { /* optionale Rückmeldung */ }
-
-  if (!merged.merged || !["found", "loading"].includes(merged.item.metadataStatus)) {
-    void lookupScannerQueueMetadata(merged.item.queueId);
-  }
-}
-
-async function lookupScannerQueueMetadata(queueId) {
-  if (!navigator.onLine || state.scannerQueueLookups.has(queueId)) return;
-  const item = state.scannerQueue.find((entry) => entry.queueId === queueId);
-  if (!item) return;
-  const controller = new AbortController();
-  state.scannerQueueLookups.set(queueId, controller);
-  item.metadataStatus = "loading";
-  item.metadataError = "";
-  renderScannerQueue();
-
-  try {
-    const result = await getMetadataForBand(item.series, item.numericBandNumber, { signal: controller.signal });
-    if (controller.signal.aborted) return;
-    const current = state.scannerQueue.find((entry) => entry.queueId === queueId);
-    if (!current) return;
-    current.pageUrl = result.pageUrl || current.pageUrl;
-    current.coverUrl = result.coverUrl || current.coverUrl || "";
-    current.coverFileName = result.coverFileName || current.coverFileName || "";
-    current.coverSource = result.coverSource || current.coverSource || "";
-    current.lookupVersion = Number(result.lookupVersion || current.lookupVersion || 0);
-    current.metadataFetchedAt = result.fetchedAt || new Date().toISOString();
-    current.metadataStatus = result.found ? "found" : "not-found";
-    current.metadataError = result.found ? "" : (result.reason || "Keine passenden Duckipedia-Daten gefunden.");
-    if (!current.title && result.title) current.title = result.title;
-    if (!current.publicationYear && result.publicationYear) current.publicationYear = result.publicationYear;
-  } catch (error) {
-    if (error?.name !== "AbortError") {
-      const current = state.scannerQueue.find((entry) => entry.queueId === queueId);
-      if (current) {
-        current.metadataStatus = navigator.onLine ? "error" : "offline";
-        current.metadataError = error.message || "Duckipedia-Daten konnten nicht geladen werden.";
-      }
-      recordDiagnosticError(error, "Scanner-Metadaten laden", "warning");
-    }
-  } finally {
-    state.scannerQueueLookups.delete(queueId);
-    renderScannerQueue();
-  }
-}
-
-async function lookupScannerMetadata(token) {
-  if (!state.scannerResult || state.scannerResult.token !== token) return;
-  if (!navigator.onLine) {
-    elements.scannerLookupStatus.textContent = "Offline: Titel und Erscheinungsjahr können gerade nicht automatisch ergänzt werden.";
-    return;
-  }
-
-  const controller = new AbortController();
-  state.scannerLookupController = controller;
-  elements.scannerLookupStatus.textContent = "Duckipedia wird nach Titel und Erscheinungsjahr durchsucht …";
-
-  try {
-    const result = await getMetadataForBand(state.scannerResult.series, state.scannerResult.bandNumber, { signal: controller.signal });
-    if (!state.scannerResult || state.scannerResult.token !== token || controller.signal.aborted) return;
-    state.scannerResult.pageUrl = result.pageUrl;
-    state.scannerResult.coverUrl = result.coverUrl || "";
-    state.scannerResult.coverFileName = result.coverFileName || "";
-    state.scannerResult.coverSource = result.coverSource || "";
-    state.scannerResult.lookupVersion = Number(result.lookupVersion || 0);
-    state.scannerResult.metadataFetchedAt = result.fetchedAt || new Date().toISOString();
-    state.scannerResult.metadataStatus = result.found ? "found" : "not-found";
-    elements.scannerDuckipediaLink.href = result.pageUrl;
-    if (result.title) elements.scannerResultName.value = result.title;
-    if (result.publicationYear) elements.scannerResultYear.value = String(result.publicationYear);
-    if (result.found && (result.title || result.publicationYear)) {
-      const foundParts = [result.title ? "Titel" : "", result.publicationYear ? "Jahr" : ""].filter(Boolean);
-      elements.scannerLookupStatus.textContent = `${foundParts.join(" und ")} wurden aus Duckipedia ergänzt.`;
-    } else if (result.found) {
-      elements.scannerLookupStatus.textContent = "Die Bandseite wurde gefunden, enthält aber keine automatisch auswertbaren Titel- oder Jahresangaben.";
-    } else {
-      elements.scannerLookupStatus.textContent = result.reason || "Titel und Jahr konnten nicht automatisch ergänzt werden.";
-    }
-  } catch (error) {
-    if (error?.name !== "AbortError") {
-      elements.scannerLookupStatus.textContent = `Duckipedia-Daten konnten nicht geladen werden: ${error.message}`;
-      state.scannerResult.metadataStatus = "error";
-    }
-  }
-}
-
-function abortScannerLookup() {
-  state.scannerLookupController?.abort();
-  state.scannerLookupController = null;
-}
-
-function findExistingScannerIssue(series, bandNumber) {
-  return state.collectionEntries.find((comic) => (
-    normalizeSeriesLookup(comic.series) === normalizeSeriesLookup(series)
-    && comic.numericBandNumber === Number(bandNumber)
-  )) || null;
-}
-
-function showScannerDetectedFlash(bandNumber, kicker, note = "") {
-  window.clearTimeout(state.scannerFlashTimer);
-  elements.scannerDetectedBand.textContent = String(bandNumber);
-  elements.scannerDetectedKicker.textContent = kicker;
-  elements.scannerDetectedNote.textContent = note;
-  elements.scannerDetectedFlash.classList.remove("hidden");
-  state.scannerFlashTimer = window.setTimeout(hideScannerDetectedFlash, 1050);
-}
-
-function hideScannerDetectedFlash() {
-  window.clearTimeout(state.scannerFlashTimer);
-  state.scannerFlashTimer = null;
-  elements.scannerDetectedFlash.classList.add("hidden");
-}
-
-async function handleScannerSave() {
-  if (!state.scannerResult) {
-    setScannerStatus("Scanne zuerst einen Band.", "error");
-    return;
-  }
-
-  try {
-    const item = buildComicFromScanner();
-    const existingComic = findExistingScannerIssue(item.series, item.numericBandNumber);
-    const now = new Date().toISOString();
-    const incoming = {
-      ...item,
-      queueId: createStableId(),
-      queueKey: createScannerQueueKey(item.series, item.numericBandNumber),
-      extension: state.scannerResult.extension,
-      mainBarcode: state.scannerResult.mainBarcode || "",
-      recognitionSource: state.scannerResult.recognitionSource || "camera",
-      pageUrl: item.duckipediaPageUrl,
-      coverUrl: item.duckipediaCoverUrl,
-      coverFileName: item.duckipediaCoverFileName,
-      coverSource: item.duckipediaCoverSource,
-      lookupVersion: item.duckipediaCoverLookupVersion,
-      existingComicId: existingComic?.id || null,
-      action: existingComic ? "additional-copy" : "add",
-      scanCount: 1,
-      lastDetectedAt: now
-    };
-
-    const merged = mergeScannerQueueItem(state.scannerQueue, incoming);
-    if (!merged.item) throw new Error("Der erkannte Band konnte nicht vorgemerkt werden.");
-    state.scannerQueue = merged.queue;
-    renderScannerQueue();
-    clearScannerResult();
-
-    const copyText = merged.addedCopies === 1 ? "ein Exemplar" : `${merged.addedCopies} Exemplare`;
-    setScannerStatus(
-      `${item.series}, Band ${item.volumeNumber}: ${copyText} vorgemerkt. Bereit für den nächsten Scan.`,
-      "success"
-    );
-    await startScannerCamera();
-  } catch (error) {
-    console.error("Gescannter Band konnte nicht vorgemerkt werden:", error);
-    setScannerStatus(`Übernahme fehlgeschlagen: ${error.message}`, "error");
-  }
-}
-
-function renderScannerSessionStats() {
-  const summary = summarizeScannerQueue(state.scannerQueue, { sessionScans: state.scannerSessionScans });
-  elements.scannerStatScanned.textContent = String(summary.scans);
-  elements.scannerStatNew.textContent = String(summary.new);
-  elements.scannerStatExisting.textContent = String(summary.existing);
-  elements.scannerStatReview.textContent = String(summary.review);
-}
-
-function renderScannerQueue() {
-  elements.scannerQueueList.replaceChildren();
-  const queue = state.scannerQueue;
-  const summary = summarizeScannerQueue(queue, { sessionScans: state.scannerSessionScans });
-  elements.scannerQueueCount.textContent = queue.length === 0
-    ? "0 Ausgaben"
-    : `${queue.length} ${queue.length === 1 ? "Ausgabe" : "Ausgaben"} · ${summary.copies} ${summary.copies === 1 ? "Exemplar" : "Exemplare"}`;
-  elements.scannerSaveQueue.disabled = queue.length === 0;
-  elements.scannerApplyDefaults.disabled = queue.length === 0;
-  elements.scannerClearQueue.disabled = queue.length === 0;
-  renderScannerSessionStats();
-
-  if (queue.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "scanner-queue-empty";
-    const title = document.createElement("strong");
-    title.textContent = "Bereit für die erste Ausgabe";
-    const copy = document.createElement("p");
-    copy.textContent = "Halte den Barcode in den Rahmen. Im Schnellmodus bleibt die Kamera für den nächsten Band aktiv.";
-    empty.append(title, copy);
-    elements.scannerQueueList.append(empty);
-    return;
-  }
-
-  queue.forEach((item, index) => {
-    const status = classifyScannerResult(item);
-    const drafts = getScannerQueueCopyDrafts(item);
-    const card = document.createElement("article");
-    card.className = `scanner-queue-card is-${status.tone}`;
-    card.dataset.queueId = item.queueId;
-    card.dataset.queueStatus = status.id;
-
-    const heading = document.createElement("div");
-    heading.className = "scanner-queue-card-heading";
-
-    const identity = document.createElement("div");
-    identity.className = "scanner-queue-identity";
-    const number = document.createElement("span");
-    number.className = "scanner-queue-number";
-    number.textContent = String(item.volumeNumber);
-    const titleWrap = document.createElement("div");
-    const kicker = document.createElement("span");
-    kicker.className = "stat-label";
-    kicker.textContent = `${item.series} · Position ${index + 1}`;
-    const title = document.createElement("h4");
-    title.textContent = item.title || `Band ${item.volumeNumber}`;
-    const meta = document.createElement("small");
-    meta.textContent = item.publicationYear
-      ? `Erschienen ${item.publicationYear}`
-      : getScannerMetadataMessage(item);
-    titleWrap.append(kicker, title, meta);
-    identity.append(number, titleWrap);
-
-    const headingActions = document.createElement("div");
-    headingActions.className = "scanner-queue-heading-actions";
-    const statusBadge = document.createElement("span");
-    statusBadge.className = `scanner-queue-status is-${status.tone}`;
-    statusBadge.textContent = status.label;
-    const copyBadge = document.createElement("span");
-    copyBadge.className = "scanner-copy-count";
-    copyBadge.textContent = drafts.length === 1 ? "1 Exemplar" : `${drafts.length} Exemplare`;
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "icon-button small-icon-button scanner-queue-remove";
-    remove.dataset.queueAction = "remove";
-    remove.setAttribute("aria-label", `${item.series}, Band ${item.volumeNumber} aus der Warteschlange entfernen`);
-    remove.textContent = "×";
-    headingActions.append(statusBadge, copyBadge, remove);
-    heading.append(identity, headingActions);
-
-    const details = document.createElement("details");
-    details.className = "scanner-queue-editor";
-    details.open = status.needsReview;
-    const summaryElement = document.createElement("summary");
-    const summaryLabel = document.createElement("span");
-    summaryLabel.textContent = status.needsReview ? "Angaben prüfen" : "Angaben & Exemplare";
-    const summaryHint = document.createElement("small");
-    summaryHint.textContent = drafts.length === 1
-      ? getConditionLabel(drafts[0].condition)
-      : `${drafts.length} Zustände bearbeiten`;
-    summaryElement.append(summaryLabel, summaryHint);
-
-    const editor = document.createElement("div");
-    editor.className = "scanner-queue-editor-body";
-    const grid = document.createElement("div");
-    grid.className = "field-grid compact-field-grid scanner-queue-fields";
-    grid.append(
-      createQueueInput("Titel", "title", item.title, "text", 200, "field-full"),
-      createQueueInput("Erscheinungsjahr", "publicationYear", item.publicationYear ?? "", "number", 4)
-    );
-
-    if (item.existingComicId) {
-      const actionField = document.createElement("label");
-      actionField.className = "field";
-      const actionLabel = document.createElement("span");
-      actionLabel.textContent = "Bereits vorhanden";
-      const actionSelect = document.createElement("select");
-      actionSelect.dataset.queueField = "action";
-      actionSelect.append(
-        createOption("additional-copy", "Als weiteres Exemplar speichern"),
-        createOption("skip", "Überspringen")
-      );
-      actionSelect.value = item.action === "skip" ? "skip" : "additional-copy";
-      const existing = state.collectionEntries.find((comic) => comic.id === item.existingComicId);
-      const hint = document.createElement("small");
-      hint.className = "field-help";
-      const count = existing ? getComicCopies(existing).length : 0;
-      hint.textContent = `${count} ${count === 1 ? "Exemplar ist" : "Exemplare sind"} bereits im Archiv.`;
-      actionField.append(actionLabel, actionSelect, hint);
-      grid.append(actionField);
-    }
-    editor.append(grid);
-
-    const copiesHeading = document.createElement("div");
-    copiesHeading.className = "scanner-copy-editor-heading";
-    const copiesTitle = document.createElement("div");
-    const copiesStrong = document.createElement("strong");
-    copiesStrong.textContent = "Physische Exemplare";
-    const copiesSmall = document.createElement("small");
-    copiesSmall.textContent = "Jeder erneute Scan derselben Ausgabe ergänzt ein Exemplar, nicht einen zweiten Bandeintrag.";
-    copiesTitle.append(copiesStrong, copiesSmall);
-    const addCopy = document.createElement("button");
-    addCopy.type = "button";
-    addCopy.className = "inline-action";
-    addCopy.dataset.queueAction = "add-copy";
-    addCopy.textContent = "+ Exemplar";
-    copiesHeading.append(copiesTitle, addCopy);
-    editor.append(copiesHeading);
-
-    const copyList = document.createElement("div");
-    copyList.className = "scanner-copy-editor-list";
-    drafts.forEach((draft, copyIndex) => {
-      copyList.append(createScannerQueueCopyEditor(item, draft, copyIndex, drafts.length));
-    });
-    editor.append(copyList);
-
-    const footer = document.createElement("div");
-    footer.className = "scanner-queue-card-footer";
-    const link = document.createElement("a");
-    link.className = "text-link scanner-queue-link";
-    link.href = item.pageUrl || createConfiguredDuckipediaUrl(item.series, item.volumeNumber, item.title);
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent = "Duckipedia öffnen";
-    footer.append(link);
-
-    if (["error", "not-found", "offline"].includes(item.metadataStatus)) {
-      const retry = document.createElement("button");
-      retry.type = "button";
-      retry.className = "text-button";
-      retry.dataset.queueAction = "retry-metadata";
-      retry.textContent = navigator.onLine ? "Daten erneut laden" : "Offline";
-      retry.disabled = !navigator.onLine;
-      footer.append(retry);
-    }
-
-    editor.append(footer);
-    details.append(summaryElement, editor);
-    card.append(heading, details);
-    elements.scannerQueueList.append(card);
-  });
-}
-
-function getScannerMetadataMessage(item) {
-  if (item.metadataStatus === "loading" || item.metadataStatus === "queued") return "Duckipedia-Daten werden ergänzt …";
-  if (item.metadataStatus === "offline") return "Offline erkannt · Daten später ergänzen";
-  if (item.metadataStatus === "not-found") return "Keine Duckipedia-Daten gefunden";
-  if (item.metadataStatus === "error") return item.metadataError || "Daten konnten nicht geladen werden";
-  if (item.metadataStatus === "found") return "Duckipedia-Daten geladen";
-  return "Bandnummer erkannt";
-}
-
-function createQueueInput(labelText, fieldName, value, type, maxLength, extraClass = "") {
-  const label = document.createElement("label");
-  label.className = `field ${extraClass}`.trim();
-  const span = document.createElement("span");
-  span.textContent = labelText;
-  const input = document.createElement("input");
-  input.type = type;
-  input.dataset.queueField = fieldName;
-  input.value = String(value ?? "");
-  if (type === "number") {
-    input.inputMode = "numeric";
-    input.min = "1800";
-    input.max = String(APP_CONFIG.publicationYearMaximum);
-  } else if (maxLength) {
-    input.maxLength = maxLength;
-  }
-  label.append(span, input);
-  return label;
-}
-
-function createScannerQueueCopyEditor(item, draft, copyIndex, copyCount) {
-  const card = document.createElement("article");
-  card.className = "scanner-copy-editor-item";
-  card.dataset.queueCopyIndex = String(copyIndex);
-
-  const heading = document.createElement("div");
-  heading.className = "scanner-copy-editor-item-heading";
-  const title = document.createElement("strong");
-  title.textContent = `Exemplar ${copyIndex + 1}`;
-  heading.append(title);
-  if (copyCount > 1) {
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "text-button danger-text compact-button";
-    remove.dataset.queueAction = "remove-copy";
-    remove.dataset.queueCopyIndex = String(copyIndex);
-    remove.textContent = "Entfernen";
-    heading.append(remove);
-  }
-
-  const fields = document.createElement("div");
-  fields.className = "scanner-copy-editor-fields";
-
-  const conditionField = document.createElement("div");
-  conditionField.className = "field";
-  const conditionId = `scanner-${item.queueId}-copy-${copyIndex}-condition`;
-  const labelRow = document.createElement("div");
-  labelRow.className = "field-label-row";
-  const conditionLabel = document.createElement("label");
-  conditionLabel.htmlFor = conditionId;
-  conditionLabel.textContent = "Zustand";
-  const assistant = document.createElement("button");
-  assistant.type = "button";
-  assistant.className = "inline-action condition-assistant-trigger";
-  assistant.dataset.openConditionAssistant = "";
-  assistant.dataset.assistantQueueId = item.queueId;
-  assistant.dataset.assistantQueueCopyIndex = String(copyIndex);
-  assistant.textContent = "Assistent";
-  labelRow.append(conditionLabel, assistant);
-  const conditionSelect = document.createElement("select");
-  conditionSelect.id = conditionId;
-  conditionSelect.dataset.queueCopyField = "condition";
-  conditionSelect.dataset.queueCopyIndex = String(copyIndex);
-  APP_CONFIG.conditions.forEach((condition) => {
-    conditionSelect.append(createOption(condition.code, `Zustand ${condition.code} – ${condition.label}`));
-  });
-  conditionSelect.value = normalizeConditionCode(draft.condition, DEFAULT_CONDITION_CODE);
-  conditionField.append(labelRow, conditionSelect);
-
-  const flags = document.createElement("div");
-  flags.className = "scanner-copy-flags";
-  flags.append(
-    createQueueCopyCheckbox("Gelesen", "isRead", draft.isRead, copyIndex),
-    createQueueCopyCheckbox("Foliert", "isSealed", draft.isSealed, copyIndex)
-  );
-
-  const notesField = document.createElement("label");
-  notesField.className = "field field-full scanner-copy-notes";
-  const notesLabel = document.createElement("span");
-  notesLabel.textContent = "Notiz";
-  const notes = document.createElement("textarea");
-  notes.rows = 2;
-  notes.maxLength = 1200;
-  notes.placeholder = "Optional, z. B. Stempel, Knick oder Tauschbestand";
-  notes.dataset.queueCopyField = "notes";
-  notes.dataset.queueCopyIndex = String(copyIndex);
-  notes.value = String(draft.notes || "");
-  notesField.append(notesLabel, notes);
-
-  fields.append(conditionField, flags, notesField);
-  card.append(heading, fields);
-  return card;
-}
-
-function createQueueCopyCheckbox(labelText, fieldName, checked, copyIndex) {
-  const label = document.createElement("label");
-  label.className = "check-row compact-check";
-  const input = document.createElement("input");
-  input.type = "checkbox";
-  input.dataset.queueCopyField = fieldName;
-  input.dataset.queueCopyIndex = String(copyIndex);
-  input.checked = Boolean(checked);
-  const span = document.createElement("span");
-  span.textContent = labelText;
-  label.append(input, span);
-  return label;
-}
-
-function getScannerQueueCopyDrafts(item) {
-  if (!Array.isArray(item.copyDrafts) || item.copyDrafts.length === 0) {
-    item.copyDrafts = [{
-      condition: normalizeConditionCode(item.condition, DEFAULT_CONDITION_CODE),
-      isRead: item.isRead === true,
-      isSealed: item.isSealed === true,
-      notes: String(item.notes || "")
-    }];
-    if (item.isDuplicate) {
-      item.copyDrafts.push({
-        condition: normalizeConditionCode(item.duplicateCondition || item.condition, DEFAULT_CONDITION_CODE),
-        isRead: false,
-        isSealed: false,
-        notes: ""
-      });
-    }
-  }
-  item.copyDrafts = item.copyDrafts.map((draft) => ({
-    condition: normalizeConditionCode(draft?.condition, DEFAULT_CONDITION_CODE),
-    isRead: draft?.isRead === true,
-    isSealed: draft?.isSealed === true,
-    notes: String(draft?.notes || "")
-  }));
-  syncScannerQueueLegacyFields(item);
-  return item.copyDrafts;
-}
-
-function syncScannerQueueLegacyFields(item) {
-  const drafts = Array.isArray(item.copyDrafts) && item.copyDrafts.length
-    ? item.copyDrafts
-    : [{ condition: DEFAULT_CONDITION_CODE, isRead: false, isSealed: false, notes: "" }];
-  const primary = drafts[0];
-  item.condition = normalizeConditionCode(primary.condition, DEFAULT_CONDITION_CODE);
-  item.isRead = primary.isRead === true;
-  item.isSealed = primary.isSealed === true;
-  item.notes = String(primary.notes || "");
-  item.isDuplicate = drafts.length > 1;
-  item.duplicateCondition = drafts[1]?.condition || null;
-}
-
-function handleScannerQueueInput(event) {
-  const control = event.target.closest("[data-queue-field], [data-queue-copy-field]");
-  const card = event.target.closest("[data-queue-id]");
-  if (!control || !card) return;
-  const item = state.scannerQueue.find((entry) => entry.queueId === card.dataset.queueId);
-  if (!item) return;
-
-  if (control.dataset.queueCopyField) {
-    const copyIndex = Number(control.dataset.queueCopyIndex);
-    const drafts = getScannerQueueCopyDrafts(item);
-    const draft = drafts[copyIndex];
-    if (!draft) return;
-    const field = control.dataset.queueCopyField;
-    draft[field] = control instanceof HTMLInputElement && control.type === "checkbox"
-      ? control.checked
-      : control.value;
-    syncScannerQueueLegacyFields(item);
-    renderScannerSessionStats();
-    return;
-  }
-
-  const field = control.dataset.queueField;
-  if (field === "publicationYear") {
-    item.publicationYear = control.value ? Number(control.value) : null;
-  } else {
-    item[field] = control.value;
-  }
-
-  if (field === "action") renderScannerQueue();
-  else renderScannerSessionStats();
-}
-
-function handleScannerQueueClick(event) {
-  const button = event.target.closest("button[data-queue-action]");
-  const card = event.target.closest("[data-queue-id]");
-  if (!button || !card) return;
-  const queueId = card.dataset.queueId;
-  const item = state.scannerQueue.find((entry) => entry.queueId === queueId);
-  if (!item) return;
-
-  const action = button.dataset.queueAction;
-  if (action === "remove") {
-    state.scannerQueueLookups.get(queueId)?.abort();
-    state.scannerQueueLookups.delete(queueId);
-    state.scannerQueue = state.scannerQueue.filter((entry) => entry.queueId !== queueId);
-    renderScannerQueue();
-    return;
-  }
-
-  if (action === "retry-metadata") {
-    void lookupScannerQueueMetadata(queueId);
-    return;
-  }
-
-  const drafts = getScannerQueueCopyDrafts(item);
-  if (action === "add-copy") {
-    drafts.push({
-      condition: elements.scannerDuplicateCondition.value || elements.scannerCondition.value || DEFAULT_CONDITION_CODE,
-      isRead: false,
-      isSealed: false,
-      notes: ""
-    });
-    syncScannerQueueLegacyFields(item);
-    renderScannerQueue();
-    return;
-  }
-
-  if (action === "remove-copy") {
-    const copyIndex = Number(button.dataset.queueCopyIndex);
-    if (drafts.length <= 1 || !Number.isInteger(copyIndex)) return;
-    drafts.splice(copyIndex, 1);
-    syncScannerQueueLegacyFields(item);
-    renderScannerQueue();
-  }
-}
-
-function applyScannerDefaultsToQueue() {
-  if (state.scannerQueue.length === 0) return;
-  const primaryCondition = elements.scannerCondition.value || DEFAULT_CONDITION_CODE;
-  const secondaryCondition = elements.scannerDuplicateCondition.value || primaryCondition;
-  state.scannerQueue.forEach((item) => {
-    const drafts = getScannerQueueCopyDrafts(item);
-    drafts.forEach((draft, index) => {
-      draft.condition = index === 0 ? primaryCondition : secondaryCondition;
-      draft.isRead = index === 0 ? elements.scannerIsRead.checked : false;
-      draft.isSealed = index === 0 ? elements.scannerIsSealed.checked : false;
-    });
-    if (elements.scannerIsDuplicate.checked && drafts.length === 1) {
-      drafts.push({ condition: secondaryCondition, isRead: false, isSealed: false, notes: "" });
-    }
-    syncScannerQueueLegacyFields(item);
-  });
-  renderScannerQueue();
-  elements.scannerQueueMessage.textContent = "Die aktuellen Scanner-Einstellungen wurden auf alle vorgemerkten Exemplare angewendet.";
-  elements.scannerQueueMessage.dataset.type = "success";
-}
-
-function clearScannerQueue() {
-  if (state.scannerQueue.length === 0) return;
-  if (!window.confirm("Die gesamte Scanner-Warteschlange verwerfen? Noch nicht gespeicherte Exemplare gehen dabei verloren.")) return;
-  state.scannerQueueLookups.forEach((controller) => controller.abort());
-  state.scannerQueueLookups.clear();
-  state.scannerQueue = [];
-  state.scannerSessionScans = 0;
-  renderScannerQueue();
-  elements.scannerQueueMessage.textContent = "Warteschlange geleert.";
-  elements.scannerQueueMessage.dataset.type = "info";
-}
-
-async function saveScannerQueue() {
-  if (state.scannerQueue.length === 0) {
-    elements.scannerQueueMessage.textContent = "Die Warteschlange ist leer.";
-    elements.scannerQueueMessage.dataset.type = "error";
-    return;
-  }
-
-  const records = [];
-  let skipped = 0;
-  let savedCopies = 0;
-  let newIssues = 0;
-  let updatedIssues = 0;
-
-  try {
-    state.scannerQueue.forEach((item) => {
-      validateQueuedComic(item);
-      if (item.action === "skip") {
-        skipped += 1;
-        return;
-      }
-
-      const drafts = getScannerQueueCopyDrafts(item);
-      const now = new Date().toISOString();
-      const existing = item.existingComicId
-        ? state.collectionEntries.find((comic) => comic.id === item.existingComicId)
-        : findComicBySeriesAndVolume(item.series, item.volumeNumber);
-
-      if (existing) {
-        const existingCopies = getComicCopies(existing);
-        const incomingCopies = drafts.map((draft, index) => normalizeCopy({
-          id: createEntityId("copy"),
-          issueId: existing.id,
-          condition: draft.condition,
-          isRead: draft.isRead,
-          isSealed: draft.isSealed,
-          notes: draft.notes,
-          source: "scanner-pro",
-          createdAt: now,
-          updatedAt: now
-        }, { issueId: existing.id, position: existingCopies.length + index + 1, now }));
-        const copies = [...existingCopies, ...incomingCopies].map((copy, index) => ({
-          ...copy,
-          issueId: existing.id,
-          displayOrder: index + 1
-        }));
-        const primary = copies[0];
-        records.push({
-          ...existing,
-          seriesId: existing.seriesId || resolveConfiguredSeriesId(item.series),
-          title: existing.title || item.title || "",
-          publicationYear: existing.publicationYear || item.publicationYear || null,
-          duckipediaPageUrl: existing.duckipediaPageUrl || item.pageUrl || "",
-          duckipediaCoverUrl: existing.duckipediaCoverUrl || item.coverUrl || "",
-          duckipediaCoverFileName: existing.duckipediaCoverFileName || item.coverFileName || "",
-          duckipediaCoverSource: existing.duckipediaCoverSource || item.coverSource || "",
-          duckipediaCoverLookupVersion: Number(existing.duckipediaCoverLookupVersion || item.lookupVersion || 0),
-          metadataStatus: existing.metadataStatus || item.metadataStatus || "",
-          metadataFetchedAt: existing.metadataFetchedAt || item.metadataFetchedAt || null,
-          copies,
-          copyCount: copies.length,
-          condition: primary.condition,
-          duplicateCondition: copies[1]?.condition || null,
-          isRead: primary.isRead,
-          isSealed: primary.isSealed,
-          isDuplicate: copies.length > 1,
-          dataFormatVersion: APP_CONFIG.dataFormatVersion,
-          updatedAt: now
-        });
-        savedCopies += incomingCopies.length;
-        updatedIssues += 1;
-        return;
-      }
-
-      const issueId = createStableId();
-      const copies = drafts.map((draft, index) => normalizeCopy({
-        id: createEntityId("copy"),
-        issueId,
-        condition: draft.condition,
-        isRead: draft.isRead,
-        isSealed: draft.isSealed,
-        notes: draft.notes,
-        source: "scanner-pro",
-        createdAt: now,
-        updatedAt: now
-      }, { issueId, position: index + 1, now }));
-      const primary = copies[0];
-      records.push({
-        id: issueId,
-        seriesId: resolveConfiguredSeriesId(item.series),
-        dataFormatVersion: APP_CONFIG.dataFormatVersion,
-        series: item.series,
-        volumeNumber: String(item.volumeNumber),
-        numericBandNumber: Number(item.numericBandNumber),
-        title: String(item.title || ""),
-        publicationYear: item.publicationYear || null,
-        copies,
-        copyCount: copies.length,
-        condition: primary.condition,
-        duplicateCondition: copies[1]?.condition || null,
-        isRead: primary.isRead,
-        isDuplicate: copies.length > 1,
-        isSealed: primary.isSealed,
-        notes: primary.notes || "",
-        duckipediaPageUrl: item.pageUrl || createConfiguredDuckipediaUrl(item.series, item.volumeNumber, item.title),
-        duckipediaCoverUrl: item.coverUrl || "",
-        duckipediaCoverFileName: item.coverFileName || "",
-        duckipediaCoverSource: item.coverSource || "",
-        duckipediaCoverLookupVersion: Number(item.lookupVersion || 0),
-        metadataStatus: item.metadataStatus || "",
-        metadataFetchedAt: item.metadataFetchedAt || null,
-        createdAt: now,
-        updatedAt: now
-      });
-      savedCopies += copies.length;
-      newIssues += 1;
-    });
-  } catch (error) {
-    elements.scannerQueueMessage.textContent = error.message;
-    elements.scannerQueueMessage.dataset.type = "error";
-    return;
-  }
-
-  if (records.length === 0) {
-    elements.scannerQueueMessage.textContent = "Alle vorgemerkten Ausgaben sind auf Überspringen gestellt.";
-    elements.scannerQueueMessage.dataset.type = "info";
-    return;
-  }
-
-  setScannerControlsBusy(true);
-  try {
-    await upsertArchiveEntries(records);
-    await recordDataChange(Math.max(1, records.length));
-    state.scannerQueueLookups.forEach((controller) => controller.abort());
-    state.scannerQueueLookups.clear();
-    state.scannerQueue = [];
-    state.scannerSessionScans = 0;
-    renderScannerQueue();
-    await refreshCollection();
-    await refreshArchiveCoreStatus({ showReport: false });
-
-    const parts = [];
-    if (newIssues) parts.push(`${newIssues} neue ${newIssues === 1 ? "Ausgabe" : "Ausgaben"}`);
-    if (updatedIssues) parts.push(`${updatedIssues} ${updatedIssues === 1 ? "Ausgabe ergänzt" : "Ausgaben ergänzt"}`);
-    const prefix = parts.join(" und ") || `${records.length} Ausgaben`;
-    elements.scannerQueueMessage.textContent = `${prefix} · ${savedCopies} ${savedCopies === 1 ? "Exemplar" : "Exemplare"} gespeichert${skipped ? ` · ${skipped} übersprungen` : ""}.`;
-    elements.scannerQueueMessage.dataset.type = "success";
-    showToast(`${savedCopies} ${savedCopies === 1 ? "Exemplar" : "Exemplare"} aus Scanner Pro gespeichert.`);
-  } catch (error) {
-    console.error("Scanner-Warteschlange konnte nicht gespeichert werden:", error);
-    elements.scannerQueueMessage.textContent = `Sammelspeicherung fehlgeschlagen: ${error.message}`;
-    elements.scannerQueueMessage.dataset.type = "error";
-  } finally {
-    setScannerControlsBusy(false);
-  }
-}
-
-function validateQueuedComic(item) {
-  if (item.action === "skip") return;
-  const drafts = getScannerQueueCopyDrafts(item);
-  if (!drafts.length) throw new Error(`${item.series}, Band ${item.volumeNumber}: Mindestens ein Exemplar ist erforderlich.`);
-  drafts.forEach((draft, index) => {
-    if (!APP_CONFIG.conditions.some((entry) => entry.code === draft.condition)) {
-      throw new Error(`${item.series}, Band ${item.volumeNumber}, Exemplar ${index + 1}: Ungültiger Zustand.`);
-    }
-    if (String(draft.notes || "").length > 1200) {
-      throw new Error(`${item.series}, Band ${item.volumeNumber}, Exemplar ${index + 1}: Die Notiz ist zu lang.`);
-    }
-  });
-  if (String(item.title || "").length > 200) {
-    throw new Error(`${item.series}, Band ${item.volumeNumber}: Der Titel ist zu lang.`);
-  }
-  if (
-    item.publicationYear !== null && item.publicationYear !== undefined && item.publicationYear !== "" &&
-    (!Number.isInteger(Number(item.publicationYear)) || Number(item.publicationYear) < 1800 || Number(item.publicationYear) > APP_CONFIG.publicationYearMaximum)
-  ) {
-    throw new Error(`${item.series}, Band ${item.volumeNumber}: Ungültiges Erscheinungsjahr.`);
-  }
-}
-
-function buildComicFromScanner() {
-  const scan = state.scannerResult;
-  const series = elements.scannerSeries.value;
-  const title = elements.scannerResultName.value.trim();
-  const yearRaw = elements.scannerResultYear.value.trim();
-  const publicationYear = yearRaw ? Number(yearRaw) : null;
-
-  if (!scan || !series || scan.series !== series) {
-    throw new Error("Die Reihe wurde nach dem Scan geändert. Bitte scanne den Band erneut.");
-  }
-  if (title.length > 200) throw new Error("Der Titel darf höchstens 200 Zeichen enthalten.");
-  if (
-    publicationYear !== null &&
-    (!Number.isInteger(publicationYear) || publicationYear < 1800 || publicationYear > APP_CONFIG.publicationYearMaximum)
-  ) {
-    throw new Error(`Das Erscheinungsjahr muss zwischen 1800 und ${APP_CONFIG.publicationYearMaximum} liegen.`);
-  }
-
-  const copyDrafts = createScannerCopyDraftsFromControls();
-  copyDrafts.forEach((draft, index) => {
-    if (!APP_CONFIG.conditions.some((entry) => entry.code === draft.condition)) {
-      throw new Error(`Bitte wähle für Exemplar ${index + 1} einen gültigen Zustand aus.`);
-    }
-  });
-  const now = new Date().toISOString();
-
-  return {
-    id: createStableId(),
-    dataFormatVersion: APP_CONFIG.dataFormatVersion,
-    series,
-    volumeNumber: String(scan.bandNumber),
-    numericBandNumber: scan.bandNumber,
-    title,
-    publicationYear,
-    copyDrafts,
-    condition: copyDrafts[0].condition,
-    duplicateCondition: copyDrafts[1]?.condition || null,
-    isRead: copyDrafts[0].isRead,
-    isDuplicate: copyDrafts.length > 1,
-    isSealed: copyDrafts[0].isSealed,
-    notes: copyDrafts[0].notes,
-    duckipediaPageUrl: scan.pageUrl || createConfiguredDuckipediaUrl(series, scan.bandNumber, title),
-    duckipediaCoverUrl: scan.coverUrl || "",
-    duckipediaCoverFileName: scan.coverFileName || "",
-    duckipediaCoverSource: scan.coverSource || "",
-    duckipediaCoverLookupVersion: Number(scan.lookupVersion || 0),
-    metadataStatus: scan.metadataStatus || "",
-    metadataFetchedAt: scan.metadataFetchedAt || null,
-    createdAt: now,
-    updatedAt: now
-  };
-}
-
-function createScannerCopyDraftsFromControls() {
-  const primaryCondition = elements.scannerCondition.value || DEFAULT_CONDITION_CODE;
-  const drafts = [{
-    condition: primaryCondition,
-    isRead: elements.scannerIsRead.checked,
-    isSealed: elements.scannerIsSealed.checked,
-    notes: ""
-  }];
-  if (elements.scannerIsDuplicate.checked) {
-    drafts.push({
-      condition: elements.scannerDuplicateCondition.value || primaryCondition,
-      isRead: false,
-      isSealed: false,
-      notes: ""
-    });
-  }
-  return drafts;
-}
-
-
-function handleScannerApplyToForm() {
-  if (!state.scannerResult) {
-    setScannerStatus("Scanne zuerst einen Band.", "error");
-    return;
-  }
-
-  const scan = state.scannerResult;
-  elements.series.value = scan.series;
-  elements.volumeNumber.value = String(scan.bandNumber);
-  elements.title.value = elements.scannerResultName.value.trim();
-  elements.publicationYear.value = elements.scannerResultYear.value.trim();
-  state.formMetadata = {
-    series: scan.series,
-    bandNumber: scan.bandNumber,
-    found: scan.metadataStatus === "found",
-    pageUrl: scan.pageUrl || createConfiguredDuckipediaUrl(scan.series, scan.bandNumber),
-    coverUrl: scan.coverUrl || "",
-    coverFileName: scan.coverFileName || "",
-    coverSource: scan.coverSource || "",
-    lookupVersion: Number(scan.lookupVersion || 0),
-    fetchedAt: scan.metadataFetchedAt || null
-  };
-  if (!state.formHasLocalCover && state.formMetadata.coverUrl) {
-    setFormCoverPreview(state.formMetadata.coverUrl, "Duckipedia-Vorschau", false);
-  }
-  elements.condition.value = elements.scannerCondition.value;
-  elements.duplicateCondition.value = elements.scannerDuplicateCondition.value;
-  elements.isRead.checked = elements.scannerIsRead.checked;
-  elements.isDuplicate.checked = elements.scannerIsDuplicate.checked;
-  elements.isSealed.checked = elements.scannerIsSealed.checked;
-  updateDuplicateConditionVisibility();
-  closeScannerModal();
-  openAddPage();
-  showFormMessage("Bandnummer und erkannte Duckipedia-Daten wurden übernommen. Bitte prüfe die Angaben und speichere den Comic.", "success");
-  elements.form.scrollIntoView({ behavior: "smooth", block: "start" });
-  window.setTimeout(() => elements.condition.focus({ preventScroll: true }), 350);
-}
-
-async function resetScannerForNext() {
-  clearScannerResult();
-  setScannerStatus("Bereit für einen neuen Scan.");
-  await startScannerCamera();
-}
-
-function clearScannerResult() {
-  abortScannerLookup();
-  state.scannerResult = null;
-  elements.scannerResult.classList.add("hidden");
-  elements.scannerBandNumber.textContent = "";
-  elements.scannerExtension.textContent = "";
-  elements.scannerResultName.value = "";
-  elements.scannerResultYear.value = "";
-  elements.scannerExistingWarning.textContent = "";
-  elements.scannerExistingWarning.classList.add("hidden");
-  elements.scannerLookupStatus.textContent = "";
-}
-
-function updateScannerDuplicateConditionVisibility() {
-  const isDuplicate = elements.scannerIsDuplicate.checked;
-  elements.scannerDuplicateConditionField.classList.toggle("hidden", !isDuplicate);
-  elements.scannerDuplicateCondition.disabled = !isDuplicate;
-
-  if (isDuplicate && !elements.scannerDuplicateCondition.value) {
-    elements.scannerDuplicateCondition.value = elements.scannerCondition.value || DEFAULT_CONDITION_CODE;
-  }
-}
-
-function setScannerControlsBusy(isBusy) {
-  [
-    elements.scannerModeFast,
-    elements.scannerModeReview,
-    elements.scannerSeries,
-    elements.scannerCondition,
-    elements.scannerDuplicateCondition,
-    elements.scannerIsRead,
-    elements.scannerIsDuplicate,
-    elements.scannerIsSealed,
-    elements.scannerStart,
-    elements.scannerStop,
-    elements.scannerPhoto,
-    elements.scannerManualCode,
-    elements.scannerManualApply,
-    elements.scannerResultName,
-    elements.scannerResultYear,
-    elements.scannerSave,
-    elements.scannerApplyForm,
-    elements.scannerRescan,
-    elements.scannerApplyDefaults,
-    elements.scannerSaveQueue,
-    elements.scannerClearQueue,
-    elements.closeScanner
-  ].forEach((control) => {
-    control.disabled = isBusy;
-  });
-  elements.scannerQueueList.querySelectorAll("input, select, button").forEach((control) => {
-    control.disabled = isBusy;
-  });
-
-  if (!isBusy) {
-    updateScannerDuplicateConditionVisibility();
-    renderScannerQueue();
-  }
-}
-
-function setScannerStatus(message, type = "info") {
-  elements.scannerStatus.textContent = message;
-  elements.scannerStatus.dataset.type = type;
 }
 
 function openSeriesModal() {
@@ -5795,7 +3996,7 @@ async function handleSaveCustomSeries(event) {
     if (originalName) {
       nextConfigs = currentConfigs.map((entry) => entry.name === originalName ? nextConfig : entry);
       if (name !== originalName) {
-        const usedCount = state.collectionEntries.filter((comic) => comic.series === originalName).length;
+        const usedCount = state.collectionEntries.filter((comic) => getEntrySeriesName(comic) === originalName).length;
         if (usedCount > 0 && !window.confirm(`Die Reihe wird von ${usedCount} gespeicherten Bänden verwendet. Alle Einträge in „${name}“ umbenennen?`)) {
           return;
         }
@@ -5826,15 +4027,16 @@ async function handleSaveCustomSeries(event) {
     const temporarySettings = { ...state.settings, customSeriesConfigs: nextConfigs };
     const sourceSeriesName = originalName || name;
     const configuredComics = state.collectionEntries
-      .filter((comic) => comic.series === sourceSeriesName)
+      .filter((comic) => getEntrySeriesName(comic) === sourceSeriesName)
       .map((comic) => {
-        const pageUrl = comic.numericBandNumber
-          ? buildDuckipediaUrl(name, comic.volumeNumber, comic.title, temporarySettings)
-          : comic.duckipediaPageUrl;
-        const changed = comic.series !== name || comic.duckipediaPageUrl !== pageUrl;
+        const comicView = toLegacyComic(comic);
+        const pageUrl = getEntryNumericBandNumber(comic)
+          ? buildDuckipediaUrl(name, getEntryVolumeNumber(comic), getEntryTitle(comic), temporarySettings)
+          : getEntryDuckipediaPageUrl(comic);
+        const changed = getEntrySeriesName(comic) !== name || getEntryDuckipediaPageUrl(comic) !== pageUrl;
         return changed
           ? {
-              ...comic,
+              ...comicView,
               seriesId: nextConfig.id,
               series: name,
               duckipediaPageUrl: pageUrl,
@@ -5962,7 +4164,7 @@ function handleCustomSeriesAction(event) {
 }
 
 async function handleRemoveCustomSeries(seriesName) {
-  const isUsed = state.collectionEntries.some((comic) => comic.series === seriesName);
+  const isUsed = state.collectionEntries.some((comic) => getEntrySeriesName(comic) === seriesName);
   const prompt = isUsed
     ? `„${seriesName}“ wird von gespeicherten Comics verwendet. Aus der persönlichen Auswahlliste entfernen und zugehörige Ziele, Fehlband-Details sowie Flohmarkt-Markierungen löschen? Bestehende Comics bleiben erhalten.`
     : `„${seriesName}“ vollständig aus der persönlichen Reihenverwaltung entfernen? Zugehörige Ziele, Fehlband-Details und Flohmarkt-Markierungen werden ebenfalls gelöscht.`;
@@ -6037,241 +4239,12 @@ async function handleRemoveCustomSeries(seriesName) {
   }
 }
 
-function handleMissingBandClick(event) {
-  const button = event.target.closest("button[data-series][data-band-number]");
-  if (!button) return;
-  openMissingDetailModal(button.dataset.series, Number(button.dataset.bandNumber));
-}
 
-async function openMissingDetailModal(series, bandNumber) {
-  const key = createMissingDetailKey(series, bandNumber);
-  const detail = state.settings.missingBandDetails?.[key] || {};
-  const lookupSequence = ++state.missingLookupSequence;
-  state.selectedMissingBand = { series, bandNumber, key };
-  state.openMissingSeries.add(series);
-  elements.missingDetailContext.textContent = `${series} · Band ${bandNumber}`;
-  elements.missingDetailName.value = detail.title || "";
-  elements.missingDetailYear.value = detail.publicationYear ?? "";
-  elements.missingDetailPriority.value = normalizeWishlistPriority(detail.priority);
-  elements.missingDetailCondition.value = detail.desiredCondition || "";
-  elements.missingDetailUrl.value = detail.duckipediaUrl || "";
-  elements.missingDetailNotes.value = detail.notes || "";
-  elements.missingDuckipediaLink.href = detail.duckipediaUrl || createConfiguredDuckipediaUrl(series, bandNumber, detail.title || "");
-  elements.missingDuckipediaLink.textContent = "Duckipedia öffnen";
-  elements.deleteMissingDetail.classList.toggle("hidden", !hasMissingDetailContent(detail));
-  elements.missingDetailMessage.textContent = "Duckipedia-Daten werden geladen …";
-  elements.missingDetailMessage.dataset.type = "info";
-  elements.missingDetailModal.classList.remove("hidden");
-  document.body.classList.add("modal-open");
 
-  try {
-    const metadata = await getMetadataForBand(series, bandNumber, { force: false });
-    if (lookupSequence !== state.missingLookupSequence || state.selectedMissingBand?.key !== key) return;
 
-    const currentDetail = state.settings.missingBandDetails?.[key] || {};
-    const typedTitle = elements.missingDetailName.value.trim();
-    const typedYear = Number(elements.missingDetailYear.value) || null;
-    const typedUrl = normalizeHttpUrl(elements.missingDetailUrl.value);
-    const enrichedDetail = {
-      ...currentDetail,
-      title: currentDetail.title || typedTitle || metadata.title || "",
-      publicationYear: currentDetail.publicationYear || typedYear || metadata.publicationYear || null,
-      duckipediaUrl: currentDetail.duckipediaUrl || typedUrl || metadata.pageUrl || createConfiguredDuckipediaUrl(series, bandNumber),
-      metadataFetchedAt: metadata.fetchedAt || new Date().toISOString()
-    };
 
-    elements.missingDetailName.value = enrichedDetail.title || "";
-    elements.missingDetailYear.value = enrichedDetail.publicationYear ?? "";
-    elements.missingDetailUrl.value = enrichedDetail.duckipediaUrl || "";
-    elements.missingDuckipediaLink.href = enrichedDetail.duckipediaUrl || createConfiguredDuckipediaUrl(series, bandNumber);
 
-    const changed = enrichedDetail.title !== (currentDetail.title || "")
-      || enrichedDetail.publicationYear !== (currentDetail.publicationYear || null)
-      || enrichedDetail.duckipediaUrl !== (currentDetail.duckipediaUrl || "");
 
-    if (metadata.found && changed) {
-      const nextDetails = { ...(state.settings.missingBandDetails || {}), [key]: enrichedDetail };
-      await saveMeaningfulSettings({ missingBandDetails: nextDetails });
-      renderMissingBands({ forceOpenSeries: series });
-      elements.deleteMissingDetail.classList.remove("hidden");
-    }
-
-    elements.missingDetailMessage.textContent = metadata.found
-      ? "Titel und Erscheinungsjahr wurden automatisch aus Duckipedia ergänzt, soweit verfügbar."
-      : (metadata.reason || "Für diesen Band wurden keine Zusatzdaten gefunden.");
-    elements.missingDetailMessage.dataset.type = metadata.found ? "success" : "info";
-  } catch (error) {
-    if (lookupSequence !== state.missingLookupSequence) return;
-    elements.missingDetailMessage.textContent = `Duckipedia-Daten konnten nicht geladen werden: ${error.message}`;
-    elements.missingDetailMessage.dataset.type = "error";
-  } finally {
-    if (lookupSequence === state.missingLookupSequence) {
-      window.setTimeout(() => elements.missingDetailName.focus(), 0);
-    }
-  }
-}
-
-function closeMissingDetailModal() {
-  state.missingLookupSequence += 1;
-  elements.missingDetailModal.classList.add("hidden");
-  state.selectedMissingBand = null;
-  elements.missingDetailForm.reset();
-  elements.missingDetailMessage.textContent = "";
-  restoreBodyModalState();
-}
-
-async function handleSaveMissingDetail(event) {
-  event.preventDefault();
-  if (!state.selectedMissingBand) return;
-
-  const title = elements.missingDetailName.value.trim();
-  const yearRaw = elements.missingDetailYear.value.trim();
-  const desiredCondition = elements.missingDetailCondition.value;
-  const priority = normalizeWishlistPriority(elements.missingDetailPriority.value);
-  const notes = elements.missingDetailNotes.value.trim();
-  const duckipediaUrl = normalizeHttpUrl(elements.missingDetailUrl.value);
-
-  if (elements.missingDetailUrl.value.trim() && !duckipediaUrl) {
-    elements.missingDetailMessage.textContent = "Der Duckipedia-Link muss mit http:// oder https:// beginnen.";
-    elements.missingDetailMessage.dataset.type = "error";
-    return;
-  }
-
-  let publicationYear = null;
-  if (yearRaw) {
-    publicationYear = Number(yearRaw);
-    if (!Number.isInteger(publicationYear) || publicationYear < 1800 || publicationYear > APP_CONFIG.publicationYearMaximum) {
-      elements.missingDetailMessage.textContent = `Das Erscheinungsjahr muss zwischen 1800 und ${APP_CONFIG.publicationYearMaximum} liegen.`;
-      elements.missingDetailMessage.dataset.type = "error";
-      return;
-    }
-  }
-
-  const nextDetails = { ...(state.settings.missingBandDetails || {}) };
-  nextDetails[state.selectedMissingBand.key] = {
-    title,
-    publicationYear,
-    desiredCondition,
-    priority,
-    notes,
-    duckipediaUrl,
-    updatedAt: new Date().toISOString()
-  };
-
-  const openSeries = state.selectedMissingBand.series;
-  await saveMeaningfulSettings({ missingBandDetails: nextDetails });
-  renderMissingBands({ forceOpenSeries: openSeries });
-  renderStats();
-  renderFleaMarketHubStatus();
-  if (!elements.fleaMarketPage.classList.contains("hidden")) renderFleaMarket();
-  closeMissingDetailModal();
-  showToast("Details zum fehlenden Band gespeichert.");
-}
-
-async function handleMarkMissingBandOwned() {
-  if (!state.selectedMissingBand) return;
-
-  const selected = { ...state.selectedMissingBand };
-  const condition = elements.missingDetailCondition.value;
-  if (!APP_CONFIG.conditions.some((entry) => entry.code === condition)) {
-    elements.missingDetailMessage.textContent = "Bitte wähle zuerst den Zustand des gefundenen Bands aus.";
-    elements.missingDetailMessage.dataset.type = "error";
-    elements.missingDetailCondition.focus();
-    return;
-  }
-
-  const yearRaw = elements.missingDetailYear.value.trim();
-  let publicationYear = null;
-  if (yearRaw) {
-    publicationYear = Number(yearRaw);
-    if (!Number.isInteger(publicationYear) || publicationYear < 1800 || publicationYear > APP_CONFIG.publicationYearMaximum) {
-      elements.missingDetailMessage.textContent = `Das Erscheinungsjahr muss zwischen 1800 und ${APP_CONFIG.publicationYearMaximum} liegen.`;
-      elements.missingDetailMessage.dataset.type = "error";
-      elements.missingDetailYear.focus();
-      return;
-    }
-  }
-
-  const typedUrl = elements.missingDetailUrl.value.trim();
-  const duckipediaUrl = normalizeHttpUrl(typedUrl);
-  if (typedUrl && !duckipediaUrl) {
-    elements.missingDetailMessage.textContent = "Der Duckipedia-Link muss mit http:// oder https:// beginnen.";
-    elements.missingDetailMessage.dataset.type = "error";
-    return;
-  }
-
-  elements.missingMarkOwned.disabled = true;
-  elements.missingDetailMessage.textContent = "Band wird in die Sammlung übernommen …";
-  elements.missingDetailMessage.dataset.type = "info";
-
-  try {
-    const metadata = await getMetadataCache(createMetadataCacheKey(selected.series, selected.bandNumber));
-    const now = new Date().toISOString();
-    const comic = {
-      id: createStableId(),
-      dataFormatVersion: APP_CONFIG.dataFormatVersion,
-      series: selected.series,
-      volumeNumber: String(selected.bandNumber),
-      numericBandNumber: selected.bandNumber,
-      title: elements.missingDetailName.value.trim(),
-      publicationYear,
-      condition,
-      duplicateCondition: null,
-      isRead: false,
-      isDuplicate: false,
-      isSealed: false,
-      notes: elements.missingDetailNotes.value.trim(),
-      duckipediaPageUrl: duckipediaUrl || metadata?.pageUrl || createConfiguredDuckipediaUrl(selected.series, selected.bandNumber),
-      duckipediaCoverUrl: metadata?.coverUrl || "",
-      duckipediaCoverFileName: metadata?.coverFileName || "",
-      duckipediaCoverSource: metadata?.coverSource || "",
-      duckipediaCoverLookupVersion: Number(metadata?.lookupVersion || 0),
-      metadataStatus: metadata?.found === true ? "found" : "",
-      metadataFetchedAt: metadata?.fetchedAt || null,
-      createdAt: now,
-      updatedAt: now
-    };
-
-    await saveArchiveEntry(comic);
-    const nextDetails = { ...(state.settings.missingBandDetails || {}) };
-    delete nextDetails[selected.key];
-    const nextFleaItems = { ...(state.settings.fleaMarketSession?.items || {}) };
-    delete nextFleaItems[selected.key];
-    await saveMeaningfulSettings({
-      missingBandDetails: nextDetails,
-      fleaMarketSession: { items: nextFleaItems, updatedAt: state.settings.fleaMarketSession?.updatedAt || null }
-    });
-    state.openMissingSeries.add(selected.series);
-    closeMissingDetailModal();
-    await refreshCollection();
-    await refreshArchiveCoreStatus({ showReport: false });
-    showToast(`${selected.series} Band ${selected.bandNumber} wurde als vorhanden eingetragen.`);
-  } catch (error) {
-    console.error(error);
-    elements.missingDetailMessage.textContent = `Band konnte nicht übernommen werden: ${error.message}`;
-    elements.missingDetailMessage.dataset.type = "error";
-  } finally {
-    elements.missingMarkOwned.disabled = false;
-  }
-}
-
-async function handleDeleteMissingDetail() {
-  if (!state.selectedMissingBand) return;
-  const nextDetails = { ...(state.settings.missingBandDetails || {}) };
-  delete nextDetails[state.selectedMissingBand.key];
-  const openSeries = state.selectedMissingBand.series;
-  await saveMeaningfulSettings({ missingBandDetails: nextDetails });
-  renderMissingBands({ forceOpenSeries: openSeries });
-  renderStats();
-  renderFleaMarketHubStatus();
-  if (!elements.fleaMarketPage.classList.contains("hidden")) renderFleaMarket();
-  closeMissingDetailModal();
-  showToast("Ergänzende Details gelöscht.");
-}
-
-function hasMissingDetailContent(detail) {
-  return Boolean(detail && (detail.title || detail.publicationYear || detail.desiredCondition || normalizeWishlistPriority(detail.priority) || detail.notes || detail.duckipediaUrl));
-}
 
 
 function restoreBodyModalState() {
@@ -6962,1477 +4935,34 @@ function registerServiceWorker() {
   });
 }
 
-function getSafeCalendarYear(value = state.settings.calendarSelectedYear) {
-  const year = Number(value);
-  return Number.isSafeInteger(year) && year >= 1900 && year <= 2100
-    ? year
-    : new Date().getFullYear();
-}
-
-function getSafeCalendarMonth(value = state.settings.calendarSelectedMonth) {
-  const month = Number(value);
-  return Number.isSafeInteger(month) && month >= 0 && month <= 11
-    ? month
-    : new Date().getMonth();
-}
-
-function getCalendarEvents() {
-  return Array.isArray(state.settings.calendarEvents)
-    ? state.settings.calendarEvents.map(normalizeCalendarEvent).filter(Boolean).sort(compareCalendarEvents)
-    : [];
-}
-
-function getCalendarImportedSources() {
-  return state.settings.calendarImportedSources && typeof state.settings.calendarImportedSources === "object"
-    ? { ...state.settings.calendarImportedSources }
-    : {};
-}
-
 function renderCalendarOverview() {
-  renderReleaseRadarIndicators();
+  return calendarFeature.renderOverview();
 }
 
-async function openCalendarPage() {
-  elements.calendarReminderTime.value = state.settings.calendarReminderTime || "09:00";
-  elements.calendarAutoSync.checked = state.settings.calendarAutoSync !== false;
-  elements.calendarSearch.value = state.calendarSearch;
-  elements.calendarCategoryFilter.value = state.calendarFilter;
-  elements.calendarPage.classList.remove("hidden");
-  elements.calendarPage.setAttribute("aria-hidden", "false");
-  document.body.classList.add("app-page-open");
-  elements.calendarPage.scrollTop = 0;
-  renderCalendarPage();
-  window.setTimeout(() => elements.closeCalendar.focus({ preventScroll: true }), 0);
-  await refreshCalendarCatalog({ silent: true, autoImport: true });
+function openCalendarPage() {
+  return calendarFeature.open();
 }
 
-function closeCalendarPage({ returnFocus = true } = {}) {
-  elements.calendarPage.classList.add("hidden");
-  elements.calendarPage.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("app-page-open");
-  if (returnFocus) window.setTimeout(() => elements.openCalendar.focus({ preventScroll: true }), 0);
+function closeCalendarPage(options) {
+  return calendarFeature.close(options);
 }
 
 function renderCalendarPage() {
-  const year = getSafeCalendarYear();
-  const month = getSafeCalendarMonth();
-  const allYearEvents = getEventsForYear(getCalendarEvents(), year);
-  const yearEvents = filterCalendarEvents(allYearEvents, {
-    category: state.calendarFilter,
-    query: state.calendarSearch
-  });
-  const monthEvents = getEventsForMonth(yearEvents, year, month);
-
-  renderCalendarYearOptions(year);
-  elements.calendarPageSummary.textContent = allYearEvents.length === 1 ? "1 Termin" : `${allYearEvents.length} Termine`;
-  elements.calendarMonthTitle.textContent = `${getMonthName(month)} ${year}`;
-  elements.calendarMonthCount.textContent = monthEvents.length === 1 ? "1 Termin" : `${monthEvents.length} Termine`;
-
-  const importedCount = Object.keys(getCalendarImportedSources()).length;
-  const availableCount = state.calendarCatalog.filter((entry) => entry.active).length;
-  elements.calendarImportSummary.textContent = availableCount
-    ? `${availableCount} Jahr${availableCount === 1 ? "" : "e"} verfügbar · ${importedCount} importiert`
-    : state.settings.calendarCatalogLastCheckAt
-      ? "Keine Jahrespläne gefunden"
-      : "Kalenderindex wird geprüft";
-
-  renderCalendarCatalog();
-  renderCalendarMonthTabs(year, month, yearEvents);
-  renderCalendarGrid(year, month, monthEvents);
-  renderCalendarEventList(monthEvents);
-  renderReleaseRadarIndicators();
+  return calendarFeature.render();
 }
 
-function renderCalendarYearOptions(selectedYear) {
-  const currentYear = new Date().getFullYear();
-  const years = new Set([currentYear - 1, currentYear, currentYear + 1, Number(selectedYear)]);
-  state.calendarCatalog.forEach((entry) => years.add(entry.year));
-  getCalendarEvents().forEach((event) => years.add(Number(event.startDate.slice(0, 4))));
-
-  elements.calendarYearSelect.replaceChildren();
-  [...years].filter((year) => Number.isSafeInteger(year) && year >= 1900 && year <= 2100).sort((a, b) => a - b).forEach((year) => {
-    const option = document.createElement("option");
-    option.value = String(year);
-    const available = state.calendarCatalog.some((entry) => entry.year === year && entry.active);
-    option.textContent = available ? `${year} · Jahresplan` : String(year);
-    elements.calendarYearSelect.append(option);
-  });
-  elements.calendarYearSelect.value = String(selectedYear);
-}
-
-function renderCalendarCatalog() {
-  const importedSources = getCalendarImportedSources();
-  const activeEntries = state.calendarCatalog.filter((entry) => entry.active);
-  const lastCheck = state.settings.calendarCatalogLastCheckAt;
-  elements.calendarCatalogStatus.textContent = state.calendarCatalogLoading
-    ? "Kalenderindex wird geprüft …"
-    : lastCheck
-      ? `${activeEntries.length} Jahr${activeEntries.length === 1 ? "" : "e"} verfügbar · geprüft ${formatDateTime(lastCheck)}`
-      : "Noch nicht geprüft";
-  elements.calendarRefreshCatalog.disabled = state.calendarCatalogLoading;
-  elements.calendarAutoSync.checked = state.settings.calendarAutoSync !== false;
-  elements.calendarCatalogList.replaceChildren();
-
-  if (!activeEntries.length) {
-    const empty = document.createElement("p");
-    empty.className = "muted-copy calendar-catalog-empty";
-    empty.textContent = state.calendarCatalogLoading
-      ? "Verfügbare Jahre werden geladen."
-      : "Noch keine Jahrespläne im Kalenderindex gefunden.";
-    elements.calendarCatalogList.append(empty);
-    return;
-  }
-
-  activeEntries.forEach((entry) => {
-    const record = importedSources[String(entry.year)];
-    const publisherCount = getEventsForYear(getCalendarEvents(), entry.year).filter((event) => event.source === "publisher").length;
-    const signatureMatches = record && `${record.id}|${record.version}|${record.file}` === createCalendarCatalogSignature(entry);
-
-    const card = document.createElement("article");
-    card.className = "calendar-catalog-card";
-
-    const heading = document.createElement("div");
-    heading.className = "calendar-catalog-heading";
-    const copy = document.createElement("div");
-    const year = document.createElement("strong");
-    year.textContent = String(entry.year);
-    const label = document.createElement("span");
-    label.textContent = entry.label;
-    copy.append(year, label);
-    const badge = document.createElement("span");
-    badge.className = `calendar-catalog-badge ${publisherCount ? "is-imported" : ""}`;
-    badge.textContent = publisherCount ? `${publisherCount} Termine` : "Nicht geladen";
-    heading.append(copy, badge);
-
-    const metadata = document.createElement("p");
-    metadata.className = "muted-copy";
-    metadata.textContent = record?.importedAt
-      ? `${signatureMatches ? "Aktuell" : "Update verfügbar"} · importiert ${formatDateTime(record.importedAt)}`
-      : entry.notes || `Version ${entry.version}`;
-
-    const actions = document.createElement("div");
-    actions.className = "calendar-catalog-actions";
-    const load = document.createElement("button");
-    load.type = "button";
-    load.className = publisherCount && signatureMatches ? "secondary-button compact-button" : "primary-button compact-button";
-    load.dataset.calendarCatalogImport = String(entry.year);
-    load.textContent = publisherCount ? (signatureMatches ? "Neu laden" : "Aktualisieren") : "Laden";
-    actions.append(load);
-
-    if (entry.sourceUrl) {
-      const source = document.createElement("a");
-      source.className = "text-button calendar-source-link";
-      source.href = entry.sourceUrl;
-      source.target = "_blank";
-      source.rel = "noopener noreferrer";
-      source.textContent = "Verlagsquelle ↗";
-      actions.append(source);
-    }
-
-    if (publisherCount || record) {
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "text-button danger-text-button";
-      remove.dataset.calendarCatalogRemove = String(entry.year);
-      remove.textContent = "Jahr entfernen";
-      actions.append(remove);
-    }
-
-    card.append(heading, metadata, actions);
-    elements.calendarCatalogList.append(card);
-  });
-}
-
-function renderCalendarMonthTabs(year, selectedMonth, yearEvents) {
-  elements.calendarMonthTabs.replaceChildren();
-  for (let month = 0; month < 12; month += 1) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.dataset.calendarMonth = String(month);
-    button.className = "calendar-month-tab";
-    if (month === selectedMonth) button.classList.add("active");
-    const count = getEventsForMonth(yearEvents, year, month).length;
-    button.textContent = `${getMonthName(month).slice(0, 3)}${count ? ` · ${count}` : ""}`;
-    elements.calendarMonthTabs.append(button);
-  }
-}
-
-function renderCalendarGrid(year, month, monthEvents) {
-  elements.calendarGrid.replaceChildren();
-  const firstDay = new Date(year, month, 1);
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const offset = (firstDay.getDay() + 6) % 7;
-  for (let index = 0; index < offset; index += 1) {
-    const spacer = document.createElement("span");
-    spacer.className = "calendar-day calendar-day-empty";
-    spacer.setAttribute("aria-hidden", "true");
-    elements.calendarGrid.append(spacer);
-  }
-
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    const dayEvents = monthEvents.filter((event) => event.startDate === date);
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "calendar-day";
-    button.dataset.calendarDate = date;
-    if (isToday(date)) button.classList.add("calendar-day-today");
-    if (dayEvents.length) button.classList.add("calendar-day-has-events");
-    button.setAttribute("aria-label", `${day}. ${getMonthName(month)}${dayEvents.length ? `, ${dayEvents.length} Termine` : ""}`);
-    const number = document.createElement("span");
-    number.textContent = String(day);
-    button.append(number);
-    if (dayEvents.length) {
-      const dots = document.createElement("span");
-      dots.className = "calendar-day-dots";
-      [...new Set(dayEvents.map((event) => event.category))].slice(0, 3).forEach((category) => {
-        const dot = document.createElement("i");
-        dot.className = `calendar-dot calendar-dot-${category}`;
-        dots.append(dot);
-      });
-      button.append(dots);
-    }
-    elements.calendarGrid.append(button);
-  }
-}
-
-function renderCalendarEventList(events) {
-  elements.calendarEventList.replaceChildren();
-  elements.calendarEmpty.classList.toggle("hidden", events.length > 0);
-  if (!events.length) return;
-  const radarItemsByEventId = new Map(getReleaseRadarItems().map((item) => [item.event.id, item]));
-
-  events.forEach((event) => {
-    const article = document.createElement("article");
-    article.className = `calendar-event-card calendar-event-${event.category}`;
-    article.dataset.calendarEventId = event.id;
-    const dateBlock = document.createElement("div");
-    dateBlock.className = "calendar-event-date";
-    const dateNumber = document.createElement("strong");
-    dateNumber.textContent = String(Number(event.startDate.slice(8, 10)));
-    const weekday = document.createElement("span");
-    weekday.textContent = new Intl.DateTimeFormat("de-DE", { weekday: "short" }).format(new Date(`${event.startDate}T12:00:00`));
-    dateBlock.append(dateNumber, weekday);
-
-    const copy = document.createElement("div");
-    copy.className = "calendar-event-copy";
-    const badgeRow = document.createElement("div");
-    badgeRow.className = "calendar-event-badge-row";
-    const badge = document.createElement("span");
-    badge.className = "calendar-event-badge";
-    badge.textContent = event.source === "publisher" ? "Neuerscheinung" : event.category === "flea-market" ? "Flohmarkt" : event.category === "comic-fair" ? "Comicbörse" : "Eigener Termin";
-    badgeRow.append(badge);
-
-    const releaseLink = resolveCalendarRelease(event);
-    if (releaseLink) {
-      const status = getCalendarCollectionStatus(releaseLink);
-      const statusBadge = document.createElement("span");
-      statusBadge.className = `calendar-collection-status calendar-collection-${status.type}`;
-      statusBadge.textContent = status.label;
-      badgeRow.append(statusBadge);
-    }
-    const radarItem = radarItemsByEventId.get(event.id);
-    if (radarItem?.isNew) {
-      const radarBadge = document.createElement("span");
-      radarBadge.className = "calendar-radar-status is-new";
-      radarBadge.textContent = "Neu";
-      badgeRow.append(radarBadge);
-    } else if (radarItem && ["watch", "ordered", "ignored"].includes(radarItem.effectiveStatus)) {
-      const radarBadge = document.createElement("span");
-      radarBadge.className = `calendar-radar-status is-${radarItem.effectiveStatus}`;
-      radarBadge.textContent = radarItem.effectiveStatus === "watch" ? "Vorgemerkt" : radarItem.effectiveStatus === "ordered" ? "Bestellt" : "Ignoriert";
-      badgeRow.append(radarBadge);
-    }
-
-    const title = document.createElement("h4");
-    title.textContent = event.title;
-    const metadata = document.createElement("p");
-    metadata.textContent = [event.startTime, event.location].filter(Boolean).join(" · ") || (event.source === "publisher" ? event.sourceName : "Ganztägig");
-    copy.append(badgeRow, title, metadata);
-
-    const actions = document.createElement("div");
-    actions.className = "calendar-event-actions";
-    const url = event.url || inferDuckipediaUrlFromCalendarTitle(event.title);
-    if (url) {
-      const link = document.createElement("a");
-      link.className = "calendar-event-link";
-      link.href = url;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      link.textContent = "Details ↗";
-      actions.append(link);
-    }
-    if (releaseLink) {
-      const status = getCalendarCollectionStatus(releaseLink);
-      const action = document.createElement("button");
-      action.type = "button";
-      action.className = status.type === "owned" ? "success-button compact-button" : "secondary-button compact-button";
-      action.dataset.calendarCollectionAction = status.type === "owned" ? "owned" : status.type === "missing" ? "missing" : "watch";
-      action.dataset.series = releaseLink.series;
-      action.dataset.bandNumber = String(releaseLink.bandNumber);
-      action.textContent = status.type === "owned" ? "In Sammlung" : status.type === "missing" ? "Fehlband öffnen" : "Auf Wunschliste";
-      actions.append(action);
-    } else if (event.source === "publisher" && event.category === "release") {
-      const linkAction = document.createElement("button");
-      linkAction.type = "button";
-      linkAction.className = "secondary-button compact-button";
-      linkAction.dataset.calendarReleaseLink = event.id;
-      linkAction.textContent = "Reihe zuordnen";
-      actions.append(linkAction);
-    }
-    if (event.source === "custom") {
-      const edit = document.createElement("button");
-      edit.type = "button";
-      edit.className = "text-button";
-      edit.dataset.calendarEdit = event.id;
-      edit.textContent = "Bearbeiten";
-      actions.append(edit);
-    }
-    article.append(dateBlock, copy, actions);
-    elements.calendarEventList.append(article);
-  });
-}
-
-function getReleaseSeriesCatalog() {
-  const calendarAliases = normalizeReleaseSeriesAliases(state.settings.releaseSeriesAliases);
-  const withCalendarAliases = (entry) => ({
-    ...entry,
-    aliases: [...new Set([...(Array.isArray(entry.aliases) ? entry.aliases : []), ...(calendarAliases[entry.id] || [])])]
-  });
-  const customDefinitions = Array.isArray(state.settings.customSeriesConfigs)
-    ? state.settings.customSeriesConfigs.map((entry) => withCalendarAliases({
-        id: entry.id || createCustomSeriesId(entry.name),
-        name: entry.name,
-        aliases: entry.aliases || []
-      }))
-    : [];
-  const configuredNames = new Set([
-    ...STANDARD_SERIES_DEFINITIONS.map((entry) => entry.name),
-    ...customDefinitions.map((entry) => entry.name)
-  ]);
-  const usedDefinitions = state.collectionEntries
-    .filter((comic) => comic?.series && !configuredNames.has(comic.series))
-    .map((comic) => ({
-      id: comic.seriesId || createCustomSeriesId(comic.series),
-      name: comic.series,
-      aliases: []
-    }));
-  return normalizeReleaseSeriesCatalog([
-    ...STANDARD_SERIES_DEFINITIONS.map(withCalendarAliases),
-    ...customDefinitions,
-    ...usedDefinitions.map(withCalendarAliases)
-  ]);
-}
-
-function resolveCalendarRelease(event) {
-  return resolveReleaseIdentity(event, getReleaseSeriesCatalog(), state.settings.releaseEventLinks);
-}
-
-function getCalendarCollectionStatus({ seriesId, series, bandNumber }) {
-  const normalizedSeriesId = String(seriesId || "").trim();
-  const owned = state.collectionEntries.some((comic) => {
-    const sameSeries = normalizedSeriesId
-      ? comic.seriesId === normalizedSeriesId
-      : comic.series === series;
-    return sameSeries && comic.numericBandNumber === bandNumber;
-  });
-  if (owned) return { type: "owned", label: "Im Besitz" };
-  const missing = state.missingGroups.some((group) => {
-    const sameSeries = normalizedSeriesId && group.seriesId
-      ? group.seriesId === normalizedSeriesId
-      : group.series === series;
-    return sameSeries && group.missingBands.includes(bandNumber);
-  });
-  if (missing) return { type: "missing", label: "Fehlt" };
-  return { type: "planned", label: "Noch nicht vorgemerkt" };
-}
-
-function inferDuckipediaUrlFromCalendarTitle(title) {
-  const pseudoEvent = { source: "publisher", category: "release", title };
-  const release = resolveCalendarRelease(pseudoEvent);
-  return release ? createConfiguredDuckipediaUrl(release.series, release.bandNumber, title) : "";
-}
-
-async function handleCalendarCollectionAction(button) {
-  const series = button.dataset.series;
-  const bandNumber = Number(button.dataset.bandNumber);
-  if (!series || !Number.isSafeInteger(bandNumber)) return;
-  const action = button.dataset.calendarCollectionAction;
-
-  if (action === "owned") {
-    closeCalendarPage({ returnFocus: false });
-    openCollectionPage("all", { series, search: bandNumber });
-    return;
-  }
-
-  if (action === "watch") {
-    const nextTargets = { ...(state.settings.knownHighestBandBySeries || {}) };
-    const currentTarget = Number(nextTargets[series]) || 0;
-    if (bandNumber > currentTarget) nextTargets[series] = bandNumber;
-    await saveMeaningfulSettings({ knownHighestBandBySeries: nextTargets });
-    state.missingGroups = calculateMissingBands(state.collectionEntries, nextTargets);
-    renderMissingHub();
-    renderMissingBands();
-    renderStats();
-    renderSeriesProgress();
-  }
-  await openMissingDetailModal(series, bandNumber);
-}
-
-function getReleaseRadarItems() {
-  return createReleaseRadarItems(getCalendarEvents(), {
-    seriesCatalog: getReleaseSeriesCatalog(),
-    comics: state.collectionEntries,
-    missingGroups: state.missingGroups,
-    decisions: state.settings.releaseRadarDecisions,
-    knownSignatures: state.settings.releaseRadarKnownSignatures,
-    eventLinks: state.settings.releaseEventLinks
-  });
-}
-
-async function initializeReleaseRadarIfNeeded() {
-  if (state.settings.releaseRadarInitializedAt) return false;
-  const releaseEvents = getCalendarEvents().filter((event) => event.source === "publisher" && event.category === "release");
-  if (!releaseEvents.length) return false;
-
-  const today = getLocalDateKey();
-  const pastEvents = releaseEvents.filter((event) => event.startDate < today);
-  state.settings = await saveAppSettings({
-    ...state.settings,
-    releaseRadarKnownSignatures: mergeKnownReleaseSignatures([], pastEvents),
-    releaseRadarInitializedAt: new Date().toISOString(),
-    releaseRadarFilter: RELEASE_RADAR_FILTERS.includes(state.releaseRadarFilter) ? state.releaseRadarFilter : "open"
-  });
-  return true;
-}
-
-function getLocalDateKey(date = new Date()) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+function initializeReleaseRadarIfNeeded() {
+  return calendarFeature.initializeReleaseRadar();
 }
 
 function renderReleaseRadarIndicators() {
-  if (!elements.releaseRadarHomeCount) return;
-  const items = getReleaseRadarItems();
-  const summary = summarizeReleaseRadar(items);
-  const badgeCount = getReleaseRadarBadgeCount(items);
-  const badgeLabel = badgeCount === 1 ? "1 neu" : `${badgeCount} neu`;
-
-  elements.releaseRadarHomeCount.textContent = String(badgeCount);
-  elements.releaseRadarHomeCount.classList.toggle("is-clear", badgeCount === 0);
-  elements.releaseRadarHomeMeta.textContent = badgeCount > 0
-    ? (summary.todayCount > 0 ? `${summary.todayCount} heute` : "neu")
-    : `${summary.upcoming} geplant`;
-
-  if (summary.next) {
-    elements.releaseRadarHomeTitle.textContent = "Nächste Neuerscheinung";
-    elements.releaseRadarHomeNext.textContent = summary.next.event.title;
-    elements.releaseRadarHomeDate.textContent = `${getReleaseTimingLabel(summary.next)} · ${formatCalendarDate(summary.next.event.startDate, { includeYear: true })}`;
-    elements.calendarRadarTitle.textContent = badgeCount > 0
-      ? `${badgeCount} Veröffentlichung${badgeCount === 1 ? "" : "en"} prüfen`
-      : "Alles im Blick";
-    elements.calendarRadarNext.textContent = `${summary.next.event.title} · ${getReleaseTimingLabel(summary.next)}`;
-  } else {
-    elements.releaseRadarHomeTitle.textContent = "Erscheinungsradar";
-    elements.releaseRadarHomeNext.textContent = "Keine kommende Veröffentlichung im geladenen Kalender";
-    elements.releaseRadarHomeDate.textContent = "Neue Jahrespläne werden automatisch einsortiert.";
-    elements.calendarRadarTitle.textContent = "Keine offenen Neuerscheinungen";
-    elements.calendarRadarNext.textContent = "Sobald ein neuer Jahresplan erscheint, wird er hier angezeigt.";
-  }
-
-  elements.calendarRadarCount.textContent = badgeCount > 0 ? badgeLabel : "aktuell";
-  elements.calendarRadarCount.classList.toggle("is-clear", badgeCount === 0);
-  elements.calendarNavBadge.textContent = String(badgeCount);
-  elements.calendarNavBadge.classList.toggle("hidden", badgeCount === 0);
-  elements.calendarNavBadge.setAttribute("aria-label", `${badgeCount} neue oder heute fällige Veröffentlichungen`);
-
-  updateReleaseRadarBadge(badgeCount).catch((error) => {
-    console.warn("App-Badge konnte nicht aktualisiert werden:", error);
-  });
+  return calendarFeature.renderReleaseRadarIndicators();
 }
 
-function openReleaseRadarPage({ returnTarget = "home" } = {}) {
-  state.releaseRadarReturnTarget = returnTarget;
-  elements.releaseRadarPage.classList.remove("hidden");
-  elements.releaseRadarPage.setAttribute("aria-hidden", "false");
-  document.body.classList.add("app-page-open");
-  elements.releaseRadarPage.scrollTop = 0;
-  renderReleaseRadarPage();
-
-  saveAppSettings({
-    ...state.settings,
-    releaseRadarLastOpenedAt: new Date().toISOString()
-  }).then((settings) => {
-    state.settings = settings;
-  }).catch((error) => console.warn("Radar-Zeitpunkt konnte nicht gespeichert werden:", error));
-
-  window.setTimeout(() => elements.closeReleaseRadar.focus({ preventScroll: true }), 0);
+function openReleaseRadarPage(options) {
+  return calendarFeature.openReleaseRadar(options);
 }
 
-function closeReleaseRadarPage({ returnFocus = true } = {}) {
-  if (elements.releaseRadarPage.classList.contains("hidden")) return;
-  elements.releaseRadarPage.classList.add("hidden");
-  elements.releaseRadarPage.setAttribute("aria-hidden", "true");
-  const anotherPageOpen = [...document.querySelectorAll(".app-page")]
-    .some((page) => !page.classList.contains("hidden"));
-  document.body.classList.toggle("app-page-open", anotherPageOpen);
-  if (!returnFocus) return;
-  const target = state.releaseRadarReturnTarget === "calendar" && !elements.calendarPage.classList.contains("hidden")
-    ? elements.openReleaseRadarCalendar
-    : elements.openReleaseRadarHome;
-  window.setTimeout(() => target?.focus({ preventScroll: true }), 0);
-}
-
-function renderReleaseRadarPage() {
-  const items = getReleaseRadarItems();
-  const summary = summarizeReleaseRadar(items);
-  const visibleItems = filterReleaseRadarItems(items, state.releaseRadarFilter);
-
-  elements.releaseRadarSummary.textContent = `${summary.upcoming} offen`;
-  elements.releaseRadarNewCount.textContent = String(summary.newCount);
-  elements.releaseRadarTodayCount.textContent = String(summary.todayCount);
-  elements.releaseRadarWatchCount.textContent = String(summary.watchedCount);
-  elements.releaseRadarOrderedCount.textContent = String(summary.orderedCount);
-
-  if (summary.next) {
-    elements.releaseRadarNextTitle.textContent = summary.next.event.title;
-    elements.releaseRadarNextCopy.textContent = `${getReleaseTimingLabel(summary.next)} · ${formatCalendarDate(summary.next.event.startDate, { includeYear: true })}`;
-  } else {
-    elements.releaseRadarNextTitle.textContent = "Keine offene Neuerscheinung";
-    elements.releaseRadarNextCopy.textContent = "Alle bekannten Termine sind erledigt oder es wurde noch kein Jahresplan geladen.";
-  }
-
-  elements.releaseRadarFilterTabs.querySelectorAll("button[data-radar-filter]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.radarFilter === state.releaseRadarFilter);
-  });
-  elements.releaseRadarList.replaceChildren();
-  elements.releaseRadarEmpty.classList.toggle("hidden", visibleItems.length > 0);
-  elements.releaseRadarMarkSeen.disabled = !visibleItems.some((item) => item.isNew);
-  elements.releaseRadarExport.disabled = !items.some((item) => ["watch", "ordered"].includes(item.effectiveStatus) && item.timing !== "past");
-
-  visibleItems.forEach((item) => elements.releaseRadarList.append(createReleaseRadarCard(item)));
-  renderReleaseRadarBadgeStatus(getReleaseRadarBadgeCount(items));
-  renderReleaseRadarIndicators();
-}
-
-function createReleaseRadarCard(item) {
-  const article = document.createElement("article");
-  article.className = `release-radar-card is-${item.effectiveStatus}${item.isNew ? " is-new" : ""}`;
-  article.dataset.radarKey = item.key;
-
-  const date = document.createElement("div");
-  date.className = "release-radar-date";
-  const day = document.createElement("strong");
-  day.textContent = String(Number(item.event.startDate.slice(8, 10)));
-  const month = document.createElement("span");
-  month.textContent = getMonthName(Number(item.event.startDate.slice(5, 7)) - 1).slice(0, 3);
-  const year = document.createElement("small");
-  year.textContent = item.event.startDate.slice(0, 4);
-  date.append(day, month, year);
-
-  const content = document.createElement("div");
-  content.className = "release-radar-card-content";
-  const badges = document.createElement("div");
-  badges.className = "release-radar-card-badges";
-  if (item.isNew) badges.append(createRadarBadge("Neu", "is-new"));
-  badges.append(createRadarBadge(getReleaseRadarStatusLabel(item), `is-${item.effectiveStatus}`));
-  badges.append(createRadarBadge(item.collection.label, `is-${item.collection.type}`));
-
-  const title = document.createElement("h3");
-  title.textContent = item.event.title;
-  const timing = document.createElement("p");
-  timing.className = "release-radar-timing";
-  timing.textContent = `${getReleaseTimingLabel(item)} · ${formatCalendarDate(item.event.startDate, { includeYear: true })}`;
-  const source = document.createElement("p");
-  source.className = "muted-copy";
-  source.textContent = item.identity
-    ? `${item.identity.series} · Band ${item.identity.bandNumber}`
-    : `${item.event.sourceName || "LTB Jahresplan"} · noch keiner Archivreihe zugeordnet`;
-  content.append(badges, title, timing, source);
-  if (item.identity && item.collection.type !== "owned") {
-    content.append(createReleaseRadarPriorityControl(item));
-  }
-
-  const actions = document.createElement("div");
-  actions.className = "release-radar-card-actions";
-
-  if (item.collection.type === "owned" && item.identity) {
-    actions.append(createReleaseRadarAction("owned", "In Sammlung", item.key, "success-button compact-button"));
-  } else if (!item.identity) {
-    actions.append(createReleaseRadarAction("link", "Reihe zuordnen", item.key, "primary-button compact-button"));
-  } else if (item.identity) {
-    actions.append(
-      createReleaseRadarAction("watch", item.effectiveStatus === "watch" ? "Vorgemerkt ✓" : "Vormerken", item.key, item.effectiveStatus === "watch" ? "primary-button compact-button" : "secondary-button compact-button"),
-      createReleaseRadarAction("ordered", item.effectiveStatus === "ordered" ? "Bestellt ✓" : "Bestellt", item.key, item.effectiveStatus === "ordered" ? "primary-button compact-button" : "secondary-button compact-button")
-    );
-    if (item.timing !== "upcoming") {
-      actions.append(createReleaseRadarAction("add", "Als vorhanden eintragen", item.key, "success-button compact-button"));
-    }
-  }
-
-  if (item.isNew) actions.append(createReleaseRadarAction("seen", "Gesehen", item.key, "text-button"));
-  if (item.decision) actions.append(createReleaseRadarAction("reset", "Status zurücksetzen", item.key, "text-button"));
-  if (item.effectiveStatus !== "ignored" && item.collection.type !== "owned") {
-    actions.append(createReleaseRadarAction("ignored", "Ignorieren", item.key, "text-button danger-text-button"));
-  }
-
-  const url = item.event.url || inferDuckipediaUrlFromCalendarTitle(item.event.title);
-  if (url) {
-    const link = document.createElement("a");
-    link.className = "text-button release-radar-details-link";
-    link.href = url;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent = "Details ↗";
-    actions.append(link);
-  }
-
-  article.append(date, content, actions);
-  return article;
-}
-
-function createReleaseRadarPriorityControl(item) {
-  const label = document.createElement("label");
-  label.className = "release-radar-priority";
-  const text = document.createElement("span");
-  text.textContent = "Suchprio";
-  const select = document.createElement("select");
-  select.dataset.radarPriority = item.key;
-  select.setAttribute("aria-label", `Suchpriorität für ${item.event.title}`);
-
-  const empty = document.createElement("option");
-  empty.value = "";
-  empty.textContent = "Keine";
-  select.append(empty);
-  WISHLIST_PRIORITIES.forEach((priority) => {
-    const option = document.createElement("option");
-    option.value = priority.id;
-    option.textContent = priority.label;
-    select.append(option);
-  });
-
-  const detailKey = createMissingDetailKey(item.identity.series, item.identity.bandNumber);
-  select.value = normalizeWishlistPriority(state.settings.missingBandDetails?.[detailKey]?.priority);
-  label.append(text, select);
-  return label;
-}
-
-async function handleReleaseRadarPriorityChange(event) {
-  const select = event.target.closest("select[data-radar-priority]");
-  if (!select) return;
-  const item = getReleaseRadarItems().find((entry) => entry.key === select.dataset.radarPriority);
-  if (!item?.identity || item.collection.type === "owned") return;
-
-  const priority = normalizeWishlistPriority(select.value);
-  const detailKey = createMissingDetailKey(item.identity.series, item.identity.bandNumber);
-  const nextDetails = { ...(state.settings.missingBandDetails || {}) };
-  const existingDetail = nextDetails[detailKey] || {};
-  const nextDetail = { ...existingDetail, priority, updatedAt: new Date().toISOString() };
-  if (hasMissingDetailContent(nextDetail)) nextDetails[detailKey] = nextDetail;
-  else delete nextDetails[detailKey];
-
-  const nextTargets = { ...(state.settings.knownHighestBandBySeries || {}) };
-  if (priority && priority !== "ignore") {
-    const currentTarget = Number(nextTargets[item.identity.series]) || 0;
-    if (item.identity.bandNumber > currentTarget) nextTargets[item.identity.series] = item.identity.bandNumber;
-  }
-
-  const decisions = normalizeReleaseDecisionMap(state.settings.releaseRadarDecisions);
-  if (priority === "ignore") {
-    decisions[item.key] = { status: "ignored", updatedAt: new Date().toISOString() };
-  } else if (priority && decisions[item.key]?.status === "ignored") {
-    delete decisions[item.key];
-  }
-
-  try {
-    await saveMeaningfulSettings({
-      missingBandDetails: nextDetails,
-      knownHighestBandBySeries: nextTargets,
-      releaseRadarDecisions: decisions
-    }, 1);
-    state.missingGroups = calculateMissingBands(state.collectionEntries, nextTargets);
-    renderMissingHub();
-    renderMissingBands();
-    renderStats();
-    renderFleaMarketHubStatus();
-    renderReleaseRadarPage();
-    if (!elements.calendarPage.classList.contains("hidden")) renderCalendarPage();
-    showReleaseRadarMessage(priority ? `Suchpriorität „${getWishlistPriorityDefinition(priority)?.label}“ gespeichert.` : "Suchpriorität entfernt.", "success");
-  } catch (error) {
-    select.value = normalizeWishlistPriority(state.settings.missingBandDetails?.[detailKey]?.priority);
-    showReleaseRadarMessage(`Suchpriorität konnte nicht gespeichert werden: ${error.message}`, "error");
-  }
-}
-
-function createRadarBadge(label, variant) {
-  const badge = document.createElement("span");
-  badge.className = `release-radar-status-badge ${variant}`;
-  badge.textContent = label;
-  return badge;
-}
-
-function getReleaseRadarStatusLabel(item) {
-  if (item.effectiveStatus === "owned") return "Im Besitz";
-  if (item.effectiveStatus === "watch") return "Vorgemerkt";
-  if (item.effectiveStatus === "ordered") return "Bestellt";
-  if (item.effectiveStatus === "ignored") return "Ignoriert";
-  return item.timing === "today" ? "Heute" : item.timing === "past" ? "Erschienen" : "Offen";
-}
-
-function createReleaseRadarAction(action, label, key, className) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = className;
-  button.dataset.radarAction = action;
-  button.dataset.radarKey = key;
-  button.textContent = label;
-  return button;
-}
-
-function handleReleaseRadarPageClick(event) {
-  const filterButton = event.target.closest("button[data-radar-filter]");
-  if (filterButton) {
-    state.releaseRadarFilter = RELEASE_RADAR_FILTERS.includes(filterButton.dataset.radarFilter)
-      ? filterButton.dataset.radarFilter
-      : "open";
-    saveAppSettings({ ...state.settings, releaseRadarFilter: state.releaseRadarFilter })
-      .then((settings) => { state.settings = settings; })
-      .catch((error) => console.warn("Radarfilter konnte nicht gespeichert werden:", error));
-    renderReleaseRadarPage();
-    return;
-  }
-
-  const actionButton = event.target.closest("button[data-radar-action]");
-  if (!actionButton) return;
-  handleReleaseRadarAction(actionButton).catch((error) => {
-    console.error("Erscheinungsstatus konnte nicht geändert werden:", error);
-    showReleaseRadarMessage(`Erscheinungsstatus konnte nicht geändert werden: ${error.message}`, "error");
-  });
-}
-
-async function handleReleaseRadarAction(button) {
-  const item = getReleaseRadarItems().find((entry) => entry.key === button.dataset.radarKey);
-  if (!item) return;
-  const action = button.dataset.radarAction;
-
-  if (action === "link") {
-    openReleaseLinkModal(item.event);
-    return;
-  }
-  if (action === "owned" && item.identity) {
-    closeReleaseRadarPage({ returnFocus: false });
-    if (!elements.calendarPage.classList.contains("hidden")) closeCalendarPage({ returnFocus: false });
-    openCollectionPage("all", { series: item.identity.series, search: item.identity.bandNumber });
-    return;
-  }
-  if (action === "add" && item.identity) {
-    prepareReleaseForAdd(item);
-    return;
-  }
-  if (action === "seen") {
-    await markReleaseItemsSeen([item]);
-    return;
-  }
-  if (["watch", "ordered"].includes(action) && item.identity) {
-    await ensureReleaseOnWishlist(item.identity);
-  }
-  await saveReleaseRadarDecision(item, action === "reset" ? "" : action);
-}
-
-async function saveReleaseRadarDecision(item, status) {
-  const decisions = normalizeReleaseDecisionMap(state.settings.releaseRadarDecisions);
-  if (!status) delete decisions[item.key];
-  else decisions[item.key] = { status, updatedAt: new Date().toISOString() };
-  const knownSignatures = status
-    ? mergeKnownReleaseSignatures(state.settings.releaseRadarKnownSignatures, [item])
-    : state.settings.releaseRadarKnownSignatures;
-  await saveMeaningfulSettings({
-    releaseRadarDecisions: decisions,
-    releaseRadarKnownSignatures: knownSignatures
-  }, 1);
-  renderReleaseRadarPage();
-  if (!elements.calendarPage.classList.contains("hidden")) renderCalendarPage();
-  showReleaseRadarMessage(status ? "Erscheinungsstatus gespeichert." : "Erscheinungsstatus zurückgesetzt.", "success");
-}
-
-async function markVisibleReleaseRadarItemsSeen() {
-  const items = filterReleaseRadarItems(getReleaseRadarItems(), state.releaseRadarFilter).filter((item) => item.isNew);
-  if (!items.length) {
-    showReleaseRadarMessage("In dieser Ansicht gibt es keine neuen Termine.", "info");
-    return;
-  }
-  await markReleaseItemsSeen(items);
-}
-
-async function markReleaseItemsSeen(items) {
-  const known = mergeKnownReleaseSignatures(state.settings.releaseRadarKnownSignatures, items);
-  await saveMeaningfulSettings({ releaseRadarKnownSignatures: known }, 1);
-  renderReleaseRadarPage();
-  if (!elements.calendarPage.classList.contains("hidden")) renderCalendarPage();
-  showReleaseRadarMessage(`${items.length} Termin${items.length === 1 ? "" : "e"} als gesehen markiert.`, "success");
-}
-
-function openReleaseLinkModal(calendarEvent) {
-  if (!calendarEvent) return;
-  state.releaseLinkEventId = calendarEvent.id;
-  const suggestion = suggestReleaseSeriesDetails(calendarEvent);
-  const catalog = getReleaseSeriesCatalog().filter((entry) => entry.id !== "other");
-  elements.releaseLinkExistingSeries.replaceChildren();
-  catalog
-    .slice()
-    .sort((first, second) => {
-      if (first.id === "ltb-main") return -1;
-      if (second.id === "ltb-main") return 1;
-      return first.name.localeCompare(second.name, "de", { sensitivity: "base" });
-    })
-    .forEach((series) => {
-      const option = document.createElement("option");
-      option.value = series.id;
-      option.textContent = series.name;
-      elements.releaseLinkExistingSeries.append(option);
-    });
-
-  const suggestedExisting = catalog.find((series) => {
-    const lookup = normalizeSeriesLookup(suggestion.seriesName);
-    return normalizeSeriesLookup(series.name) === lookup
-      || series.aliases.some((alias) => normalizeSeriesLookup(alias) === lookup);
-  });
-  if (suggestedExisting) elements.releaseLinkExistingSeries.value = suggestedExisting.id;
-
-  const shouldCreateNew = !suggestedExisting && Boolean(suggestion.seriesName);
-  elements.releaseLinkModeNew.checked = shouldCreateNew;
-  elements.releaseLinkModeExisting.checked = !shouldCreateNew;
-  elements.releaseLinkNewName.value = suggestion.seriesName || "";
-  elements.releaseLinkNewPattern.value = "";
-  elements.releaseLinkAlias.value = suggestion.alias || "";
-  elements.releaseLinkBand.value = suggestion.bandNumber ? String(suggestion.bandNumber) : "";
-  elements.releaseLinkContext.textContent = `${calendarEvent.title} · ${formatCalendarDate(calendarEvent.startDate, { includeYear: true })}`;
-  elements.releaseLinkMessage.textContent = "";
-  syncReleaseLinkMode();
-  elements.releaseLinkModal.classList.remove("hidden");
-  document.body.classList.add("modal-open");
-  window.setTimeout(() => {
-    (shouldCreateNew ? elements.releaseLinkNewName : elements.releaseLinkExistingSeries).focus();
-  }, 0);
-}
-
-function closeReleaseLinkModal() {
-  elements.releaseLinkModal.classList.add("hidden");
-  state.releaseLinkEventId = null;
-  elements.releaseLinkMessage.textContent = "";
-  restoreBodyModalState();
-}
-
-function syncReleaseLinkMode() {
-  const createNew = elements.releaseLinkModeNew.checked;
-  elements.releaseLinkExistingFields.classList.toggle("hidden", createNew);
-  elements.releaseLinkNewFields.classList.toggle("hidden", !createNew);
-  elements.releaseLinkExistingSeries.required = !createNew;
-  elements.releaseLinkNewName.required = createNew;
-}
-
-async function handleReleaseLinkSubmit(event) {
-  event.preventDefault();
-  const calendarEvent = getCalendarEvents().find((entry) => entry.id === state.releaseLinkEventId);
-  if (!calendarEvent) {
-    elements.releaseLinkMessage.textContent = "Der Kalendertermin ist nicht mehr verfügbar.";
-    elements.releaseLinkMessage.dataset.type = "error";
-    return;
-  }
-
-  const bandNumber = Number(elements.releaseLinkBand.value);
-  if (!Number.isSafeInteger(bandNumber) || bandNumber < 1 || bandNumber > 99999) {
-    elements.releaseLinkMessage.textContent = "Bitte gib eine gültige Bandnummer zwischen 1 und 99999 ein.";
-    elements.releaseLinkMessage.dataset.type = "error";
-    return;
-  }
-
-  const alias = elements.releaseLinkAlias.value.trim().slice(0, 160);
-  const signature = createReleaseEventSignature(calendarEvent);
-  const existingAliases = normalizeReleaseSeriesAliases(state.settings.releaseSeriesAliases);
-  const existingLinks = normalizeReleaseEventLinks(state.settings.releaseEventLinks);
-  let seriesId = "";
-  let seriesName = "";
-  let nextConfigs = Array.isArray(state.settings.customSeriesConfigs) ? [...state.settings.customSeriesConfigs] : [];
-  let definitionToSave = null;
-
-  if (elements.releaseLinkModeNew.checked) {
-    const name = elements.releaseLinkNewName.value.trim();
-    const rawPattern = elements.releaseLinkNewPattern.value.trim();
-    const pattern = normalizeDuckipediaPattern(rawPattern);
-    if (!name || name.length > 100) {
-      elements.releaseLinkMessage.textContent = "Bitte gib einen Reihennamen mit höchstens 100 Zeichen ein.";
-      elements.releaseLinkMessage.dataset.type = "error";
-      return;
-    }
-    if (rawPattern && !pattern) {
-      elements.releaseLinkMessage.textContent = "Der Duckipedia-Pfad ist ungültig. Verwende einen Pfad oder eine URL von de.duckipedia.org.";
-      elements.releaseLinkMessage.dataset.type = "error";
-      return;
-    }
-    const duplicate = getReleaseSeriesCatalog().find((entry) => normalizeSeriesLookup(entry.name) === normalizeSeriesLookup(name));
-    if (duplicate) {
-      elements.releaseLinkMessage.textContent = `„${duplicate.name}“ gibt es bereits. Wähle bitte „Bestehender Reihe zuordnen“.`;
-      elements.releaseLinkMessage.dataset.type = "error";
-      return;
-    }
-    seriesId = createCustomSeriesId(name);
-    seriesName = name;
-    definitionToSave = {
-      id: seriesId,
-      name,
-      duckipediaPattern: pattern,
-      category: "special",
-      aliases: alias ? [alias] : [],
-      isArchived: false
-    };
-    nextConfigs = [...nextConfigs, definitionToSave];
-  } else {
-    seriesId = elements.releaseLinkExistingSeries.value;
-    const selected = getReleaseSeriesCatalog().find((entry) => entry.id === seriesId);
-    if (!selected) {
-      elements.releaseLinkMessage.textContent = "Bitte wähle eine vorhandene Reihe aus.";
-      elements.releaseLinkMessage.dataset.type = "error";
-      return;
-    }
-    seriesName = selected.name;
-    const customIndex = nextConfigs.findIndex((entry) => (entry.id || createCustomSeriesId(entry.name)) === seriesId);
-    if (customIndex >= 0 && alias) {
-      const current = nextConfigs[customIndex];
-      const aliases = [...new Set([...(current.aliases || []), alias])];
-      definitionToSave = { ...current, id: seriesId, aliases };
-      nextConfigs[customIndex] = definitionToSave;
-    }
-  }
-
-  const nextAliases = { ...existingAliases };
-  if (alias) nextAliases[seriesId] = [...new Set([...(nextAliases[seriesId] || []), alias])];
-  const nextLinks = {
-    ...existingLinks,
-    [signature]: { seriesId, bandNumber, updatedAt: new Date().toISOString() }
-  };
-
-  try {
-    await saveMeaningfulSettings({
-      customSeriesConfigs: nextConfigs,
-      releaseSeriesAliases: nextAliases,
-      releaseEventLinks: nextLinks
-    }, 1);
-    if (definitionToSave) await saveSeriesDefinition(definitionToSave);
-    populateConfiguration();
-    renderCustomSeriesList();
-    await refreshArchiveCoreStatus({ showReport: false });
-    closeReleaseLinkModal();
-    renderReleaseRadarPage();
-    if (!elements.calendarPage.classList.contains("hidden")) renderCalendarPage();
-    renderReleaseRadarIndicators();
-    showReleaseRadarMessage(`${calendarEvent.title} ist jetzt mit „${seriesName}“, Band ${bandNumber}, verknüpft.`, "success");
-  } catch (error) {
-    elements.releaseLinkMessage.textContent = `Zuordnung konnte nicht gespeichert werden: ${error.message}`;
-    elements.releaseLinkMessage.dataset.type = "error";
-  }
-}
-
-async function ensureReleaseOnWishlist(identity) {
-  const nextTargets = { ...(state.settings.knownHighestBandBySeries || {}) };
-  const currentTarget = Number(nextTargets[identity.series]) || 0;
-  if (identity.bandNumber <= currentTarget) return;
-  nextTargets[identity.series] = identity.bandNumber;
-  await saveMeaningfulSettings({ knownHighestBandBySeries: nextTargets }, 1);
-  state.missingGroups = calculateMissingBands(state.collectionEntries, nextTargets);
-  renderMissingHub();
-  renderMissingBands();
-  renderStats();
-  renderSeriesProgress();
-  shelfUI?.refresh({ comics: state.collectionEntries, missingGroups: state.missingGroups, settings: state.settings, localCoverIds: state.localCoverIds });
-}
-
-function prepareReleaseForAdd(item) {
-  if (!item.identity) return;
-  closeReleaseRadarPage({ returnFocus: false });
-  if (!elements.calendarPage.classList.contains("hidden")) closeCalendarPage({ returnFocus: false });
-  resetForm();
-  elements.series.value = item.identity.series;
-  elements.volumeNumber.value = String(item.identity.bandNumber);
-  elements.publicationYear.value = item.event.startDate.slice(0, 4);
-  openAddPage();
-  showFormMessage(`${item.event.title} wurde vorbereitet. Prüfe nur noch Zustand und Eigenschaften.`, "success");
-  window.setTimeout(() => {
-    lookupFormMetadata({ force: false }).catch((error) => console.warn("Metadaten konnten nicht vorgeladen werden:", error));
-  }, 0);
-}
-
-async function exportWatchedReleaseReminders() {
-  const items = getReleaseRadarItems().filter((item) => ["watch", "ordered"].includes(item.effectiveStatus) && item.timing !== "past");
-  if (!items.length) {
-    showReleaseRadarMessage("Es gibt keine kommenden vorgemerkten oder bestellten Ausgaben.", "info");
-    return;
-  }
-
-  const reminderTime = state.settings.calendarReminderTime || "09:00";
-  const events = items.map((item) => ({ ...item.event, reminderEnabled: true }));
-  const content = buildCalendarIcs(events, {
-    calendarName: "Entenarchiv Erscheinungsradar",
-    reminderTime,
-    timedReleaseReminders: true
-  });
-  const result = await shareOrDownloadText({
-    content,
-    filename: createAppFilename("Entenarchiv-Erscheinungsradar", "ics"),
-    mimeType: "text/calendar;charset=utf-8",
-    title: "Entenarchiv Erscheinungsradar",
-    text: `${items.length} vorgemerkte oder bestellte Neuerscheinungen`
-  });
-  if (result.method !== "cancelled") showReleaseRadarMessage("Kalenderdatei wurde erstellt. Öffne sie mit Apple Kalender, um Erinnerungen zu aktivieren.", "success");
-}
-
-function showReleaseRadarMessage(message, type = "info") {
-  elements.releaseRadarMessage.textContent = message;
-  elements.releaseRadarMessage.dataset.type = type;
-}
-
-async function handleReleaseRadarBadgeToggle() {
-  elements.releaseRadarMessage.textContent = "";
-  if (!elements.releaseRadarBadgeEnabled.checked) {
-    state.settings = await saveAppSettings({ ...state.settings, releaseRadarBadgeEnabled: false });
-    if (typeof navigator.clearAppBadge === "function") await navigator.clearAppBadge().catch(() => {});
-    renderReleaseRadarBadgeStatus(getReleaseRadarBadgeCount(getReleaseRadarItems()));
-    showReleaseRadarMessage("Das App-Badge wurde ausgeschaltet.", "info");
-    return;
-  }
-
-  if (typeof navigator.setAppBadge !== "function") {
-    elements.releaseRadarBadgeEnabled.checked = false;
-    state.settings = await saveAppSettings({ ...state.settings, releaseRadarBadgeEnabled: false });
-    showReleaseRadarMessage("Dieses Gerät unterstützt kein App-Badge für die Web-App.", "info");
-    renderReleaseRadarBadgeStatus(0);
-    return;
-  }
-
-  if ("Notification" in window && Notification.permission === "default") {
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") {
-      elements.releaseRadarBadgeEnabled.checked = false;
-      state.settings = await saveAppSettings({ ...state.settings, releaseRadarBadgeEnabled: false });
-      showReleaseRadarMessage(permission === "denied" ? "Die Berechtigung wurde abgelehnt. Du kannst sie in den iOS-Einstellungen ändern." : "Die Berechtigung wurde nicht erteilt.", "error");
-      renderReleaseRadarBadgeStatus(0);
-      return;
-    }
-  }
-
-  state.settings = await saveAppSettings({ ...state.settings, releaseRadarBadgeEnabled: true });
-  await updateReleaseRadarBadge(getReleaseRadarBadgeCount(getReleaseRadarItems()));
-  renderReleaseRadarBadgeStatus(getReleaseRadarBadgeCount(getReleaseRadarItems()));
-  showReleaseRadarMessage("Das App-Badge ist aktiviert.", "success");
-}
-
-function renderReleaseRadarBadgeStatus(count) {
-  const supported = typeof navigator.setAppBadge === "function" && typeof navigator.clearAppBadge === "function";
-  const permission = "Notification" in window ? Notification.permission : "unavailable";
-  const enabled = state.settings.releaseRadarBadgeEnabled !== false;
-  elements.releaseRadarBadgeEnabled.checked = enabled;
-  elements.releaseRadarBadgeEnabled.disabled = !supported || permission === "denied";
-
-  if (!supported) elements.releaseRadarBadgeSummary.textContent = "Auf diesem Gerät nicht verfügbar";
-  else if (permission === "denied") elements.releaseRadarBadgeSummary.textContent = "In den Systemeinstellungen gesperrt";
-  else if (!enabled) elements.releaseRadarBadgeSummary.textContent = "Ausgeschaltet";
-  else if (permission === "granted" || permission === "unavailable") elements.releaseRadarBadgeSummary.textContent = `${count} offene Markierung${count === 1 ? "" : "en"}`;
-  else elements.releaseRadarBadgeSummary.textContent = "Aktivierung benötigt einmalige Zustimmung";
-}
-
-async function updateReleaseRadarBadge(count = getReleaseRadarBadgeCount(getReleaseRadarItems())) {
-  if (typeof navigator.setAppBadge !== "function" || typeof navigator.clearAppBadge !== "function") return;
-  if (state.settings.releaseRadarBadgeEnabled === false) {
-    await navigator.clearAppBadge().catch(() => {});
-    return;
-  }
-  if ("Notification" in window && Notification.permission !== "granted") return;
-  if (count > 0) await navigator.setAppBadge(count);
-  else await navigator.clearAppBadge();
-}
-
-
-async function changeCalendarYear(delta) {
-  const nextYear = Math.min(2100, Math.max(1900, getSafeCalendarYear() + delta));
-  await setCalendarYear(nextYear);
-}
-
-async function setCalendarYear(year) {
-  const normalizedYear = getSafeCalendarYear(year);
-  state.settings = await saveAppSettings({ ...state.settings, calendarSelectedYear: normalizedYear });
-  renderCalendarPage();
-}
-
-async function jumpCalendarToToday() {
-  const today = new Date();
-  state.settings = await saveAppSettings({
-    ...state.settings,
-    calendarSelectedYear: today.getFullYear(),
-    calendarSelectedMonth: today.getMonth()
-  });
-  state.calendarSearch = "";
-  state.calendarFilter = "all";
-  elements.calendarSearch.value = "";
-  elements.calendarCategoryFilter.value = "all";
-  renderCalendarPage();
-}
-
-async function setCalendarMonth(month) {
-  const normalizedMonth = getSafeCalendarMonth(month);
-  state.settings = await saveAppSettings({ ...state.settings, calendarSelectedMonth: normalizedMonth });
-  renderCalendarPage();
-}
-
-function handleCalendarMonthTabClick(event) {
-  const button = event.target.closest("button[data-calendar-month]");
-  if (!button) return;
-  setCalendarMonth(Number(button.dataset.calendarMonth));
-}
-
-function handleCalendarDayClick(event) {
-  const button = event.target.closest("button[data-calendar-date]");
-  if (!button) return;
-  const card = [...elements.calendarEventList.querySelectorAll("[data-calendar-event-id]")].find((entry) => {
-    const calendarEvent = getCalendarEvents().find((item) => item.id === entry.dataset.calendarEventId);
-    return calendarEvent?.startDate === button.dataset.calendarDate;
-  });
-  if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
-}
-
-function handleCalendarEventListClick(event) {
-  const releaseLinkAction = event.target.closest("button[data-calendar-release-link]");
-  if (releaseLinkAction) {
-    const calendarEvent = getCalendarEvents().find((item) => item.id === releaseLinkAction.dataset.calendarReleaseLink);
-    if (calendarEvent) openReleaseLinkModal(calendarEvent);
-    return;
-  }
-  const collectionAction = event.target.closest("button[data-calendar-collection-action]");
-  if (collectionAction) {
-    handleCalendarCollectionAction(collectionAction).catch((error) => {
-      console.error("Kalenderverknüpfung fehlgeschlagen:", error);
-      showToast(`Kalenderverknüpfung fehlgeschlagen: ${error.message}`, "error");
-    });
-    return;
-  }
-  const edit = event.target.closest("button[data-calendar-edit]");
-  if (!edit) return;
-  const calendarEvent = getCalendarEvents().find((item) => item.id === edit.dataset.calendarEdit);
-  if (calendarEvent) openCalendarEventModal(calendarEvent);
-}
-
-async function refreshCalendarCatalog({ silent = false, autoImport = false } = {}) {
-  if (state.calendarCatalogLoading) return;
-  state.calendarCatalogLoading = true;
-  renderCalendarCatalog();
-  if (!silent) showCalendarImportMessage("Verfügbare Jahrespläne werden geprüft …", "info");
-
-  try {
-    const response = await fetch(CALENDAR_CATALOG_URL, { cache: "no-store" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const catalog = normalizeCalendarCatalog(await response.json());
-    state.calendarCatalog = catalog.calendars;
-    state.calendarCatalogUpdatedAt = catalog.updatedAt;
-    state.settings = await saveAppSettings({
-      ...state.settings,
-      calendarCatalogLastCheckAt: new Date().toISOString()
-    });
-
-    let imported = 0;
-    if (autoImport && state.settings.calendarAutoSync !== false) {
-      const currentYear = new Date().getFullYear();
-      const automaticEntries = state.calendarCatalog.filter((entry) => entry.active && [currentYear, currentYear + 1].includes(entry.year));
-      for (const entry of automaticEntries) {
-        if (calendarCatalogEntryNeedsImport(entry)) {
-          await importCalendarCatalogEntry(entry, { silent: true, selectYear: false });
-          imported += 1;
-        }
-      }
-    }
-
-    if (!silent) {
-      const suffix = imported ? ` ${imported} Jahresplan${imported === 1 ? " wurde" : "e wurden"} aktualisiert.` : " Alles ist aktuell.";
-      showCalendarImportMessage(`${state.calendarCatalog.length} verfügbare Jahr${state.calendarCatalog.length === 1 ? "" : "e"} gefunden.${suffix}`, "success");
-    }
-  } catch (error) {
-    console.error("Kalenderindex konnte nicht geladen werden:", error);
-    if (!silent) showCalendarImportMessage("Der Kalenderindex konnte gerade nicht geladen werden. Bereits importierte Termine bleiben verfügbar.", "error");
-  } finally {
-    state.calendarCatalogLoading = false;
-    renderCalendarPage();
-  }
-}
-
-function calendarCatalogEntryNeedsImport(entry) {
-  const record = getCalendarImportedSources()[String(entry.year)];
-  const publisherEvents = getEventsForYear(getCalendarEvents(), entry.year).filter((event) => event.source === "publisher");
-  if (!record || publisherEvents.length === 0) return true;
-  return `${record.id}|${record.version}|${record.file}` !== createCalendarCatalogSignature(entry);
-}
-
-async function importCalendarCatalogEntry(entry, { silent = false, selectYear = true } = {}) {
-  if (!entry || state.calendarImporting) return 0;
-  state.calendarImporting = true;
-  renderCalendarCatalog();
-  if (!silent) showCalendarImportMessage(`${entry.label} wird geladen …`, "info");
-
-  try {
-    const response = await fetch(entry.file, { cache: "no-store" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const text = await response.text();
-    const importedEvents = parseIcsCalendar(text, {
-      sourceUrl: entry.sourceUrl,
-      sourceName: entry.label,
-      sourceId: entry.id,
-      sourceVersion: entry.version
-    }).filter((event) => Number(event.startDate.slice(0, 4)) === entry.year);
-    if (!importedEvents.length) throw new Error(`Die Datei enthält keine Termine für ${entry.year}.`);
-
-    const mergedEvents = mergePublisherCalendarEvents(getCalendarEvents(), importedEvents);
-    const importedSources = getCalendarImportedSources();
-    importedSources[String(entry.year)] = {
-      id: entry.id,
-      label: entry.label,
-      version: entry.version,
-      file: entry.file,
-      sourceUrl: entry.sourceUrl,
-      importedAt: new Date().toISOString(),
-      eventCount: importedEvents.length
-    };
-
-    const patch = {
-      calendarEvents: mergedEvents,
-      calendarImportedSources: importedSources,
-      calendarSourceUrl: entry.sourceUrl || state.settings.calendarSourceUrl,
-      calendarSourceName: entry.label,
-      calendarLastImportAt: new Date().toISOString()
-    };
-    if (selectYear) patch.calendarSelectedYear = entry.year;
-    state.settings = await saveMeaningfulSettings(patch, 1);
-    await initializeReleaseRadarIfNeeded();
-    renderCalendarOverview();
-    renderCalendarPage();
-    if (!silent) showCalendarImportMessage(`${importedEvents.length} Termine aus ${entry.label} wurden geladen.`, "success");
-    return importedEvents.length;
-  } catch (error) {
-    console.error(`${entry.label} konnte nicht geladen werden:`, error);
-    if (!silent) showCalendarImportMessage(`Jahresplan konnte nicht geladen werden: ${error.message}`, "error");
-    return 0;
-  } finally {
-    state.calendarImporting = false;
-    renderCalendarCatalog();
-  }
-}
-
-async function handleCalendarCatalogClick(event) {
-  const importButton = event.target.closest("button[data-calendar-catalog-import]");
-  if (importButton) {
-    const year = Number(importButton.dataset.calendarCatalogImport);
-    const entry = state.calendarCatalog.find((item) => item.year === year);
-    if (entry) await importCalendarCatalogEntry(entry, { silent: false, selectYear: true });
-    return;
-  }
-
-  const removeButton = event.target.closest("button[data-calendar-catalog-remove]");
-  if (!removeButton) return;
-  const year = Number(removeButton.dataset.calendarCatalogRemove);
-  if (!window.confirm(`Alle importierten Verlagstermine für ${year} entfernen? Eigene Termine bleiben erhalten.`)) return;
-  const importedSources = getCalendarImportedSources();
-  delete importedSources[String(year)];
-  state.settings = await saveMeaningfulSettings({
-    calendarEvents: removePublisherCalendarYear(getCalendarEvents(), year),
-    calendarImportedSources: importedSources
-  }, 1);
-  renderCalendarOverview();
-  renderCalendarPage();
-  showCalendarImportMessage(`Verlagstermine für ${year} wurden entfernt.`, "success");
-}
-
-async function handleCalendarAutoSyncChange() {
-  state.settings = await saveAppSettings({
-    ...state.settings,
-    calendarAutoSync: elements.calendarAutoSync.checked
-  });
-  if (elements.calendarAutoSync.checked) {
-    await refreshCalendarCatalog({ silent: false, autoImport: true });
-  } else {
-    showCalendarImportMessage("Automatische Aktualisierung ist deaktiviert. Jahrespläne können weiterhin manuell geladen werden.", "info");
-  }
-}
-
-async function handleCalendarFileImport(event) {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  try {
-    const text = await file.text();
-    await importCalendarText(text, {
-      sourceUrl: "",
-      sourceName: file.name.replace(/\.ics$/i, "") || "Importierter Jahresplan",
-      sourceId: `manual-${file.name.toLocaleLowerCase("de").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
-      sourceVersion: `datei-${file.lastModified || Date.now()}`
-    });
-    showCalendarImportMessage("iCal-Datei wurde erfolgreich importiert.", "success");
-  } catch (error) {
-    showCalendarImportMessage(`Import fehlgeschlagen: ${error.message}`, "error");
-  } finally {
-    event.target.value = "";
-  }
-}
-
-async function importCalendarText(text, source = {}) {
-  const importedEvents = parseIcsCalendar(text, source);
-  const mergedEvents = mergePublisherCalendarEvents(getCalendarEvents(), importedEvents);
-  const importedYears = [...new Set(importedEvents.map((event) => Number(event.startDate.slice(0, 4))))].filter(Number.isFinite);
-  const importedSources = getCalendarImportedSources();
-  const now = new Date().toISOString();
-  importedYears.forEach((year) => {
-    const yearEvents = importedEvents.filter((event) => Number(event.startDate.slice(0, 4)) === year);
-    importedSources[String(year)] = {
-      id: source.sourceId || `manual-${year}`,
-      label: source.sourceName || `Importierter Jahresplan ${year}`,
-      version: source.sourceVersion || "manuell",
-      file: "",
-      sourceUrl: source.sourceUrl || "",
-      importedAt: now,
-      eventCount: yearEvents.length
-    };
-  });
-  const preferredYear = importedYears.includes(new Date().getFullYear())
-    ? new Date().getFullYear()
-    : importedYears[0] || getSafeCalendarYear();
-  state.settings = await saveMeaningfulSettings({
-    calendarEvents: mergedEvents,
-    calendarImportedSources: importedSources,
-    calendarSourceUrl: source.sourceUrl || state.settings.calendarSourceUrl,
-    calendarSourceName: source.sourceName || "Importierter Jahresplan",
-    calendarLastImportAt: now,
-    calendarSelectedYear: preferredYear
-  }, 1);
-  await initializeReleaseRadarIfNeeded();
-  renderCalendarOverview();
-  renderCalendarPage();
-}
-
-function showCalendarImportMessage(message, type = "info") {
-  elements.calendarImportMessage.textContent = message;
-  elements.calendarImportMessage.dataset.type = type;
-}
-
-function openCalendarEventModal(calendarEvent = null) {
-  const event = calendarEvent ? normalizeCalendarEvent(calendarEvent) : null;
-  state.selectedCalendarEventId = event?.id || null;
-  elements.calendarEventModalTitle.textContent = event ? "Termin bearbeiten" : "Termin hinzufügen";
-  elements.calendarEventId.value = event?.id || "";
-  elements.calendarEventName.value = event?.title || "";
-  elements.calendarEventDate.value = event?.startDate || `${getSafeCalendarYear()}-${String(getSafeCalendarMonth() + 1).padStart(2, "0")}-01`;
-  elements.calendarEventCategory.value = event?.category && event.category !== "release" ? event.category : "flea-market";
-  elements.calendarEventAllDay.checked = event ? event.allDay !== false : true;
-  elements.calendarEventTime.value = event?.startTime || "10:00";
-  elements.calendarEventLocation.value = event?.location || "";
-  elements.calendarEventUrl.value = event?.url || "";
-  elements.calendarEventNotes.value = event?.notes || "";
-  elements.calendarEventReminder.checked = event ? event.reminderEnabled !== false : true;
-  elements.calendarEventDelete.classList.toggle("hidden", !event);
-  elements.calendarEventMessage.textContent = "";
-  syncCalendarEventTimeVisibility();
-  elements.calendarEventModal.classList.remove("hidden");
-  document.body.classList.add("modal-open");
-  window.setTimeout(() => elements.calendarEventName.focus({ preventScroll: true }), 0);
-}
-
-function closeCalendarEventModal() {
-  elements.calendarEventModal.classList.add("hidden");
-  document.body.classList.remove("modal-open");
-  state.selectedCalendarEventId = null;
-}
-
-function syncCalendarEventTimeVisibility() {
-  elements.calendarEventTimeField.classList.toggle("hidden", elements.calendarEventAllDay.checked);
-}
-
-async function handleCalendarEventSubmit(event) {
-  event.preventDefault();
-  const title = elements.calendarEventName.value.trim();
-  const startDate = elements.calendarEventDate.value;
-  if (!title || !startDate) {
-    elements.calendarEventMessage.textContent = "Bitte gib Titel und Datum an.";
-    elements.calendarEventMessage.dataset.type = "error";
-    return;
-  }
-
-  const existing = getCalendarEvents().find((item) => item.id === state.selectedCalendarEventId);
-  const now = new Date().toISOString();
-  const calendarEvent = normalizeCalendarEvent({
-    id: existing?.id || createCalendarEventId("custom"),
-    uid: existing?.uid || "",
-    title,
-    startDate,
-    endDate: startDate,
-    allDay: elements.calendarEventAllDay.checked,
-    startTime: elements.calendarEventAllDay.checked ? "" : elements.calendarEventTime.value,
-    endTime: "",
-    location: elements.calendarEventLocation.value,
-    notes: elements.calendarEventNotes.value,
-    url: elements.calendarEventUrl.value,
-    source: "custom",
-    sourceName: "Eigener Termin",
-    category: elements.calendarEventCategory.value,
-    reminderEnabled: elements.calendarEventReminder.checked,
-    createdAt: existing?.createdAt || now,
-    updatedAt: now
-  });
-  if (!calendarEvent) return;
-
-  const nextEvents = getCalendarEvents().filter((item) => item.id !== calendarEvent.id);
-  nextEvents.push(calendarEvent);
-  state.settings = await saveMeaningfulSettings({
-    calendarEvents: nextEvents,
-    calendarSelectedYear: Number(startDate.slice(0, 4)),
-    calendarSelectedMonth: Number(startDate.slice(5, 7)) - 1
-  }, 1);
-  closeCalendarEventModal();
-  renderCalendarOverview();
-  renderCalendarPage();
-  showToast(existing ? "Termin aktualisiert." : "Termin gespeichert.");
-}
-
-async function deleteSelectedCalendarEvent() {
-  const calendarEvent = getCalendarEvents().find((item) => item.id === state.selectedCalendarEventId);
-  if (!calendarEvent || calendarEvent.source !== "custom") return;
-  if (!window.confirm(`„${calendarEvent.title}“ wirklich löschen?`)) return;
-  state.settings = await saveMeaningfulSettings({
-    calendarEvents: getCalendarEvents().filter((item) => item.id !== calendarEvent.id)
-  }, 1);
-  closeCalendarEventModal();
-  renderCalendarOverview();
-  renderCalendarPage();
-  showToast("Termin gelöscht.");
-}
-
-async function handleCalendarReminderTimeChange() {
-  state.settings = await saveAppSettings({ ...state.settings, calendarReminderTime: elements.calendarReminderTime.value || "09:00" });
-}
-
-async function exportCalendarWithReminders() {
-  const year = getSafeCalendarYear();
-  const events = getEventsForYear(getCalendarEvents(), year);
-  if (!events.length) {
-    showCalendarImportMessage("Für dieses Jahr sind noch keine Termine vorhanden.", "error");
-    return;
-  }
-  const reminderTime = elements.calendarReminderTime.value || state.settings.calendarReminderTime || "09:00";
-  await handleCalendarReminderTimeChange();
-  const content = buildCalendarIcs(events, {
-    calendarName: `Entenarchiv ${year}`,
-    reminderTime,
-    timedReleaseReminders: true
-  });
-  const result = await shareOrDownloadText({
-    content,
-    filename: `Entenarchiv-Kalender-${year}.ics`,
-    mimeType: "text/calendar;charset=utf-8",
-    title: `Entenarchiv-Kalender ${year}`,
-    text: `Neuerscheinungen und eigene Termine für ${year}`
-  });
-  if (result.method !== "cancelled") {
-    showToast("Kalenderdatei erstellt. Öffne sie mit Apple Kalender, um die Erinnerungen zu aktivieren.");
-  }
+function closeReleaseRadarPage(options) {
+  return calendarFeature.closeReleaseRadar(options);
 }

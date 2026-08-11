@@ -1,15 +1,24 @@
 import { getConditionRank } from "./config.js";
-import { getComicCopies } from "./archive-model.js";
+import {
+  getEntryCopies,
+  getEntryCreatedAt,
+  getEntryNotes,
+  getEntryPublicationYear,
+  getEntrySeriesName,
+  getEntryTitle,
+  getEntryUpdatedAt,
+  getEntryVolumeNumber
+} from "./archive-entry.js";
 import { matchesSmartList, sortSmartList } from "./shelf.js";
-import { compareBandNumbers, compareOptionalText, compareSeries, compareSeriesAndBand, normalizeSearchText } from "./app-utils.js";
+import { compareBandNumbers, compareOptionalText, normalizeSearchText } from "./app-utils.js";
 
 export function getScopedCollectionEntries(entries = [], scope = "main") {
   const source = Array.isArray(entries) ? entries : [];
   const mainSeries = "Lustiges Taschenbuch";
   if (scope === "all") return [...source];
   return scope === "other"
-    ? source.filter((entry) => entry.series !== mainSeries)
-    : source.filter((entry) => entry.series === mainSeries);
+    ? source.filter((entry) => getEntrySeriesName(entry) !== mainSeries)
+    : source.filter((entry) => getEntrySeriesName(entry) === mainSeries);
 }
 
 export function filterAndSortCollectionEntries(entries = [], {
@@ -29,14 +38,14 @@ export function filterAndSortCollectionEntries(entries = [], {
 
   const filtered = source.filter((entry) => {
     if (preset.smartList && !matchesSmartList(entry, preset.smartList, { localCoverIds })) return false;
-    if (preset.publicationYear && Number(entry.publicationYear) !== Number(preset.publicationYear)) return false;
-    if (preset.series && entry.series !== preset.series) return false;
-    const copies = getComicCopies(entry);
+    if (preset.publicationYear && Number(getEntryPublicationYear(entry)) !== Number(preset.publicationYear)) return false;
+    if (preset.series && getEntrySeriesName(entry) !== preset.series) return false;
+    const copies = getEntryCopies(entry);
     if (Array.isArray(preset.conditionCodes) && preset.conditionCodes.length) {
       const allowed = new Set(preset.conditionCodes);
       if (!copies.some((copy) => allowed.has(copy.condition))) return false;
     }
-    if (selectedSeries !== "all" && entry.series !== selectedSeries) return false;
+    if (selectedSeries !== "all" && getEntrySeriesName(entry) !== selectedSeries) return false;
     if (selectedCondition !== "all" && !copies.some((copy) => copy.condition === selectedCondition)) return false;
     if (readFilter === "read" && !copies.some((copy) => copy.isRead)) return false;
     if (readFilter === "unread" && copies.some((copy) => copy.isRead)) return false;
@@ -44,7 +53,11 @@ export function filterAndSortCollectionEntries(entries = [], {
     if (onlyDuplicate && copies.length < 2) return false;
     if (searchTerm) {
       const searchable = normalizeSearchText([
-        entry.title, entry.series, entry.volumeNumber, entry.publicationYear, entry.notes,
+        getEntryTitle(entry),
+        getEntrySeriesName(entry),
+        getEntryVolumeNumber(entry),
+        getEntryPublicationYear(entry),
+        getEntryNotes(entry),
         ...copies.map((copy) => copy.notes)
       ].join(" "));
       if (!searchable.includes(searchTerm)) return false;
@@ -58,18 +71,33 @@ export function filterAndSortCollectionEntries(entries = [], {
 }
 
 export function createCollectionSortComparator(sortBy) {
-  if (sortBy === "volume") return (first, second) => compareBandNumbers(first, second) || compareSeries(first, second);
-  if (sortBy === "title") return (first, second) => compareOptionalText(first.title, second.title) || compareSeriesAndBand(first, second);
+  if (sortBy === "volume") return (first, second) => compareBandNumbers(toComparable(first), toComparable(second)) || compareSeries(first, second);
+  if (sortBy === "title") return (first, second) => compareOptionalText(getEntryTitle(first), getEntryTitle(second)) || compareSeriesAndBand(first, second);
   if (sortBy === "condition") {
     return (first, second) => {
-      const firstWorst = Math.max(...getComicCopies(first).map((copy) => getConditionRank(copy.condition)), 0);
-      const secondWorst = Math.max(...getComicCopies(second).map((copy) => getConditionRank(copy.condition)), 0);
+      const firstWorst = Math.max(...getEntryCopies(first).map((copy) => getConditionRank(copy.condition)), 0);
+      const secondWorst = Math.max(...getEntryCopies(second).map((copy) => getConditionRank(copy.condition)), 0);
       return firstWorst - secondWorst || compareSeriesAndBand(first, second);
     };
   }
   if (sortBy === "recent") {
-    return (first, second) => ((Date.parse(second.updatedAt || second.createdAt || "") || 0)
-      - (Date.parse(first.updatedAt || first.createdAt || "") || 0)) || compareSeriesAndBand(first, second);
+    return (first, second) => ((Date.parse(getEntryUpdatedAt(second) || getEntryCreatedAt(second) || "") || 0)
+      - (Date.parse(getEntryUpdatedAt(first) || getEntryCreatedAt(first) || "") || 0)) || compareSeriesAndBand(first, second);
   }
   return compareSeriesAndBand;
+}
+
+function compareSeries(first, second) {
+  return getEntrySeriesName(first).localeCompare(getEntrySeriesName(second), "de", { sensitivity: "base", numeric: true });
+}
+
+function compareSeriesAndBand(first, second) {
+  return compareSeries(first, second) || compareBandNumbers(toComparable(first), toComparable(second));
+}
+
+function toComparable(entry) {
+  return {
+    volumeNumber: getEntryVolumeNumber(entry),
+    numericBandNumber: entry?.issue?.numericBandNumber ?? null
+  };
 }

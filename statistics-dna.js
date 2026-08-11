@@ -1,5 +1,5 @@
 import { APP_CONFIG, getConditionRank } from "./config.js";
-import { getComicCopies } from "./archive-model.js";
+import { getEntryCopies, getEntryPublicationYear, getEntrySeriesName } from "./archive-entry.js";
 
 export const QUALITY_BUCKETS = Object.freeze([
   Object.freeze({ id: "excellent", label: "Zustand 0–1", shortLabel: "0–1", codes: Object.freeze(["0", "0-1", "1"]) }),
@@ -22,20 +22,20 @@ export function buildStatisticsDNA({ comics = [], progressData = [], missingGrou
   let rankedCopies = 0;
 
   source.forEach((comic) => {
-    const copies = getComicCopies(comic);
+    const copies = getEntryCopies(comic);
     physicalCopies += copies.length;
     if (copies.some((copy) => copy.isRead)) readIssues += 1;
     sealedCopies += copies.filter((copy) => copy.isSealed).length;
 
-    if (Number.isInteger(comic.publicationYear)) {
-      const year = comic.publicationYear;
+    if (Number.isInteger(getEntryPublicationYear(comic))) {
+      const year = getEntryPublicationYear(comic);
       const entry = years.get(year) || { year, issues: 0, copies: 0 };
       entry.issues += 1;
       entry.copies += copies.length;
       years.set(year, entry);
     }
 
-    const seriesName = String(comic.series || "Unbekannte Reihe").trim() || "Unbekannte Reihe";
+    const seriesName = String(getEntrySeriesName(comic) || "Unbekannte Reihe").trim() || "Unbekannte Reihe";
     const seriesEntry = series.get(seriesName) || {
       series: seriesName,
       issues: 0,
@@ -96,7 +96,7 @@ export function buildStatisticsDNA({ comics = [], progressData = [], missingGrou
     .filter((entry) => entry.copies > 0)
     .sort((a, b) => b.qualityRate - a.qualityRate || b.copies - a.copies || a.series.localeCompare(b.series, "de"))[0] || null;
   const averageCondition = rankedCopies ? nearestCondition(conditionRankTotal / rankedCopies) : null;
-  const duplicateIssues = source.filter((comic) => getComicCopies(comic).length > 1).length;
+  const duplicateIssues = source.filter((comic) => getEntryCopies(comic).length > 1).length;
 
   return {
     uniqueIssues: source.length,

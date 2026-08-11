@@ -1,11 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { readAppStyles } from "./test-helpers.mjs";
 
-const [html, css, app, sw] = await Promise.all([
+const [html, css, app, scannerFeature, sw] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
-  readFile(new URL("../style.css", import.meta.url), "utf8"),
+  readAppStyles(),
   readFile(new URL("../app.js", import.meta.url), "utf8"),
+  readFile(new URL("../scanner-feature.js", import.meta.url), "utf8"),
   readFile(new URL("../service-worker.js", import.meta.url), "utf8")
 ]);
 
@@ -19,8 +21,9 @@ test("Scanner Pro und Zustandsassistent sind in Oberfläche und App verdrahtet",
   for (const id of ["scanner-mode-fast", "scanner-mode-review", "scanner-stat-scanned", "condition-assistant-modal"]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
-  assert.match(app, /mergeScannerQueueItem/);
-  assert.match(app, /renderScannerSessionStats/);
+  assert.match(app, /import\("\.\/scanner-feature\.js"\)/);
+  assert.match(scannerFeature, /mergeScannerQueueItem/);
+  assert.match(scannerFeature, /renderScannerSessionStats/);
   assert.match(app, /openConditionAssistant/);
   assert.match(sw, /\.\/scanner-pro\.js/);
   assert.match(sw, /\.\/condition-assistant\.js/);

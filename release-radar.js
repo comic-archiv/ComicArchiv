@@ -1,3 +1,5 @@
+import { getEntryNumericBandNumber, getEntrySeriesId, getEntrySeriesName } from "./archive-entry.js";
+
 const RELEASE_DECISIONS = new Set(["watch", "ordered", "ignored"]);
 const MAX_KNOWN_SIGNATURES = 3000;
 
@@ -175,11 +177,13 @@ export function resolveReleaseIdentity(event, seriesCatalog = [], eventLinks = {
 export function getReleaseCollectionState(identity, comics = [], missingGroups = []) {
   if (!identity) return { type: "unlinked", label: "Nicht zugeordnet" };
 
-  const owned = (Array.isArray(comics) ? comics : []).some((comic) => {
-    const sameSeries = comic?.seriesId
-      ? comic.seriesId === identity.seriesId
-      : normalizeReleaseText(comic?.series) === normalizeReleaseText(identity.series);
-    return sameSeries && Number(comic?.numericBandNumber) === identity.bandNumber;
+  const owned = (Array.isArray(comics) ? comics : []).some((entry) => {
+    const seriesId = getEntrySeriesId(entry);
+    const seriesName = getEntrySeriesName(entry);
+    const sameSeries = seriesId
+      ? seriesId === identity.seriesId
+      : normalizeReleaseText(seriesName) === normalizeReleaseText(identity.series);
+    return sameSeries && Number(getEntryNumericBandNumber(entry)) === identity.bandNumber;
   });
   if (owned) return { type: "owned", label: "Im Besitz" };
 

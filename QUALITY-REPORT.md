@@ -1,87 +1,82 @@
-# Qualitätsbericht Entenarchiv 4.6.12
+# Qualitätsbericht Entenarchiv 4.6.18
 
 ## Stand
 
-Version 4.6.6 bereinigt zusätzlich die aktive Storage-API und entfernt Legacy-`Comic`-Begriffe aus allen normalen Schreibpfaden. Archivgraph und Feld-Settings sind die einzigen aktiven Datenquellen. Die früher live gepflegten `comics`- und Mega-`settings`-Datensätze werden nach einem lokalen Sicherheits-Snapshot geleert und anschließend von normalen Schreibpfaden nicht mehr verwendet.
+Version 4.6.18 schließt den Runtime- und Feature-Architecture-Cleanup ab. Archivgraph und Feld-Settings bleiben die einzigen aktiven persistenten Datenquellen; die UI arbeitet jetzt zusätzlich direkt mit `Issue + Copy + Series` als `ArchiveEntry`, statt den Archivgraph für den normalen Runtime-Pfad wieder in ein Legacy-Comic-Modell zurückzuformen.
 
 ## Automatisierte Prüfung
 
-- 164 automatisierte Tests erfolgreich
+- 174 automatisierte Tests erfolgreich
 - Projektvalidierung erfolgreich
-- 533 eindeutige HTML-IDs geprüft
-- 458 statische App-Selektoren geprüft
-- 57 JavaScript-Dateien syntaktisch geprüft
-- 35 Offline-Dateien geprüft
 - Kalenderjahr 2026 mit 100 gültigen Terminen validiert
-- Produktions-Build erfolgreich erstellt
-- App-Version 4.6.5, Datenformat 9, Archivmodell 1 und IndexedDB-Schema 6 konsistent
+- Produktions-Build mit 44 Runtime-Einträgen erfolgreich erstellt
+- App-Version `4.6.18`, Datenformat `9`, Archivmodell `1`, Data Stack `2` und IndexedDB-Schema `6` konsistent
+- alle neuen Featuremodule lassen sich syntaktisch und als ES-Module laden
+
+Ein automatisierter visueller Browser-Smoke-Test war in der Build-Umgebung nicht zuverlässig ausführbar. Deshalb bleibt nach dem Deployment ein kurzer manueller Smoke-Test der Hauptansichten sinnvoll.
+
+## Direkte Archive-Runtime
+
+- `archive-entry.js` definiert die direkte Runtime-Sicht auf `Issue`, `Series` und `Copy`.
+- `archive-runtime.js` erzeugt Archive Entries unmittelbar aus dem validierten Archivgraph.
+- Die aktive Sammlung liest nicht aus dem stillgelegten `comics`-Store.
+- Legacy-Comic-Projektionen bleiben nur an expliziten historischen Import-, Export- und Migrationsgrenzen erhalten.
+- Ein Regressionstest vergleicht die neue Runtime-Sicht für gültige Daten mit der bisherigen Legacy-Materialisierung.
+
+## Featuremodule
+
+Aus `app.js` wurden weitere Verantwortungsbereiche ausgelagert:
+
+- `collection-feature.js` – Sammlungsansicht, Filter, Karten und Aktionen
+- `collection-query.js` – DOM-freie Scope-, Filter- und Sortierlogik
+- `missing-feature.js` – Fehlband-Hub, Fehlbanddetails und Prioritäten
+- `calendar-feature.js` – Kalender, Terminverwaltung und Release Radar
+- `scanner-feature.js` – Scanner-UI und Scanner-Ablauf
+- `diagnostics-ui.js` – Diagnose-Oberfläche
+- `app-elements.js`, `app-state.js`, `app-utils.js` – DOM-Registry, Runtime-State und zustandsfreie Helfer
+
+`app.js` liegt nach diesem Block bei rund **205 KB / 4.968 Zeilen**; vor 4.6.13 waren es rund **359 KB / 8.438 Zeilen**.
+
+## Scanner Lazy Loading
+
+`scanner-feature.js`, `scanner.js` und `scanner-pro.js` werden nicht mehr beim normalen App-Start geladen und liegen nicht im Core-Precache. Beim ersten Öffnen des Scanners lädt die App das Feature dynamisch; danach kann der Service Worker die geladenen Dateien cache-first bereitstellen.
+
+## CSS-Architektur
+
+`style.css` enthält nur noch die geordneten Imports:
+
+1. `styles/tokens.css`
+2. `styles/base.css`
+3. `styles/components.css`
+4. `styles/calendar.css`
+5. `styles/collection.css`
+6. `styles/scanner.css`
+7. `styles/statistics.css`
+8. `styles/refinements.css`
+
+Die acht Dateien wurden als zusammenhängende Abschnitte aus der vorherigen bereinigten `style.css` geschnitten. Ihre Verkettung reproduziert den vorherigen CSS-Quelltext in identischer Reihenfolge; dadurch ändert die reine Architekturaufteilung die Kaskade nicht.
 
 ## Data Stack v2
 
-Geprüft werden insbesondere:
+Unverändert aktiv bleiben:
 
-- `seriesCatalog`, `issues` und `copies` als einzige aktive Sammlungsquelle
-- direkte Archive-Runtime ohne persistierten `comics`-Read-Fallback
-- 35 aktive Settings-Feld-Datensätze in sechs Fach-Stores
-- feldgenaue Settings-Writes statt Mega-Settings-Write-Amplification
-- Sicherheits-Snapshot vor der Stilllegung der Legacy-Live-Daten
-- vollständige Leerung der Live-Datensätze in `comics` und `settings`
-- keine Legacy-Mirror-Writes in Einzel-, Batch-, Lösch-, Reihen- oder Backup-Import-Pfaden
-- Rollback auf Archivgraph + Feld-Settings, ohne Legacy-Live-Speicher erneut zu aktivieren
-- Diagnose unabhängig vom stillgelegten Legacy-Mirror
-
-Die IndexedDB-Object-Stores `comics` und `settings` bleiben vorerst als **leere Schema-Hüllen** vorhanden. Sie werden nur noch für sichere Direkt-Upgrades älterer Installationen und historische Migrationsadapter benötigt. Ein normaler 4.6.5-Lauf hält beide Stores leer.
-
-## Source-Hygiene
-
-Die historischen Einzelberichte aus den Cleanup- und Data-Stack-Zwischenstufen 4.5.3 bis 4.6.4 wurden entfernt und in diesem Bericht konsolidiert. Ebenfalls entfernt wurden die nicht mehr relevanten Update-/CI-Hotfix-Anleitungen für 4.3.0 und 4.5.1.
-
-Frühere Cleanup-Ergebnisse bleiben im Code erhalten:
-
-- Service-Worker-Strategien getrennt und Core-Precache reduziert
-- versteckte Vollansichten werden nicht unnötig neu gerendert
-- Batch-Writes im Storage-Layer
-- Duckipedia-Metadaten-GC
-- CSS-Dubletten und nachweislich redundante Deklarationen entfernt
-- seltene DOM-Bereiche werden lazy gemountet
+- `seriesCatalog`, `issues` und `copies` als persistente Sammlungsquelle
+- 35 Settings-Felder in sechs Fach-Stores
+- feldgenaue Settings-Writes
+- leere `comics`- und `settings`-Stores nur als Schema-Hüllen für sichere Direkt-Upgrades älterer Installationen
+- lokale Data-Stack-Snapshots und Integritätsprüfungen
 
 ## Bewusst verbleibende technische Schulden
 
-Zwei Punkte bleiben absichtlich für die nächste Source-Cleanup-Tranche bestehen:
+Der große Monolith ist deutlich kleiner, aber noch nicht vollständig zerlegt. Größere verbleibende Kandidaten sind insbesondere:
 
-1. `app.js` ist weiterhin ungefähr 392 KB groß und sollte featureweise modularisiert werden.
-2. Die bestehende UI arbeitet intern noch mit einer comic-förmigen **In-Memory-Kompatibilitätsansicht**, obwohl diese bereits ausschließlich aus dem Archivgraph erzeugt wird. Diese Projektion ist nicht mehr persistent und verursacht keine doppelte Datenhaltung, kann aber später aus den UI-Verträgen entfernt werden.
+- `calendar-feature.js` mit rund 73 KB
+- `scanner-feature.js` mit rund 56 KB
+- Statistik-, Flohmarkt- und Reihenfortschritts-Orchestrierung verbleiben teilweise in `app.js`
+- historische Import-/Migrationsadapter bleiben absichtlich erhalten, solange direkte Upgrades alter Backups/Installationen unterstützt werden
 
-`style.css` liegt weiterhin bei ungefähr 194 KB. Die sicheren automatischen CSS-Cleanups sind abgeschlossen; weitere Aufteilung sollte featureweise und mit visuellen Regressionstests erfolgen.
+Diese Punkte eignen sich für Performance-/Release-Hardening ab 4.6.19, ohne den jetzt abgeschlossenen Daten- und Runtime-Cutover erneut anzufassen.
 
 ## Datensicherheit
 
-Vor der Legacy-Stilllegung wird lokal ein `pre-legacy-storage-retirement-v1`-Snapshot gespeichert. Externe JSON- und Medien-Backups bleiben unabhängig davon empfohlen, da lokale IndexedDB-Snapshots keinen Geräteverlust oder gelöschte Website-Daten absichern.
-
-## 4.6.6 Source Cleanup
-
-Aktive Schreib- und Löschpfade heißen nun `saveArchiveEntry`, `saveArchiveEntriesBatch`, `upsertArchiveEntries`, `deleteArchiveEntry` und `replaceArchiveEntriesFromLegacy`. Der verbleibende `getAllComics()`-Export ist ausschließlich ein historischer Import-/Migrationsadapter.
-
-## 4.6.7 Settings Hygiene
-
-Die aktive redundante `customSeries`-Namensliste ist entfernt. `customSeriesConfigs` ist die einzige persistente Quelle; alte Backup-Felder werden nur noch beim Normalisieren als Importadapter gelesen.
-
-## 4.6.8 Modul-Cleanup
-
-Zustandsfreie App-Helfer sind in `app-utils.js` ausgelagert und separat getestet.
-
-## 4.6.9 Feature-Split
-
-Die Diagnose-Oberfläche ist vollständig in `diagnostics-ui.js` gekapselt.
-
-## 4.6.10 Feature-Split
-
-Sammlungs-Scope, Filter und Sortierung sind in `collection-query.js` als DOM-freie Query-Schicht gekapselt.
-
-## 4.6.11 App Shell
-
-Die zentrale DOM-Registry liegt in `app-elements.js`; `app.js` enthält keine hunderte Query-Selector-Zuweisungen mehr.
-
-## 4.6.12 App State
-
-Initialzustand und Smart-List-Definitionen sind in `app-state.js` gekapselt. Damit sind DOM-Registry, State, Utilities, Collection Query und Diagnose bereits aus dem Monolithen getrennt.
+Datenformat, Archivmodell und IndexedDB-Schema ändern sich in 4.6.18 nicht. Ein externes JSON-Backup vor dem Upgrade bleibt trotzdem empfohlen. Eigene Cover bleiben lokal in IndexedDB und sind nicht Bestandteil des GitHub-Repositories.

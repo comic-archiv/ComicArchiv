@@ -1,6 +1,17 @@
-# Entenarchiv 4.6.5
+# Entenarchiv 4.6.18
 
-Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.6.5 schließt den **Data-Stack-v2-Cutover** ab: Archivgraph und getrennte Feld-Settings sind die einzigen aktiven Datenquellen. Die früher live gepflegten `comics`- und Mega-`settings`-Datensätze werden nach einem Sicherheits-Snapshot geleert und anschließend nicht mehr im normalen Schreibpfad verwendet.
+Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.6.18 schließt den großen **Runtime- und Feature-Architecture-Cleanup** ab: Sammlung, Fehlbände, Kalender und Scanner sind eigene Featuremodule, die aktive UI arbeitet direkt auf `Issue + Copy + Series`, und die bisher monolithische CSS-Datei ist in geordnete Fachdateien zerlegt.
+
+## Neu in 4.6.18
+
+- Direkte `ArchiveEntry`-Runtime aus `seriesCatalog`, `issues` und `copies`; Legacy-Projektionen bleiben nur an historischen Import-/Backup-Grenzen.
+- Sammlung und Sammlungsfilter in `collection-feature.js` und `collection-query.js`.
+- Fehlband-Hub und Fehlbanddetails in `missing-feature.js`.
+- Kalender, Terminverwaltung und Release Radar in `calendar-feature.js`.
+- Scanner in `scanner-feature.js`; das Feature wird erst beim Öffnen dynamisch geladen und nicht mehr im Core-Precache vorgehalten.
+- `style.css` dient als Import-Manifest für acht geordnete Stylemodule. Die Aufteilung reproduziert die vorherige Kaskade bytegenau in derselben Reihenfolge.
+- `app.js` liegt bei rund 205 KB / 4.968 Zeilen statt rund 359 KB / 8.438 Zeilen vor dem Architekturblock.
+- Datenformat, Archivmodell, Data Stack und IndexedDB-Schema bleiben unverändert.
 
 ## Neu in 4.6.5
 
@@ -148,15 +159,18 @@ Die Gestaltung verwendet den Entenarchiv-Farbraum, klare Typografie, Druckraster
 
 ## Technische Eckdaten
 
-- App-Version: `4.6.5`
+- App-Version: `4.6.18`
 - Datenformat: `9`
 - Archivmodell: `1`
 - Data-Stack-Version: `2`
 - IndexedDB-Schema: `6`
-- Schema 6 mit Archivgraph-Runtime, Feld-Settings und Legacy-Retirement-Snapshot; `comics`/`settings` bleiben nur als leere Upgrade-Hüllen im Schema
-- neue Module `archive-runtime.js`, `data-stack.js`, `collector-goals.js` und `share-cards.js`
-- Service-Worker-Cache: `v4-6-5`
-- Scanner- und PDF-Bibliothek weiterhin nur bei Bedarf geladen
+- aktive Sammlung: direkter Archivgraph aus `seriesCatalog`, `issues` und `copies`
+- aktive Einstellungen: feldgenaue Datensätze in sechs Fach-Stores
+- `comics` und Mega-`settings`: nur noch leere Upgrade-Hüllen / historische Adapter
+- Runtime-Modell: `archive-entry.js` + `archive-runtime.js`
+- Featuremodule: Sammlung, Fehlbände, Kalender/Release Radar, Scanner und Diagnose
+- Service-Worker-Cache: `v4-6-18`
+- Scanner-Feature und schwere Vendor-Bibliotheken werden nur bei Bedarf geladen
 - GitHub Pages mit vorgeschalteter GitHub-Actions-Prüfung
 
 ## Projektstruktur
@@ -164,21 +178,30 @@ Die Gestaltung verwendet den Entenarchiv-Farbraum, klare Typografie, Druckraster
 ```text
 Entenarchiv/
 ├── index.html
-├── style.css
-├── app.js
+├── style.css                 # geordnetes CSS-Import-Manifest
+├── styles/
+│   ├── tokens.css
+│   ├── base.css
+│   ├── components.css
+│   ├── calendar.css
+│   ├── collection.css
+│   ├── scanner.css
+│   ├── statistics.css
+│   └── refinements.css
+├── app.js                    # App-Orchestrierung
+├── app-elements.js
+├── app-state.js
+├── app-utils.js
+├── archive-entry.js
 ├── archive-model.js
 ├── archive-runtime.js
+├── collection-feature.js
+├── collection-query.js
+├── missing-feature.js
+├── calendar-feature.js
+├── scanner-feature.js        # dynamisch geladen
+├── diagnostics-ui.js
 ├── data-stack.js
-├── collector-goals.js
-├── share-cards.js
-├── statistics-dna.js
-├── release-radar.js
-├── calendar.js
-├── scanner.js
-├── scanner-pro.js
-├── condition-assistant.js
-├── shelf.js
-├── shelf-ui.js
 ├── storage.js
 ├── export.js
 ├── service-worker.js

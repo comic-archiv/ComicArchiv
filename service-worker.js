@@ -1,10 +1,18 @@
-const APP_VERSION = "4.6.12";
+const APP_VERSION = "4.6.18";
 const CACHE_PREFIX = "entenarchiv-shell-";
-const CACHE_NAME = `${CACHE_PREFIX}v4-6-12`;
+const CACHE_NAME = `${CACHE_PREFIX}v4-6-18`;
 
 const CORE_SHELL = Object.freeze([
   "./index.html",
   "./style.css",
+  "./styles/tokens.css",
+  "./styles/base.css",
+  "./styles/components.css",
+  "./styles/calendar.css",
+  "./styles/collection.css",
+  "./styles/scanner.css",
+  "./styles/statistics.css",
+  "./styles/refinements.css",
   "./recovery.js",
   "./release-radar.js",
   "./asset-loader.js",
@@ -13,12 +21,12 @@ const CORE_SHELL = Object.freeze([
   "./lazy-dom.js",
   "./config.js",
   "./archive-model.js",
+  "./archive-entry.js",
   "./archive-runtime.js",
   "./data-stack.js",
   "./storage.js",
   "./missing.js",
   "./export.js",
-  "./scanner.js",
   "./shelf.js",
   "./shelf-ui.js",
   "./statistics-dna.js",
@@ -28,8 +36,10 @@ const CORE_SHELL = Object.freeze([
   "./condition-assistant.js",
   "./collector-goals.js",
   "./collection-query.js",
+  "./collection-feature.js",
+  "./missing-feature.js",
+  "./calendar-feature.js",
   "./share-cards.js",
-  "./scanner-pro.js",
   "./app.js",
   "./app-utils.js",
   "./app-elements.js",
@@ -55,6 +65,9 @@ const NETWORK_FIRST_PATHS = Object.freeze(new Set([
 // tatsächlich geöffnet werden. Vorhandene Cache-Kopien aus einer älteren
 // Version werden ohne erneuten Download übernommen.
 const ON_DEMAND_ASSETS = Object.freeze([
+  "./scanner-feature.js",
+  "./scanner.js",
+  "./scanner-pro.js",
   "./vendor/quagga.min.js",
   "./vendor/jspdf.umd.min.js"
 ]);

@@ -1,5 +1,5 @@
 import { createMissingDetailKey } from "./config.js";
-import { getComicCopies } from "./archive-model.js";
+import { getEntryCopies } from "./archive-entry.js";
 
 export const WISHLIST_PRIORITIES = Object.freeze([
   Object.freeze({ id: "wanted", label: "Gesucht", shortLabel: "Gesucht", symbol: "!", rank: 0, active: true }),
@@ -130,7 +130,7 @@ export function buildCollectorMission({ progressData = [], missingGroups = [], s
 export function buildMilestones({ comics = [], progressData = [] } = {}) {
   const source = Array.isArray(comics) ? comics : [];
   const progress = Array.isArray(progressData) ? progressData : [];
-  const physicalCopies = source.reduce((sum, comic) => sum + getComicCopies(comic).length, 0);
+  const physicalCopies = source.reduce((sum, comic) => sum + getEntryCopies(comic).length, 0);
   const milestones = [];
 
   [100, 250, 500, 750, 1000].forEach((threshold) => {

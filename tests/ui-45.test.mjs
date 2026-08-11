@@ -26,19 +26,21 @@ test("Sammelziele und Share Cards sind App-, Build- und Offline-Bestandteil", as
 });
 
 test("Flohmarkt und Fehlbanddetails sind mit Suchprioritäten verdrahtet", async () => {
-  const [app, exportCode] = await Promise.all([read("app.js"), read("export.js")]);
-  assert.match(app, /normalizeWishlistPriority\(detail\.priority\)/);
+  const [app, missingFeature, calendarFeature, exportCode] = await Promise.all([
+    read("app.js"), read("missing-feature.js"), read("calendar-feature.js"), read("export.js")
+  ]);
+  assert.match(missingFeature, /normalizeWishlistPriority\(detail\.priority\)/);
   assert.match(app, /fleaMarketPriorityFilter/);
-  assert.match(app, /data-radar-priority/);
-  assert.match(app, /handleReleaseRadarPriorityChange/);
+  assert.match(calendarFeature, /data-radar-priority/);
+  assert.match(calendarFeature, /handleReleaseRadarPriorityChange/);
   assert.match(exportCode, /"Priorität"/);
   assert.match(exportCode, /doc\.text\("Prio"/);
 });
 
 test("App-Version und Cache-Version sind synchron", async () => {
   const [config, worker, metadata] = await Promise.all([read("config.js"), read("service-worker.js"), read("version.json")]);
-  assert.match(config, /appVersion:\s*"4\.6\.12"/);
-  assert.match(worker, /APP_VERSION\s*=\s*"4\.6\.12"/);
-  assert.match(worker, /v4-6-12/);
-  assert.equal(JSON.parse(metadata).appVersion, "4.6.12");
+  assert.match(config, /appVersion:\s*"4\.6\.18"/);
+  assert.match(worker, /APP_VERSION\s*=\s*"4\.6\.18"/);
+  assert.match(worker, /v4-6-18/);
+  assert.equal(JSON.parse(metadata).appVersion, "4.6.18");
 });

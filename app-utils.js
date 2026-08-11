@@ -1,3 +1,5 @@
+import { getEntryNumericBandNumber, getEntrySeriesName, getEntryVolumeNumber } from "./archive-entry.js";
+
 // Pure/portable helpers extracted from app.js. Keep this module DOM-state free.
 
 export function parseStrictPositiveInteger(value) {
@@ -25,22 +27,20 @@ export function compareSeriesAndBand(first, second) {
 }
 
 export function compareSeries(first, second) {
-  return String(first.series).localeCompare(String(second.series), "de", { sensitivity: "base" });
+  return getEntrySeriesName(first).localeCompare(getEntrySeriesName(second), "de", { sensitivity: "base" });
 }
 
 export function compareBandNumbers(first, second) {
-  const firstNumber = Number.isSafeInteger(first.numericBandNumber)
-    ? first.numericBandNumber
-    : Number.POSITIVE_INFINITY;
-  const secondNumber = Number.isSafeInteger(second.numericBandNumber)
-    ? second.numericBandNumber
-    : Number.POSITIVE_INFINITY;
+  const firstBandNumber = getEntryNumericBandNumber(first);
+  const secondBandNumber = getEntryNumericBandNumber(second);
+  const firstNumber = Number.isSafeInteger(firstBandNumber) ? firstBandNumber : Number.POSITIVE_INFINITY;
+  const secondNumber = Number.isSafeInteger(secondBandNumber) ? secondBandNumber : Number.POSITIVE_INFINITY;
 
   if (firstNumber !== secondNumber) {
     return firstNumber - secondNumber;
   }
 
-  return String(first.volumeNumber).localeCompare(String(second.volumeNumber), "de", {
+  return getEntryVolumeNumber(first).localeCompare(getEntryVolumeNumber(second), "de", {
     numeric: true,
     sensitivity: "base"
   });
