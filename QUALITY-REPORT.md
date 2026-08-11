@@ -1,4 +1,4 @@
-# Qualitätsbericht Entenarchiv 4.6.7
+# Qualitätsbericht Entenarchiv 4.6.8
 
 ## Stand
 
@@ -65,3 +65,7 @@ Aktive Schreib- und Löschpfade heißen nun `saveArchiveEntry`, `saveArchiveEntr
 ## 4.6.7 Settings Hygiene
 
 Die aktive redundante `customSeries`-Namensliste ist entfernt. `customSeriesConfigs` ist die einzige persistente Quelle; alte Backup-Felder werden nur noch beim Normalisieren als Importadapter gelesen.
+
+## 4.6.8 Modul-Cleanup
+
+Zustandsfreie App-Helfer sind in `app-utils.js` ausgelagert und separat getestet.

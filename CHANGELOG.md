@@ -1,5 +1,11 @@
 # Änderungen
 
+## 4.6.8 – App Utility Extraction
+
+- Allgemeine Sortier-, Formatierungs-, URL- und Normalisierungshelfer sind aus `app.js` in `app-utils.js` ausgelagert.
+- Das neue Modul ist zustandsfrei und separat testbar.
+- Runtime-Verhalten und Datenmodell bleiben unverändert.
+
 ## 4.6.7 – Custom Series Legacy Field Retirement
 
 - `customSeriesConfigs` ist die einzige aktive Settings-Quelle für eigene Reihen.
