@@ -1,5 +1,13 @@
 # Änderungen
 
+## 4.6.21 – Mobile Density Hotfix
+
+- iPhone-Header nutzt die obere Safe Area enger und blendet die Eyebrow auf Smartphones aus.
+- Logo und Theme-Aktion werden kompakter, ohne die Statusleiste zu überlagern.
+- Bottom-Navigation überschreibt die alte direkte Span-Schriftgröße und wird dadurch tatsächlich flacher.
+- Primäre Hinzufügen-Aktion und Icons werden auf native Tab-Bar-Dichte reduziert.
+- Safari-sichere Share-Card-Breitenbegrenzung bleibt erhalten.
+
 ## 4.6.20 – Compact Mobile Chrome
 
 - Header und Unterseiten-Header auf mobilen Geräten deutlich kompakter, Safe Areas bleiben erhalten.

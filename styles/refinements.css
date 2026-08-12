@@ -1369,95 +1369,118 @@ textarea,
 
 
 /* --------------------------------------------------------------------------
-   Entenarchiv 4.6.20: kompakter App-Chrome + mobile Share-Card-Breite
+   Mobiler App-Chrome: kompakte iPhone-Dichte + Safari-sichere Share Cards
    -------------------------------------------------------------------------- */
 
-/* Header: Safe Area bleibt erhalten, sichtbarer Chrome wird deutlich kompakter. */
+/*
+ * iOS meldet bei viewport-fit=cover eine relativ große Safe Area. Die
+ * Bedienelemente dürfen näher an deren Unterkante rücken, ohne Statusleiste /
+ * Dynamic Island zu überlagern. Dadurch wird der Header auf kleinen Screens
+ * spürbar kompakter statt die volle Safe Area plus zusätzlichen Innenabstand
+ * zu addieren.
+ */
 .app-header {
-  min-height: calc(58px + env(safe-area-inset-top));
-  padding: calc(5px + env(safe-area-inset-top)) 14px 5px;
+  min-height: 0;
+  padding: max(4px, calc(env(safe-area-inset-top) - 14px)) 12px 4px;
 }
 
 .app-header .brand {
-  gap: 9px;
+  gap: 8px;
 }
 
 .app-header .brand-mark.brand-logo {
-  width: 42px;
-  height: 42px;
-  flex-basis: 42px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 10px;
 }
 
 .app-header .brand > div {
-  min-height: 42px;
+  min-height: 36px;
 }
 
 .app-header .brand .eyebrow {
-  margin-bottom: 1px;
-  font-size: 0.66rem;
+  margin-bottom: 0;
+  font-size: 0.62rem;
 }
 
 .app-header h1 {
-  font-size: clamp(1.25rem, 5vw, 1.55rem);
+  font-size: clamp(1.12rem, 4.6vw, 1.35rem);
 }
 
 .app-header #theme-toggle {
-  width: 42px;
-  min-width: 42px;
-  min-height: 42px;
+  width: 38px;
+  min-width: 38px;
+  min-height: 38px;
 }
 
-/* Unterseiten-Header folgt derselben kompakten Höhe. */
+/* Unterseiten erhalten dieselbe Dichte. */
 .app-page-header {
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  min-height: calc(58px + env(safe-area-inset-top));
-  padding: calc(5px + env(safe-area-inset-top)) 12px 5px;
-  gap: 10px;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  min-height: 0;
+  padding: max(4px, calc(env(safe-area-inset-top) - 14px)) 10px 4px;
+  gap: 8px;
 }
 
 .app-page-back {
-  width: 42px;
-  min-width: 42px;
-  height: 42px;
-  min-height: 42px;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
 }
 
-/* Bottom-Navigation: weiterhin gut tappbar, aber deutlich weniger vertikaler Raum. */
+/*
+ * Bottom-Navigation: Die alte Basisregel .bottom-nav span { font-size:1.15rem }
+ * setzt die Beschriftungen direkt am Span und wurde von der Item-Schriftgröße
+ * nicht überschrieben. Deshalb werden Icon- und Text-Spans hier explizit
+ * getrennt dimensioniert.
+ */
 .bottom-nav {
-  min-height: calc(58px + env(safe-area-inset-bottom));
-  padding: 4px 10px calc(4px + env(safe-area-inset-bottom));
+  min-height: 0;
+  padding: 3px 10px max(4px, calc(env(safe-area-inset-bottom) - 8px));
   gap: 4px;
 }
 
 .bottom-nav-item {
-  min-height: 48px;
-  gap: 2px;
-  font-size: 0.66rem;
+  min-height: 42px;
+  gap: 1px;
+  font-size: 0.64rem;
+  line-height: 1.05;
 }
 
-.bottom-nav-item svg {
-  width: 21px;
-  height: 21px;
+.bottom-nav-item svg,
+.bottom-nav-icon-wrap > svg {
+  width: 19px;
+  height: 19px;
+}
+
+.bottom-nav-item > span:not(.bottom-nav-icon-wrap) {
+  font-size: 0.68rem;
+  line-height: 1.05;
 }
 
 .bottom-nav-primary {
-  margin-top: -8px;
-  min-height: 54px;
-  border-radius: 16px;
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 22%, transparent);
+  margin-top: -5px;
+  min-height: 46px;
+  border-radius: 14px;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 .bottom-nav-primary svg {
-  width: 25px;
-  height: 25px;
+  width: 22px;
+  height: 22px;
+}
+
+.bottom-nav-primary > span {
+  font-size: 0.72rem;
+  line-height: 1;
 }
 
 body {
-  padding-bottom: calc(74px + env(safe-area-inset-bottom));
+  padding-bottom: calc(60px + env(safe-area-inset-bottom));
 }
 
-/* Share Cards: Safari darf die intrinsische Canvas-/Select-Breite nie auf das Modal übertragen. */
+/* Share Cards: Safari darf intrinsische Canvas-/Select-Breiten nie auf das Modal übertragen. */
 #share-card-modal {
   padding-left: max(8px, env(safe-area-inset-left));
   padding-right: max(8px, env(safe-area-inset-right));
@@ -1485,6 +1508,18 @@ body {
 #share-card-modal .share-card-preview {
   width: 100%;
   contain: inline-size;
+}
+
+@media (max-width: 600px) {
+  /* Auf Smartphones reicht die Wortmarke; die Eyebrow kostet unnötig Höhe. */
+  .app-header .brand .eyebrow {
+    display: none;
+  }
+
+  .app-header .brand > div {
+    display: flex;
+    align-items: center;
+  }
 }
 
 @media (max-width: 430px) {

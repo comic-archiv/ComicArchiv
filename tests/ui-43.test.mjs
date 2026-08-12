@@ -37,7 +37,7 @@ test("Erscheinungsradar ist auf Startseite, Kalenderseite und in der Navigation 
 test("Erscheinungsradar bleibt bei Data Stack v2 mit Datenformat 9 und Archivmodell 1 kompatibel", async () => {
   const [config, storage, version] = await Promise.all([read("config.js"), read("storage.js"), read("version.json")]);
   const metadata = JSON.parse(version);
-  assert.equal(metadata.appVersion, "4.6.20");
+  assert.equal(metadata.appVersion, "4.6.21");
   assert.equal(metadata.dataFormatVersion, 9);
   assert.equal(metadata.archiveModelVersion, 1);
   assert.match(config, /releaseRadarDecisions:\s*Object\.freeze\(\{\}\)/);
