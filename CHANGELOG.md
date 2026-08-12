@@ -1,5 +1,11 @@
 # Änderungen
 
+## 4.6.20 – Compact Mobile Chrome
+
+- Header und Unterseiten-Header auf mobilen Geräten deutlich kompakter, Safe Areas bleiben erhalten.
+- Bottom-Navigation und primäre Hinzufügen-Aktion benötigen weniger vertikalen Platz.
+- Share-Card-Dialog wird auf schmalen Safari-Viewports hart auf die verfügbare Breite begrenzt.
+
 ## 4.6.19 – Architecture Runtime Hotfix
 
 - `createConditionBadge` ist nach dem Feature-Split wieder als gemeinsames UI-Modul für App-Shell und Sammlung verdrahtet.
