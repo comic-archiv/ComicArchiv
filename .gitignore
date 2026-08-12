@@ -18,3 +18,9 @@ Entenarchiv-Share-*.png
 Entenarchiv-Erscheinungsradar-*.ics
 ComicArchiv-*-cleanup.mjs
 ComicArchiv-*-commands.txt
+
+# One-off upgrade helpers (root only)
+/ComicArchiv-*.mjs
+/ComicArchiv-*.zip
+/SMOKE-TEST-*.txt
+/run-*.yml

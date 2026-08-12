@@ -222,10 +222,6 @@ export function parseDuckipediaWikitext(wikitext) {
  * the page. This prevents review badges, article screenshots and story images
  * from being mistaken for the book cover.
  */
-export function extractInfoboxTemplate(wikitext) {
-  return extractPublicationInfobox(wikitext)?.source || "";
-}
-
 export function extractPublicationInfobox(wikitext) {
   const source = String(wikitext || "").replace(/<!--([\s\S]*?)-->/g, "");
   const candidates = extractTemplateBlocks(source)

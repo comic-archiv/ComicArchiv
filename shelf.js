@@ -17,8 +17,6 @@ import {
 
 export const SHELF_PAGE_SIZE = 60;
 
-export const SHELF_VIEW_MODES = Object.freeze(["shelf", "covers", "list", "missing"]);
-
 export const SMART_LIST_DEFINITIONS = Object.freeze([
   Object.freeze({ id: "recent", title: "Neu im Archiv", description: "Zuletzt hinzugefügte oder aktualisierte Bände", icon: "spark" }),
   Object.freeze({ id: "unread", title: "Noch ungelesen", description: "Bände, von denen noch kein Exemplar gelesen wurde", icon: "book" }),
@@ -31,10 +29,6 @@ export const SMART_LIST_DEFINITIONS = Object.freeze([
 ]);
 
 const MAX_SHELF_BAND = 5000;
-
-export function getSmartListDefinition(id) {
-  return SMART_LIST_DEFINITIONS.find((entry) => entry.id === id) || null;
-}
 
 export function matchesSmartList(comic, smartListId, {
   currentYear = new Date().getFullYear(),

@@ -33,10 +33,6 @@ export function recordDiagnosticError(error, context = "Unbekannter Bereich", le
   return entry;
 }
 
-export function recordDiagnosticMessage(message, context = "App", level = "info") {
-  return recordDiagnosticError(new Error(String(message || "Unbekannte Meldung")), context, level);
-}
-
 export function getDiagnosticLog() {
   try {
     const parsed = JSON.parse(globalThis.localStorage?.getItem(DIAGNOSTIC_STORAGE_KEY) || "[]");

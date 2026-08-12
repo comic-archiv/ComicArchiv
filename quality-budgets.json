@@ -1,0 +1,9 @@
+{
+  "appJsMaxBytes": 215000,
+  "activeDomMaxElements": 1325,
+  "coreShellMaxAssets": 46,
+  "coreShellMaxBytes": 1200000,
+  "runtimeCssMaxBytes": 215000,
+  "runtimeJavaScriptMaxBytes": 950000,
+  "largestRuntimeModuleMaxBytes": 215000
+}

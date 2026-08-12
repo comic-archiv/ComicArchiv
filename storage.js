@@ -93,18 +93,6 @@ let settingsSplitPromise;
 let settingsCutoverPromise;
 let legacyRetirementPromise;
 
-export function getStorageMode() {
-  return STORAGE_MODE;
-}
-
-export function getDatabaseName() {
-  return DATABASE_NAME;
-}
-
-export function getDatabaseVersion() {
-  return DATABASE_VERSION;
-}
-
 function resolveDatabaseName() {
   try {
     const search = globalThis.location?.search || "";
@@ -1138,70 +1126,6 @@ async function countStoreRecords(database, storeName) {
   return Number(count || 0);
 }
 
-export async function getLegacyStorageRetirementStatus() {
-  const database = await getDatabase();
-  const result = await ensureLegacyStorageRetired();
-  const meta = await readLegacyStorageRetirementMeta(database).catch(() => null);
-  const [legacyComicCount, legacySettingsCount] = await Promise.all([
-    countStoreRecords(database, COMICS_STORE).catch(() => -1),
-    countStoreRecords(database, SETTINGS_STORE).catch(() => -1)
-  ]);
-  return {
-    ready: Boolean(result.ready && isLegacyStorageRetired(meta) && legacyComicCount === 0 && legacySettingsCount === 0),
-    status: meta?.status || result.status || "unknown",
-    version: meta?.legacyStorageRetirementVersion || LEGACY_STORAGE_RETIREMENT_VERSION,
-    completedAt: meta?.completedAt || null,
-    retiredLegacyComicCount: Number(meta?.retiredLegacyComicCount || 0),
-    retiredLegacySettingsCount: Number(meta?.retiredLegacySettingsCount || 0),
-    liveLegacyComicCount: legacyComicCount,
-    liveLegacySettingsCount: legacySettingsCount,
-    snapshotId: meta?.snapshotId || null,
-    snapshotCreatedAt: meta?.snapshotCreatedAt || null,
-    error: result.error || meta?.error || ""
-  };
-}
-
-export async function verifySettingsCutoverIntegrity() {
-  const database = await getDatabase();
-  const [meta, values] = await Promise.all([
-    readSettingsCutoverMeta(database).catch(() => null),
-    readSettingsFieldValues(database)
-  ]);
-  const integrity = validateSettingsFieldValues(values);
-  return {
-    valid: isSettingsCutoverComplete(meta) && integrity.valid,
-    active: isSettingsCutoverComplete(meta),
-    settingsCutoverVersion: meta?.settingsCutoverVersion || SETTINGS_CUTOVER_VERSION,
-    source: isSettingsCutoverComplete(meta) ? "field-records" : "legacy-settings",
-    legacySettingsFrozenAt: meta?.legacySettingsFrozenAt || null,
-    integrity
-  };
-}
-
-export async function verifySettingsSplitParity() {
-  const database = await getDatabase();
-  const [cutoverMeta, groups] = await Promise.all([
-    readSettingsCutoverMeta(database).catch(() => null),
-    readSettingsSplitRecords(database)
-  ]);
-  if (isSettingsCutoverComplete(cutoverMeta)) {
-    const values = await readSettingsFieldValues(database);
-    const integrity = validateSettingsFieldValues(values);
-    return {
-      valid: integrity.valid,
-      splitVersion: SETTINGS_SPLIT_VERSION,
-      groupCount: Object.keys(SETTINGS_SPLIT_STORE_BY_GROUP).length,
-      missingGroups: [],
-      mismatchedGroups: [],
-      cutover: true,
-      legacyComparisonSkipped: true,
-      integrity
-    };
-  }
-  const legacySettings = normalizeSettings(await readSettingsValue(database));
-  return compareSettingsSplit(legacySettings, groups);
-}
-
 export async function getArchiveGraph() {
   const database = await getDatabase();
   const core = await ensureArchiveCoreReady();
@@ -1324,11 +1248,6 @@ export async function getDataStackStatus() {
     rollbackSnapshotId: snapshot?.id || null,
     rollbackSnapshotCreatedAt: snapshot?.createdAt || null
   };
-}
-
-export async function getLatestDataStackSnapshot() {
-  const database = await getDatabase();
-  return getLatestDataStackSnapshotRecord(database);
 }
 
 export async function restoreLatestDataStackSnapshot() {

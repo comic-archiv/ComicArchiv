@@ -13,6 +13,7 @@ const runtimeEntries = [
   "app-utils.js",
   "app-elements.js",
   "app-state.js",
+  "app-update.js",
   "archive-model.js",
   "archive-entry.js",
   "archive-runtime.js",

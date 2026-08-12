@@ -1,13 +1,6 @@
 const CARD_WIDTH = 1080;
 const CARD_HEIGHT = 1350;
 
-export const SHARE_CARD_TEMPLATES = Object.freeze([
-  Object.freeze({ id: "collection", label: "Meine Sammlung" }),
-  Object.freeze({ id: "main-series", label: "Hauptreihe" }),
-  Object.freeze({ id: "milestone", label: "Meilenstein" }),
-  Object.freeze({ id: "dna", label: "Sammlungs-DNA" })
-]);
-
 export function buildShareCardPayload(template, context = {}) {
   const dna = context.dna || {};
   const main = context.mainProgress || null;

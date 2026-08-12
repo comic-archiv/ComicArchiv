@@ -155,11 +155,6 @@ export function getEntryMetadataFetchedAt(entry) {
   return entry?.issue?.metadataFetchedAt ?? entry?.metadataFetchedAt ?? null;
 }
 
-export function hasEntryLocalOrRemoteCover(entry, localCoverIds = new Set()) {
-  const coverSet = localCoverIds instanceof Set ? localCoverIds : new Set(localCoverIds || []);
-  return coverSet.has(getEntryId(entry)) || Boolean(getEntryDuckipediaCoverUrl(entry));
-}
-
 export function toLegacyComic(entry, { dataFormatVersion = APP_CONFIG.dataFormatVersion } = {}) {
   if (!isArchiveEntry(entry)) return entry && typeof entry === "object" ? { ...entry } : entry;
   const copies = getEntryCopies(entry).map((copy, index) => ({

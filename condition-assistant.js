@@ -1,5 +1,3 @@
-export const CONDITION_ASSISTANT_VERSION = 2;
-
 const CONDITION_DETAILS = Object.freeze({
   "0": Object.freeze({ label: "Perfekt", priceRelation: "ca. 150 % von Zustand 1", description: "Praktisch makellos und ungelesen wirkend; nur minimale produktionsbedingte Unregelmäßigkeiten sind zulässig." }),
   "0-1": Object.freeze({ label: "Fast perfekt", priceRelation: "Zwischenstufe zwischen Zustand 0 und 1", description: "Neuwertig mit höchstens minimalen Lagerungs- oder Öffnungsspuren." }),
@@ -146,15 +144,6 @@ export function evaluateConditionAssessment(input = {}) {
 export function buildConditionAssessmentNote(input = {}) {
   if (typeof input?.note === "string") return input.note;
   return evaluateConditionAssessment(input).note || "";
-}
-
-export function assessComicCondition(input = {}) {
-  return evaluateConditionAssessment({
-    comicComplete: input.completeComicPart !== false,
-    coverComplete: input.coverComplete !== false,
-    impression: input.overallId || "good",
-    defects: input.defectIds || []
-  });
 }
 
 function normalizeAssessment(input) {

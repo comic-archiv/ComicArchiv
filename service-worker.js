@@ -1,6 +1,6 @@
-const APP_VERSION = "4.6.21";
+const APP_VERSION = "4.6.22";
 const CACHE_PREFIX = "entenarchiv-shell-";
-const CACHE_NAME = `${CACHE_PREFIX}v4-6-21`;
+const CACHE_NAME = `${CACHE_PREFIX}v4-6-22`;
 
 const CORE_SHELL = Object.freeze([
   "./index.html",
@@ -45,11 +45,10 @@ const CORE_SHELL = Object.freeze([
   "./app-utils.js",
   "./app-elements.js",
   "./app-state.js",
+  "./app-update.js",
   "./manifest.webmanifest",
   "./version.json",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png",
-  "./icons/apple-touch-icon.png"
+  "./icons/icon-192.png"
 ]);
 
 const OPTIONAL_SHELL = Object.freeze([
@@ -98,7 +97,10 @@ self.addEventListener("install", (event) => {
         console.warn("Optionale Offline-Dateien konnten nicht vollständig vorgeladen werden:", optionalPrecacheFailures);
       }
 
-      await self.skipWaiting();
+      // Bei der Erstinstallation darf der Worker direkt aktiv werden. Bei Updates
+      // bleibt er bewusst im waiting-State, bis die Nutzerin/der Nutzer im
+      // sichtbaren Update-Hinweis „Jetzt aktualisieren“ auswählt.
+      if (!self.registration.active) await self.skipWaiting();
     })()
   );
 });

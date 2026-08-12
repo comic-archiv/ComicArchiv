@@ -72,6 +72,7 @@ import { createLazyDomManager } from "./lazy-dom.js";
 import { createDiagnosticsUI } from "./diagnostics-ui.js";
 import { createAppElements } from "./app-elements.js";
 import { createInitialAppState, SMART_LIST_DEFINITIONS_LOOKUP } from "./app-state.js";
+import { createAppUpdateController } from "./app-update.js";
 import {
   countPhysicalCopies,
   createCustomSeriesId,
@@ -201,6 +202,12 @@ const diagnosticsUI = createDiagnosticsUI({
   getOptionalAssetStatus,
   createAppFilename,
   restoreBodyModalState
+});
+
+const appUpdateController = createAppUpdateController({
+  elements,
+  currentVersion: APP_CONFIG.appVersion,
+  recordError: recordDiagnosticError
 });
 
 let toastTimer;
@@ -371,7 +378,7 @@ async function initializeApp() {
     runOptionalStartupTask("Medienstatus", refreshMediaStatus)
   ]);
   renderCalendarOverview();
-  registerServiceWorker();
+  appUpdateController.register();
   window.EntenarchivRecovery?.markReady({
     appVersion: APP_CONFIG.appVersion,
     dataFormatVersion: APP_CONFIG.dataFormatVersion
@@ -4899,41 +4906,6 @@ function applyTheme(theme) {
 
   const themeColor = normalizedTheme === "dark" ? "#0b1020" : "#f7f4ee";
   document.querySelector('meta[name="theme-color"]').setAttribute("content", themeColor);
-}
-
-function registerServiceWorker() {
-  if (!("serviceWorker" in navigator)) return;
-
-  window.addEventListener("load", async () => {
-    try {
-      const registration = await navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" });
-      const activateUpdate = (worker) => {
-        if (!worker) return;
-        state.waitingServiceWorker = worker;
-        worker.postMessage({ type: "SKIP_WAITING" });
-      };
-
-      if (registration.waiting) activateUpdate(registration.waiting);
-      registration.addEventListener("updatefound", () => {
-        const installingWorker = registration.installing;
-        if (!installingWorker) return;
-        installingWorker.addEventListener("statechange", () => {
-          if (installingWorker.state === "installed" && navigator.serviceWorker.controller) activateUpdate(installingWorker);
-        });
-      });
-
-      let hasReloaded = false;
-      navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (hasReloaded) return;
-        hasReloaded = true;
-        window.location.reload();
-      });
-      await registration.update();
-    } catch (error) {
-      console.error("Service Worker konnte nicht registriert werden:", error);
-      recordDiagnosticError(error, "Service Worker registrieren", "warning");
-    }
-  });
 }
 
 function renderCalendarOverview() {

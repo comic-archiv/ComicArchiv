@@ -1,5 +1,17 @@
 # Änderungen
 
+## 4.6.22 – Hardening & Cleanup
+
+- Feste CI-Budgets für App-Orchestrator, Start-DOM, Core-Precache, CSS und Runtime-JavaScript eingeführt.
+- Vollständig unreferenzierte Runtime-Exports entfernt und dauerhafte Dead-Export-Prüfung ergänzt.
+- Semantischer Backup-Roundtrip als Release-Gate ergänzt.
+- PWA-Updates werden sichtbar angeboten und erst nach „Jetzt aktualisieren“ aktiviert; Erstinstallation bleibt automatisch.
+- Update-Prüfung läuft zusätzlich beim Zurückkehren in die App und nach erneuter Netzwerkverbindung.
+- 512er Installationsicon und Apple-Touch-Icon aus dem kritischen Core-Precache entfernt.
+- Legacy-Kompatibilitätsinventar neu dokumentiert; alte Hotfix-/Migrations-Zwischendokumente entfernt.
+- Der permanente GitHub-Actions-Workflow verwendet den vollständigen `npm run ci`-Hardening-Pfad.
+- Datenformat 9, Archivmodell 1, Data Stack 2 und IndexedDB-Schema 6 bleiben unverändert.
+
 ## 4.6.21 – Mobile Density Hotfix
 
 - iPhone-Header nutzt die obere Safe Area enger und blendet die Eyebrow auf Smartphones aus.

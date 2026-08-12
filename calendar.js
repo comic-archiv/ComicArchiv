@@ -316,11 +316,6 @@ export function isToday(dateString) {
   return dateString === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 }
 
-export function getUpcomingEvents(events, fromDate = new Date(), limit = 3) {
-  const start = `${fromDate.getFullYear()}-${String(fromDate.getMonth() + 1).padStart(2, "0")}-${String(fromDate.getDate()).padStart(2, "0")}`;
-  return deduplicateCalendarEvents(events).filter((event) => event.startDate >= start).slice(0, limit);
-}
-
 function firstValue(entries) {
   return Array.isArray(entries) && entries[0] ? entries[0].value : "";
 }

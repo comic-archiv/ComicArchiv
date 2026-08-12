@@ -260,12 +260,6 @@ export function validateSettingsSplitGroups(groups = {}) {
   };
 }
 
-export function findChangedSettingsGroups(currentGroups = {}, nextGroups = {}) {
-  return Object.keys(SETTINGS_GROUP_FIELDS).filter(
-    (groupName) => stableStringify(currentGroups?.[groupName]) !== stableStringify(nextGroups?.[groupName])
-  );
-}
-
 export function validateSettingsFieldValues(settings = {}) {
   const source = settings && typeof settings === "object" && !Array.isArray(settings) ? settings : {};
   const missingFields = {};

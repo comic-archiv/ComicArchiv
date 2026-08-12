@@ -3,6 +3,10 @@
 export function createAppElements() {
   return {
   html: document.documentElement,
+  appUpdateBanner: document.querySelector("#app-update-banner"),
+  appUpdateText: document.querySelector("#app-update-text"),
+  appUpdateAction: document.querySelector("#app-update-action"),
+  appUpdateDismiss: document.querySelector("#app-update-dismiss"),
   addPage: document.querySelector("#add-page"),
   closeAddPage: document.querySelector("#close-add-page"),
   navAdd: document.querySelector("#nav-add"),

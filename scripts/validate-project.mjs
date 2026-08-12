@@ -22,6 +22,7 @@ const requiredFiles = [
   "styles/refinements.css",
   "app.js",
   "app-elements.js",
+  "app-update.js",
   "archive-model.js",
   "archive-entry.js",
   "data-stack.js",
@@ -50,6 +51,8 @@ const requiredFiles = [
   "service-worker.js",
   "manifest.webmanifest",
   "version.json",
+  "quality-budgets.json",
+  "LEGACY-COMPATIBILITY.md",
   "icons/icon-192.png",
   "icons/icon-512.png",
   "icons/icon-1024.png",
@@ -66,10 +69,11 @@ for (const file of requiredFiles) {
   if (!existsSync(join(root, file))) errors.push(`Pflichtdatei fehlt: ${file}`);
 }
 
-const [html, appSource, appElementsSource, shelfUiSource, configSource, storageSource, archiveModelSource, exportSource, recoverySource, serviceWorkerSource, styleManifestSource, releaseRadarSource, calendarFeatureSource, syncSource, workflowSource, calendarCatalog, packageJson, versionJson, manifest] = await Promise.all([
+const [html, appSource, appElementsSource, appUpdateSource, shelfUiSource, configSource, storageSource, archiveModelSource, exportSource, recoverySource, serviceWorkerSource, styleManifestSource, releaseRadarSource, calendarFeatureSource, syncSource, workflowSource, calendarCatalog, packageJson, versionJson, manifest] = await Promise.all([
   readText("index.html"),
   readText("app.js"),
   readText("app-elements.js"),
+  readText("app-update.js"),
   readText("shelf-ui.js"),
   readText("config.js"),
   readText("storage.js"),
@@ -122,7 +126,7 @@ const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
 const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
 if (duplicateIds.length) errors.push(`Doppelte HTML-IDs: ${[...new Set(duplicateIds)].join(", ")}`);
 const idSet = new Set(ids);
-const queriedIds = [...`${appSource}\n${appElementsSource}\n${shelfUiSource}`.matchAll(/document\.querySelector\("#([A-Za-z0-9_-]+)"\)/g)].map((match) => match[1]);
+const queriedIds = [...`${appSource}\n${appElementsSource}\n${appUpdateSource}\n${shelfUiSource}`.matchAll(/document\.querySelector\("#([A-Za-z0-9_-]+)"\)/g)].map((match) => match[1]);
 const queriedElementIds = [...shelfUiSource.matchAll(/byId\("([A-Za-z0-9_-]+)"\)/g)].map((match) => match[1]);
 queriedIds.push(...queriedElementIds);
 const missingIds = [...new Set(queriedIds.filter((id) => !idSet.has(id)))];
@@ -145,6 +149,16 @@ if (!html.includes('id="recovery-panel"') || !html.includes('id="diagnostics-mod
 }
 if (!html.includes('id="test-mode-banner"') || !appSource.includes("comicarchiv-db-test") && !styleSource.includes("test-mode-banner")) {
   errors.push("Der getrennte Testmodus ist nicht vollständig eingebunden.");
+}
+
+if (!html.includes('id="app-update-banner"') || !appUpdateSource.includes("Jetzt aktualisieren")) {
+  errors.push("Sichtbarer App-Update-Hinweis ist nicht vollständig eingebunden.");
+}
+if (!appUpdateSource.includes('postMessage({ type: "SKIP_WAITING" })') || !appUpdateSource.includes('controllerchange')) {
+  errors.push("Kontrollierte Service-Worker-Aktivierung fehlt im App-Update-Modul.");
+}
+if (/await self\.skipWaiting\(\);/.test(serviceWorkerSource) && !serviceWorkerSource.includes("if (!self.registration.active)")) {
+  errors.push("Service-Worker-Updates dürfen nicht mehr ungefragt sofort aktiviert werden.");
 }
 
 const archiveStores = ["seriesCatalog", "issues", "copies", "archiveMeta", "migrationSnapshots"];

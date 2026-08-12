@@ -1,5 +1,3 @@
-export const SCANNER_PRO_VERSION = 1;
-
 export const SCANNER_MODES = Object.freeze({
   FAST: "fast",
   REVIEW: "review"

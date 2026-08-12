@@ -1,6 +1,20 @@
-# Entenarchiv 4.6.18
+# Entenarchiv 4.6.22
 
-Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.6.18 schließt den großen **Runtime- und Feature-Architecture-Cleanup** ab: Sammlung, Fehlbände, Kalender und Scanner sind eigene Featuremodule, die aktive UI arbeitet direkt auf `Issue + Copy + Series`, und die bisher monolithische CSS-Datei ist in geordnete Fachdateien zerlegt.
+Entenarchiv ist eine private, offlinefähige Progressive Web App zur Verwaltung von Lustigen Taschenbüchern und Sonderreihen. Version 4.6.22 schließt den **4.6-Cleanup-Zyklus** mit festen Performance- und Architekturgrenzen, kontrollierten PWA-Updates, einem Backup-Roundtrip als Release-Gate und einer finalen Legacy-/Repo-Bereinigung ab.
+
+## Neu in 4.6.22
+
+- feste CI-Budgets für `app.js`, aktives Start-DOM, Core-Precache, Runtime-CSS und gesamten Runtime-JavaScript-Stack
+- CI-Prüfung gegen vollständig unreferenzierte Runtime-Exports; vorhandene tote Helfer wurden entfernt
+- automatischer Backup-Roundtrip: aktueller Archivgraph → JSON-Backup → Validierung → Archive-Runtime → erneutes Backup
+- sichtbarer PWA-Update-Hinweis: neue Service Worker warten auf „Jetzt aktualisieren“, statt eine offene App ungefragt neu zu laden
+- Update-Prüfung beim Start, beim Zurückkehren in die App und nach Wiederherstellung der Netzwerkverbindung
+- große Installationsicons sind nicht mehr Teil des kritischen Core-Precaches
+- `LEGACY-COMPATIBILITY.md` dokumentiert die bewusst verbliebenen historischen Adapter und die Kriterien für deren spätere Entfernung
+- alte Hotfix-Zwischenberichte und die überholte V4-Migrationsanleitung wurden aus dem Repo entfernt
+- der normale GitHub-Actions-Deploy läuft jetzt über denselben vollständigen `npm run ci`-Pfad wie lokale Release-Prüfungen
+
+Datenformat `9`, Archivmodell `1`, Data Stack `2` und IndexedDB-Schema `6` bleiben unverändert.
 
 ## Neu in 4.6.18
 
@@ -159,7 +173,7 @@ Die Gestaltung verwendet den Entenarchiv-Farbraum, klare Typografie, Druckraster
 
 ## Technische Eckdaten
 
-- App-Version: `4.6.18`
+- App-Version: `4.6.22`
 - Datenformat: `9`
 - Archivmodell: `1`
 - Data-Stack-Version: `2`
@@ -169,7 +183,7 @@ Die Gestaltung verwendet den Entenarchiv-Farbraum, klare Typografie, Druckraster
 - `comics` und Mega-`settings`: nur noch leere Upgrade-Hüllen / historische Adapter
 - Runtime-Modell: `archive-entry.js` + `archive-runtime.js`
 - Featuremodule: Sammlung, Fehlbände, Kalender/Release Radar, Scanner und Diagnose
-- Service-Worker-Cache: `v4-6-18`
+- Service-Worker-Cache: `v4-6-22`
 - Scanner-Feature und schwere Vendor-Bibliotheken werden nur bei Bedarf geladen
 - GitHub Pages mit vorgeschalteter GitHub-Actions-Prüfung
 
@@ -191,6 +205,7 @@ Entenarchiv/
 ├── app.js                    # App-Orchestrierung
 ├── app-elements.js
 ├── app-state.js
+├── app-update.js            # kontrollierte PWA-Updates
 ├── app-utils.js
 ├── archive-entry.js
 ├── archive-model.js
@@ -214,9 +229,12 @@ Entenarchiv/
 ## Qualitätsprüfung
 
 ```bash
-npm run check
-npm run calendar:verify
-npm run build
+npm run ci
+
+# einzeln verfügbar:
+npm run hardening
+npm run quality:budget
+npm run backup:roundtrip
 ```
 
 GitHub Actions führt die Prüfungen nach jedem Commit aus und veröffentlicht nur eine erfolgreiche Version.

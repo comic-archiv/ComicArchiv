@@ -30,7 +30,6 @@ export function createInitialAppState() {
   editingComic: null,
   importBackup: null,
   importReturnTarget: null,
-  waitingServiceWorker: null,
   selectedMissingBand: null,
   scannerResult: null,
   scannerLookupController: null,

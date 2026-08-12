@@ -1,87 +1,67 @@
-# Qualitätsbericht Entenarchiv 4.6.19
+# Qualitätsbericht Entenarchiv 4.6.22
+
 ## Stand
 
-Version 4.6.18 schließt den Runtime- und Feature-Architecture-Cleanup ab. Archivgraph und Feld-Settings bleiben die einzigen aktiven persistenten Datenquellen; die UI arbeitet jetzt zusätzlich direkt mit `Issue + Copy + Series` als `ArchiveEntry`, statt den Archivgraph für den normalen Runtime-Pfad wieder in ein Legacy-Comic-Modell zurückzuformen.
+4.6.22 schließt den 4.6-Cleanup-Zyklus ab. Archivgraph und feldgenaue Settings sind die einzigen aktiven persistenten Datenquellen. Sammlung, Fehlbände, Kalender, Scanner und Diagnose sind modularisiert; `app.js` ist auf App-Orchestrierung reduziert. Dieser Release ergänzt feste Regression-Grenzen und macht die erreichte Architektur zu einem prüfbaren CI-Vertrag.
 
-## Automatisierte Prüfung
+## Release-Gates
 
-- 174 automatisierte Tests erfolgreich
-- Projektvalidierung erfolgreich
-- Kalenderjahr 2026 mit 100 gültigen Terminen validiert
-- Produktions-Build mit 44 Runtime-Einträgen erfolgreich erstellt
-- App-Version `4.6.18`, Datenformat `9`, Archivmodell `1`, Data Stack `2` und IndexedDB-Schema `6` konsistent
-- alle neuen Featuremodule lassen sich syntaktisch und als ES-Module laden
+Die normale `npm run ci`-Prüfung umfasst jetzt:
 
-Ein automatisierter visueller Browser-Smoke-Test war in der Build-Umgebung nicht zuverlässig ausführbar. Deshalb bleibt nach dem Deployment ein kurzer manueller Smoke-Test der Hauptansichten sinnvoll.
+1. Projektvalidierung und vollständige Node-Test-Suite,
+2. Performance-/Architektur-Budgets,
+3. Prüfung auf vollständig unreferenzierte Runtime-Exports,
+4. semantischen Backup-Roundtrip,
+5. Repo-Hygiene,
+6. Kalenderdatenvalidierung,
+7. sauberen Produktions-Build.
 
-## Direkte Archive-Runtime
+## Performance- und Architektur-Budgets
 
-- `archive-entry.js` definiert die direkte Runtime-Sicht auf `Issue`, `Series` und `Copy`.
-- `archive-runtime.js` erzeugt Archive Entries unmittelbar aus dem validierten Archivgraph.
-- Die aktive Sammlung liest nicht aus dem stillgelegten `comics`-Store.
-- Legacy-Comic-Projektionen bleiben nur an expliziten historischen Import-, Export- und Migrationsgrenzen erhalten.
-- Ein Regressionstest vergleicht die neue Runtime-Sicht für gültige Daten mit der bisherigen Legacy-Materialisierung.
+Die Grenzwerte stehen in `quality-budgets.json` und müssen bei einer bewussten Architekturentscheidung ausdrücklich geändert werden. 4.6.22 startet mit folgenden Grenzen:
 
-## Featuremodule
+- `app.js`: maximal 215.000 Bytes
+- initial aktives DOM: maximal 1.325 Elemente; Inhalte in `<template>` zählen nicht als aktive Startknoten
+- Core-Precache: maximal 46 Dateien und 1.200.000 Bytes
+- Runtime-CSS: maximal 215.000 Bytes
+- Runtime-JavaScript: maximal 950.000 Bytes
+- größtes einzelnes Runtime-Modul: maximal 215.000 Bytes
 
-Aus `app.js` wurden weitere Verantwortungsbereiche ausgelagert:
+Der Scanner und seine Vendor-Abhängigkeit bleiben außerhalb des Core-Precaches und werden weiterhin erst bei Bedarf geladen.
 
-- `collection-feature.js` – Sammlungsansicht, Filter, Karten und Aktionen
-- `collection-query.js` – DOM-freie Scope-, Filter- und Sortierlogik
-- `missing-feature.js` – Fehlband-Hub, Fehlbanddetails und Prioritäten
-- `calendar-feature.js` – Kalender, Terminverwaltung und Release Radar
-- `scanner-feature.js` – Scanner-UI und Scanner-Ablauf
-- `diagnostics-ui.js` – Diagnose-Oberfläche
-- `app-elements.js`, `app-state.js`, `app-utils.js` – DOM-Registry, Runtime-State und zustandsfreie Helfer
+## Kontrollierte PWA-Updates
 
-`app.js` liegt nach diesem Block bei rund **205 KB / 4.968 Zeilen**; vor 4.6.13 waren es rund **359 KB / 8.438 Zeilen**.
+Updates ersetzen eine offene App nicht mehr ungefragt. Ein neu installierter Service Worker bleibt bei bestehenden Installationen im `waiting`-Status. Die App zeigt dann einen sichtbaren Hinweis **„Update verfügbar“** mit **„Jetzt aktualisieren“**. Erst diese Aktion sendet `SKIP_WAITING`; nach `controllerchange` wird exakt einmal neu geladen.
 
-## Scanner Lazy Loading
+Die Erstinstallation darf weiterhin direkt aktiviert werden. Beim Start, beim Zurückkehren in die sichtbare App und nach Wiederherstellung der Netzwerkverbindung wird nach Updates gesucht. `icon-512.png` und `apple-touch-icon.png` gehören nicht mehr zum kritischen Core-Precache.
 
-`scanner-feature.js`, `scanner.js` und `scanner-pro.js` werden nicht mehr beim normalen App-Start geladen und liegen nicht im Core-Precache. Beim ersten Öffnen des Scanners lädt die App das Feature dynamisch; danach kann der Service Worker die geladenen Dateien cache-first bereitstellen.
+## Backup-/Restore-Gate
 
-## CSS-Architektur
+`scripts/check-backup-roundtrip.mjs` erzeugt aus einem repräsentativen Archivgraph mit mehreren Exemplaren, eigener Reihe, Settings und Metadaten ein aktuelles JSON-Backup. Dieses wird durch denselben Importvalidator gelesen, wieder in die Archive-Runtime überführt und erneut exportiert. IDs, Copy-Zustände, Custom-Series-Konfiguration, Settings und Metadaten müssen semantisch erhalten bleiben.
 
-`style.css` enthält nur noch die geordneten Imports:
+Der Test ersetzt kein externes Nutzerbackup, schützt aber den vollständigen Format-/Adapterpfad automatisch vor Regressionen.
 
-1. `styles/tokens.css`
-2. `styles/base.css`
-3. `styles/components.css`
-4. `styles/calendar.css`
-5. `styles/collection.css`
-6. `styles/scanner.css`
-7. `styles/statistics.css`
-8. `styles/refinements.css`
+## Dead Code und Legacy
 
-Die acht Dateien wurden als zusammenhängende Abschnitte aus der vorherigen bereinigten `style.css` geschnitten. Ihre Verkettung reproduziert den vorherigen CSS-Quelltext in identischer Reihenfolge; dadurch ändert die reine Architekturaufteilung die Kaskade nicht.
+4.6.22 entfernt vollständig unreferenzierte Runtime-Exports. `scripts/check-dead-exports.mjs` verhindert neue Symbole, die weder Runtime, Tests, Scripts noch Browser-Migrationstest verwenden.
 
-## Data Stack v2
+Bewusst verbleibende historische Adapter sind in `LEGACY-COMPATIBILITY.md` inventarisiert. Die leeren IndexedDB-Stores `comics` und `settings` bleiben bis zu einem ohnehin notwendigen Schema-Upgrade erhalten; sie sind keine aktiven Datenquellen.
 
-Unverändert aktiv bleiben:
+## Repo-Hygiene
 
-- `seriesCatalog`, `issues` und `copies` als persistente Sammlungsquelle
-- 35 Settings-Felder in sechs Fach-Stores
-- feldgenaue Settings-Writes
-- leere `comics`- und `settings`-Stores nur als Schema-Hüllen für sichere Direkt-Upgrades älterer Installationen
-- lokale Data-Stack-Snapshots und Integritätsprüfungen
+Im dauerhaften Repository bleibt nur `.github/workflows/deploy-pages.yml`. Einmalige Upgrade-Installer, temporäre Workflows, alte `QUALITY-4.x`-Zwischenberichte und lokale Exportartefakte dürfen die Hygiene-Prüfung nicht passieren. `dist/` wird ausschließlich beim Build erzeugt.
 
-## Bewusst verbleibende technische Schulden
+## Datenmodell
 
-Der große Monolith ist deutlich kleiner, aber noch nicht vollständig zerlegt. Größere verbleibende Kandidaten sind insbesondere:
+- App-Version: 4.6.22
+- Datenformat: 9
+- Archivmodell: 1
+- Data Stack: 2
+- IndexedDB-Schema: 6
+- aktive Sammlung: `seriesCatalog` + `issues` + `copies`
+- aktive Settings: feldgenaue Datensätze in sechs Fach-Stores
+- Legacy-`comics`/Mega-`settings`: leere Upgrade-Hüllen und historische Adapter
 
-- `calendar-feature.js` mit rund 73 KB
-- `scanner-feature.js` mit rund 56 KB
-- Statistik-, Flohmarkt- und Reihenfortschritts-Orchestrierung verbleiben teilweise in `app.js`
-- historische Import-/Migrationsadapter bleiben absichtlich erhalten, solange direkte Upgrades alter Backups/Installationen unterstützt werden
+## Nächster Entwicklungsschritt
 
-Diese Punkte eignen sich für Performance-/Release-Hardening ab 4.6.19, ohne den jetzt abgeschlossenen Daten- und Runtime-Cutover erneut anzufassen.
-
-## Datensicherheit
-
-Datenformat, Archivmodell und IndexedDB-Schema ändern sich in 4.6.18 nicht. Ein externes JSON-Backup vor dem Upgrade bleibt trotzdem empfohlen. Eigene Cover bleiben lokal in IndexedDB und sind nicht Bestandteil des GitHub-Repositories.
-
-## 4.6.19 Runtime-Hotfix
-
-- Gemeinsamer Zustands-Badge-Helfer für App-Shell und Sammlung wiederhergestellt.
-- Verbliebene Kalender-Modal-Scope-Referenzen auf die öffentliche Feature-API umgestellt.
-- Runtime-Scope-Regressionstests ergänzt.
+Weitere Refactorings sind kein Selbstzweck mehr. Ab 4.7 können neue Smart-Archiv-Funktionen auf der bereinigten Architektur entstehen. Die Budgets und Release-Gates sollen verhindern, dass neue Features unbemerkt wieder Monolithen, große Start-DOMs oder doppelte Persistenzpfade erzeugen.
