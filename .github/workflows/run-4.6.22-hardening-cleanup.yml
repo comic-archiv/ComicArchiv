@@ -3,10 +3,10 @@ name: Entenarchiv 4.6.22 Hardening & Cleanup
 on:
   workflow_dispatch:
 
+# Der eigentliche Repository-Push verwendet bewusst WORKFLOW_PUSH_TOKEN.
+# Der eingebaute GITHUB_TOKEN bleibt daher auf minimale Leserechte beschraenkt.
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 
 concurrency:
   group: entenarchiv-pages
@@ -19,10 +19,20 @@ jobs:
     timeout-minutes: 20
 
     steps:
+      - name: Workflow-Push-Token pruefen
+        env:
+          WORKFLOW_PUSH_TOKEN: ${{ secrets.WORKFLOW_PUSH_TOKEN }}
+        run: |
+          if [ -z "$WORKFLOW_PUSH_TOKEN" ]; then
+            echo "::error::Repository-Secret WORKFLOW_PUSH_TOKEN fehlt. Hinterlege ein Fine-grained PAT mit Contents: Read and write sowie Workflows: Read and write."
+            exit 1
+          fi
+
       - name: Projekt laden
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          token: ${{ secrets.WORKFLOW_PUSH_TOKEN }}
 
       - name: Node.js einrichten
         uses: actions/setup-node@v7
@@ -78,20 +88,7 @@ jobs:
             git push origin HEAD:main
           fi
 
-      - name: Pages-Paket bereitstellen
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: ./dist
-
-  deploy:
-    name: GitHub Pages veroeffentlichen
-    needs: cleanup
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
-      - name: Gepruefte Version veroeffentlichen
-        id: deployment
-        uses: actions/deploy-pages@v5
+      - name: Abschluss bestaetigen
+        run: |
+          echo "4.6.22 wurde geprueft und nach main gepusht."
+          echo "Der neu eingecheckte deploy-pages.yml uebernimmt den anschliessenden GitHub-Pages-Deploy."
