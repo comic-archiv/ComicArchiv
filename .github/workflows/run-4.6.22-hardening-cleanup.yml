@@ -1,0 +1,97 @@
+name: Entenarchiv 4.6.22 Hardening & Cleanup
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: entenarchiv-pages
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Hardening anwenden und vollstaendig pruefen
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Projekt laden
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Geprueften 4.6.22-Stand anwenden
+        run: node ComicArchiv-4.6.22-hardening-cleanup.mjs
+
+      - name: Einmalige Upgrade-Dateien vor den Hygiene-Checks entfernen
+        run: |
+          rm -f ComicArchiv-4.6.22-hardening-cleanup.mjs
+          rm -f .github/workflows/run-4.6.22-hardening-cleanup.yml
+
+      - name: Vollstaendige Projekt-CI inklusive Hardening
+        run: npm run ci
+
+      - name: Aenderungen committen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Keine Aenderungen zu committen."
+          else
+            git commit -m "chore: harden and close 4.6 cleanup cycle"
+          fi
+
+      - name: Mit aktuellem main synchronisieren
+        run: |
+          git fetch origin main
+          if ! git rebase origin/main; then
+            git rebase --abort || true
+            echo "::error::main hat sich in einer von 4.6.22 betroffenen Datei geaendert. Es wurde nichts gepusht."
+            exit 1
+          fi
+
+      - name: CI nach Synchronisierung erneut pruefen
+        run: npm run ci
+
+      - name: Geprueften Stand pushen
+        run: |
+          if ! git push origin HEAD:main; then
+            echo "main wurde unmittelbar vor dem Push aktualisiert. Sicherer zweiter Versuch."
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo "::error::Konflikt beim zweiten Synchronisationsversuch. Kein Force-Push, nichts ueberschrieben."
+              exit 1
+            fi
+            npm run ci
+            git push origin HEAD:main
+          fi
+
+      - name: Pages-Paket bereitstellen
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./dist
+
+  deploy:
+    name: GitHub Pages veroeffentlichen
+    needs: cleanup
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Gepruefte Version veroeffentlichen
+        id: deployment
+        uses: actions/deploy-pages@v5
